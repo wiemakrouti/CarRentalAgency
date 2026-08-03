@@ -1,0 +1,39 @@
+# Business Rules
+
+Confirmed decisions — implement against these directly, don't re-derive or assume.
+
+## Naming convention
+
+All code (folders, files, DB tables/columns, API routes, variables, classes) is **English**. The UI (labels, buttons, menus, messages) is **French**. The French business term "Locations" ("Location de voitures") means **car rentals**, not geographic locations — implemented as the **Rentals** module, no geographic-location entity exists in this project.
+
+## Currency
+
+**TND** (Tunisian Dinar), 3 decimal places (millimes) — `Setting.currencyCode`, default `"TND"`. Money fields use `Decimal(10,3)`.
+
+## Contract languages
+
+**French (primary) + Arabic (secondary)**, bilingual PDF contracts. Arabic block rendered RTL. `Setting.contractPrimaryLanguage = "fr"`, `Setting.contractSecondaryLanguage = "ar"`.
+
+## Late fee policy
+
+`rental.dailyRate × daysLate`, computed automatically server-side when a rental is returned late (`POST /rentals/:id/return`). Uses the rental's own snapshotted `dailyRate`, not a separate configurable rate. Written as an automatic `Payment(type: LATE_FEE)`.
+
+## Damage charges
+
+Recorded at rental return as `Payment(type: DAMAGE_FEE)` with `amount` + free-text `notes`. Optional photos uploaded to Cloudinary via `PaymentAttachment` (1–N from `Payment`), through `POST /finances/payments/:id/attachments`.
+
+## Deposit ("Caution")
+
+Stored on `Rental.depositAmount`; `Rental.depositReturned` tracks whether it's been given back to the client.
+
+## Soft delete
+
+Cars, Clients, Rentals, Payments, Expenses, and Maintenance Records are archived (`deletedAt`), never hard-deleted, to preserve historical reports.
+
+## Single administrator (v1)
+
+No employee accounts, no per-module permissions UI. `User.role` exists and is architecturally ready for more roles later, but only `ADMIN` is used today.
+
+## Open items
+
+- **Deployment target** — not yet decided; not a blocker (Docker works on a VPS or most managed container platforms either way).

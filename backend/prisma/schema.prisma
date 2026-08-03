@@ -1,0 +1,404 @@
+// Prisma schema for the Car Rental Management Dashboard.
+// Naming: English identifiers throughout (see docs/business-rules.md for the
+// French-UI / English-code convention). Money fields use Decimal(10,3) to match
+// TND's 3-decimal (millime) precision.
+//
+// Soft delete: `deletedAt` marks a record archived instead of removing it.
+// `licensePlate`, `vin`, and `email` are only *logically* unique among
+// non-archived rows — enforced via partial unique indexes added by hand in the
+// initial migration (see migration.sql), since Prisma's schema DSL has no
+// partial-unique-index syntax.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+}
+
+enum CarCategory {
+  ECONOMY
+  COMPACT
+  SUV
+  LUXURY
+  VAN
+}
+
+enum Transmission {
+  MANUAL
+  AUTOMATIC
+}
+
+enum FuelType {
+  GASOLINE
+  DIESEL
+  HYBRID
+  ELECTRIC
+}
+
+enum CarStatus {
+  AVAILABLE
+  RENTED
+  MAINTENANCE
+  OUT_OF_SERVICE
+}
+
+enum ClientDocumentType {
+  ID_CARD
+  DRIVING_LICENSE
+  PASSPORT
+  OTHER
+}
+
+// OVERDUE is not flipped by a background job (no scheduler in v1, see
+// RemindersService) — it's set by the return flow when a rental is returned
+// late, and treated as a derived condition (ACTIVE + past plannedReturnDate)
+// by read-side queries such as the dashboard "overdue rentals" widget.
+enum RentalStatus {
+  RESERVED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  OVERDUE
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  BANK_TRANSFER
+  CHECK
+}
+
+enum PaymentType {
+  RENTAL_PAYMENT
+  DEPOSIT
+  DEPOSIT_REFUND
+  EXTENSION_PAYMENT
+  LATE_FEE
+  DAMAGE_FEE
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  REFUNDED
+}
+
+enum ExpenseCategory {
+  FUEL
+  INSURANCE
+  REPAIR
+  REGISTRATION
+  OTHER
+}
+
+enum MaintenanceType {
+  OIL_CHANGE
+  TIRE_CHANGE
+  REPAIR
+  INSPECTION
+  CLEANING
+  OTHER
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  fullName     String
+  role         Role      @default(ADMIN)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  rentalsCreated Rental[]   @relation("RentalCreatedBy")
+  auditLogs      AuditLog[]
+
+  @@map("users")
+}
+
+model Car {
+  id            String        @id @default(uuid())
+  licensePlate  String
+  vin           String?
+  brand         String
+  model         String
+  year          Int
+  color         String
+  category      CarCategory
+  transmission  Transmission
+  fuelType      FuelType
+  seats         Int
+  mileage       Int
+  dailyRate     Decimal       @db.Decimal(10, 3)
+  status        CarStatus     @default(AVAILABLE)
+  purchaseDate  DateTime?
+  purchasePrice Decimal?      @db.Decimal(10, 3)
+
+  // Reminder-ready fields (no reminder UI/scheduler in v1, see docs/architecture.md §1)
+  insuranceExpiryDate           DateTime?
+  technicalInspectionExpiryDate DateTime?
+  registrationExpiryDate        DateTime?
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  images             CarImage[]
+  rentals            Rental[]
+  maintenanceRecords MaintenanceRecord[]
+  expenses           Expense[]
+
+  @@index([licensePlate])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("cars")
+}
+
+model CarImage {
+  id        String   @id @default(uuid())
+  carId     String
+  car       Car      @relation(fields: [carId], references: [id])
+  url       String
+  publicId  String
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([carId])
+  @@map("car_images")
+}
+
+model Client {
+  id                   String    @id @default(uuid())
+  firstName            String
+  lastName             String
+  email                String?
+  phone                String
+  address               String?
+  city                  String?
+  nationalIdNumber      String?
+  drivingLicenseNumber  String
+  drivingLicenseExpiry  DateTime?
+  dateOfBirth           DateTime?
+  blacklisted           Boolean   @default(false)
+  notes                 String?
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  documents ClientDocument[]
+  rentals   Rental[]
+
+  @@index([email])
+  @@index([phone])
+  @@index([deletedAt])
+  @@map("clients")
+}
+
+model ClientDocument {
+  id         String             @id @default(uuid())
+  clientId   String
+  client     Client             @relation(fields: [clientId], references: [id])
+  type       ClientDocumentType
+  url        String
+  publicId   String
+  expiryDate DateTime?
+  createdAt  DateTime           @default(now())
+
+  @@index([clientId])
+  @@map("client_documents")
+}
+
+model Rental {
+  id           String @id @default(uuid())
+  rentalNumber String @unique
+
+  carId String
+  car   Car    @relation(fields: [carId], references: [id])
+
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  pickupDate        DateTime
+  plannedReturnDate DateTime
+  actualReturnDate  DateTime?
+
+  // Snapshotted from Car.dailyRate at creation time so a later price change
+  // never retroactively alters an existing contract/report.
+  dailyRate       Decimal @db.Decimal(10, 3)
+  totalAmount     Decimal @db.Decimal(10, 3)
+  depositAmount   Decimal @db.Decimal(10, 3)
+  depositReturned Boolean @default(false)
+
+  mileageAtPickup   Int?
+  mileageAtReturn   Int?
+  fuelLevelAtPickup String?
+  fuelLevelAtReturn String?
+
+  status          RentalStatus @default(RESERVED)
+  cancelledReason String?
+  notes           String?
+
+  createdByUserId String
+  createdBy       User   @relation("RentalCreatedBy", fields: [createdByUserId], references: [id])
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  extensions RentalExtension[]
+  payments   Payment[]
+  contract   ContractDocument?
+
+  @@index([status])
+  @@index([carId, pickupDate, plannedReturnDate])
+  @@index([clientId])
+  @@index([deletedAt])
+  @@map("rentals")
+}
+
+model RentalExtension {
+  id                 String   @id @default(uuid())
+  rentalId           String
+  rental             Rental   @relation(fields: [rentalId], references: [id])
+  previousReturnDate DateTime
+  newReturnDate      DateTime
+  additionalAmount   Decimal  @db.Decimal(10, 3)
+  createdAt          DateTime @default(now())
+
+  @@index([rentalId])
+  @@map("rental_extensions")
+}
+
+model Payment {
+  id       String @id @default(uuid())
+  rentalId String
+  rental   Rental @relation(fields: [rentalId], references: [id])
+
+  amount Decimal       @db.Decimal(10, 3)
+  method PaymentMethod
+  type   PaymentType
+  status PaymentStatus @default(COMPLETED)
+  paidAt DateTime?
+  notes  String?
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  attachments PaymentAttachment[]
+
+  @@index([rentalId])
+  @@index([type])
+  @@index([deletedAt])
+  @@map("payments")
+}
+
+// Optional photos for a payment — used in practice for DAMAGE_FEE payments
+// recorded at rental return.
+model PaymentAttachment {
+  id        String   @id @default(uuid())
+  paymentId String
+  payment   Payment  @relation(fields: [paymentId], references: [id])
+  url       String
+  publicId  String
+  createdAt DateTime @default(now())
+
+  @@index([paymentId])
+  @@map("payment_attachments")
+}
+
+model ContractDocument {
+  id          String   @id @default(uuid())
+  rentalId    String   @unique
+  rental      Rental   @relation(fields: [rentalId], references: [id])
+  pdfUrl      String
+  publicId    String
+  language    String
+  generatedAt DateTime @default(now())
+
+  @@map("contract_documents")
+}
+
+model Expense {
+  id          String          @id @default(uuid())
+  category    ExpenseCategory
+  amount      Decimal         @db.Decimal(10, 3)
+  carId       String?
+  car         Car?            @relation(fields: [carId], references: [id])
+  description String
+  date        DateTime
+  receiptUrl  String?
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([carId])
+  @@index([date])
+  @@index([deletedAt])
+  @@map("expenses")
+}
+
+model MaintenanceRecord {
+  id               String          @id @default(uuid())
+  carId            String
+  car              Car             @relation(fields: [carId], references: [id])
+  type             MaintenanceType
+  description      String?
+  cost             Decimal         @db.Decimal(10, 3)
+  mileageAtService Int
+  serviceDate      DateTime
+  nextDueDate      DateTime?
+  nextDueMileage   Int?
+  garageName       String?
+  invoiceUrl       String?
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([carId])
+  @@index([deletedAt])
+  @@map("maintenance_records")
+}
+
+// Singleton row — application code always reads/updates the single Setting
+// record (created by the seed script), never creates a second one.
+model Setting {
+  id                        String   @id @default(uuid())
+  agencyName                String
+  address                   String?
+  phone                     String?
+  logoUrl                   String?
+  currencyCode              String   @default("TND")
+  contractPrimaryLanguage   String   @default("fr")
+  contractSecondaryLanguage String   @default("ar")
+  defaultDepositAmount      Decimal  @default(0) @db.Decimal(10, 3)
+  taxRatePercent            Decimal  @default(0) @db.Decimal(5, 2)
+  updatedAt                 DateTime @updatedAt
+
+  @@map("settings")
+}
+
+model AuditLog {
+  id     String  @id @default(uuid())
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  action         String
+  entityType     String?
+  entityId       String?
+  previousValues Json?
+  newValues      Json?
+  ipAddress      String?
+  createdAt      DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([userId, createdAt])
+  @@map("audit_logs")
+}
