@@ -1,0 +1,47 @@
+import { createBrowserRouter, type RouteObject } from 'react-router-dom';
+
+import { AppShell } from '@/components/layout/app-shell';
+import { CarsPage } from '@/features/cars/pages/CarsPage';
+import { ClientsPage } from '@/features/clients/pages/ClientsPage';
+import { RentalsPage } from '@/features/rentals/pages/RentalsPage';
+import { FinancesPage } from '@/features/finances/pages/FinancesPage';
+import { MaintenancePage } from '@/features/maintenance/pages/MaintenancePage';
+import { ReportsPage } from '@/features/reports/pages/ReportsPage';
+import { SettingsPage } from '@/features/settings/pages/SettingsPage';
+
+const devRoutes: RouteObject[] = import.meta.env.DEV
+  ? [
+      {
+        path: '/design-system',
+        lazy: async () => {
+          const { DesignSystemPage } = await import('@/dev/design-system/DesignSystemPage');
+          return { Component: DesignSystemPage };
+        },
+      },
+    ]
+  : [];
+
+export const router = createBrowserRouter([
+  {
+    path: '/',
+    element: <AppShell />,
+    children: [
+      {
+        index: true,
+        handle: { breadcrumb: 'Tableau de bord' },
+        lazy: async () => {
+          const { DashboardPage } = await import('@/features/dashboard/pages/DashboardPage');
+          return { Component: DashboardPage };
+        },
+      },
+      { path: 'cars', handle: { breadcrumb: 'Gestion des voitures' }, element: <CarsPage /> },
+      { path: 'clients', handle: { breadcrumb: 'Gestion des clients' }, element: <ClientsPage /> },
+      { path: 'rentals', handle: { breadcrumb: 'Gestion des locations' }, element: <RentalsPage /> },
+      { path: 'finances', handle: { breadcrumb: 'Finances' }, element: <FinancesPage /> },
+      { path: 'maintenance', handle: { breadcrumb: 'Maintenance' }, element: <MaintenancePage /> },
+      { path: 'reports', handle: { breadcrumb: 'Rapports' }, element: <ReportsPage /> },
+      { path: 'settings', handle: { breadcrumb: 'Paramètres' }, element: <SettingsPage /> },
+    ],
+  },
+  ...devRoutes,
+]);

@@ -3,7 +3,8 @@
 Each phase is a reviewable, testable increment (`CLAUDE.md`: "no feature without proper planning"). Checked phases are done; update this file as each phase ships.
 
 - [x] **Phase 0** — Project setup: npm workspaces, TS/ESLint/Prettier, full Prisma schema (all entities, soft delete, AuditLog, Role), first migration, `docker-compose.yml` + Dockerfiles, base Express app + base Vite/React/Tailwind/shadcn app, seed script skeleton, `/docs` folder.
-- [ ] **Phase 1** — Authentication + app shell: login, JWT, `authorize('ADMIN')` wired, login/logout audited, protected routing, French sidebar/topbar, empty Dashboard.
+- [x] **Phase 1a** — Design system & app shell (UI only, no auth/business logic): full token-based design system (colors, typography, radius, shadows) on shadcn/ui, light/dark/system theme with persistence, collapsible sidebar + topbar + mobile drawer, Ctrl/Cmd+K command palette (static data), breadcrumb-aware routing for all 8 nav pages as empty placeholders, visual-only Dashboard (seeded KPI cards + static-data charts), dev-only `/design-system` component showcase. See `docs/design-system.md`.
+- [ ] **Phase 1b** — Authentication: login, JWT, `authorize('ADMIN')` wired, login/logout audited, protected routing (the shell currently has no auth guard — every route is open).
 - [ ] **Phase 2** — Cars module: CRUD (soft-delete + restore), image upload, audit logging, list/filter/search.
 - [ ] **Phase 3** — Clients module: CRUD (soft-delete + restore), documents, blacklist flag, audit logging.
 - [ ] **Phase 4a** — Rentals — creation: availability check, price calc, deposit, create; audited.

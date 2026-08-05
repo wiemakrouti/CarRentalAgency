@@ -51,4 +51,4 @@ npm workspaces: `backend/`, `frontend/`, `packages/shared/` (enums + Zod schemas
 
 ## Frontend
 
-Feature-based folders (`frontend/src/features/{cars,clients,rentals,finances,maintenance,reports,settings,auth,dashboard}`), not type-based — each module owns its API calls, hooks, and pages. Shared UI primitives (shadcn/ui) live in `frontend/src/components`.
+Feature-based folders (`frontend/src/features/{cars,clients,rentals,finances,maintenance,reports,settings,auth,dashboard}`), not type-based — each module owns its API calls, hooks, and pages. Shared UI lives in `frontend/src/components`: `ui/` (shadcn/Radix primitives), `common/` (composite building blocks — empty/loading/error states, page header/container, KPI/chart cards, search/filter/pagination), `layout/` (app shell — sidebar, topbar, mobile nav, command palette). Theme state lives in `frontend/src/providers`; the nav config (`frontend/src/lib/navigation.ts`) drives both the sidebar and the command palette. Full token/component reference: `docs/design-system.md`.
