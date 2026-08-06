@@ -79,6 +79,6 @@ Every page today is a `PageContainer` + `PageHeader` + `EmptyState` ("Module en 
 
 ## Known deferrals
 
-- No authentication — every route is open (Phase 1b).
+- Authentication shipped in Phase 1b (`docs/api.md`, `docs/database.md`) — every route now requires a session; see `frontend/src/providers/auth-provider.tsx` and `frontend/src/components/layout/protected-route.tsx`.
 - `SearchBar`/`FilterBar`/`Pagination`/`CommandPalette` render but don't query real data — wired up when each feature module (Cars, Clients, Rentals, …) is built.
 - Dashboard charts use static local arrays, not API data — real aggregation queries come in the Reports phase (`docs/roadmap.md`).

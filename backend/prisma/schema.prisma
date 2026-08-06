@@ -117,10 +117,38 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  rentalsCreated Rental[]   @relation("RentalCreatedBy")
+  rentalsCreated Rental[]       @relation("RentalCreatedBy")
   auditLogs      AuditLog[]
+  refreshTokens  RefreshToken[]
 
   @@map("users")
+}
+
+// Stateful refresh tokens: one row per session/device (a login never revokes
+// another session's row). The raw token is never stored — only its SHA-256
+// hash, so a leaked database can't be used to forge sessions. `refresh`
+// rotates: the presented row is marked revoked and linked via
+// `replacedByTokenId` to the row created in its place. A revoked row being
+// presented again (token-reuse) is a theft signal — AuthService responds by
+// revoking every other active session for that user.
+// Expired/revoked rows are pruned by a future scheduled job, not on read.
+model RefreshToken {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tokenHash         String    @unique
+  expiresAt         DateTime
+  revokedAt         DateTime?
+  replacedByTokenId String?
+
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
 }
 
 model Car {

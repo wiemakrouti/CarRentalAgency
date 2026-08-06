@@ -2,6 +2,10 @@
 
 REST, JSON, prefixed `/api/v1`. All routes except `/auth/login` and `/auth/refresh` require `Authorization: Bearer <accessToken>` (see `backend/src/middleware/authenticate.ts`).
 
+## Authentication
+
+Access token: short-lived JWT (`JWT_ACCESS_EXPIRES_IN`, default 15m), returned in the login/refresh response body, sent as `Authorization: Bearer <token>`. Refresh token: stateful, opaque, delivered as an httpOnly cookie scoped to path `/api/v1/auth` — see `docs/database.md` "Authentication" for the rotation/reuse-detection design (`RefreshToken` table). No lockout/rate-limiting on `/auth/login` yet — deferred to the Phase 10 hardening pass (`docs/roadmap.md`). Login failures (unknown email or wrong password) return the same generic `INVALID_CREDENTIALS` error, deliberately, to avoid user enumeration.
+
 ## Response envelope
 
 Defined in `packages/shared/src/api-envelope.ts`, used by every endpoint:
@@ -27,10 +31,9 @@ Errors never leak stack traces or Prisma internals (`backend/src/middleware/erro
 
 Implemented:
 - `GET /health` — liveness check, no auth required.
+- **Auth** — `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me` (see "Authentication" above).
 
 Planned (see `docs/roadmap.md` for the phase each ships in):
-
-**Auth** — `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me`
 
 **Cars** — `GET/POST /cars`, `GET/PATCH/DELETE /cars/:id`, `POST /cars/:id/restore`, `POST/DELETE /cars/:id/images(/:imageId)`, `GET /cars/available?pickupDate=&returnDate=`
 

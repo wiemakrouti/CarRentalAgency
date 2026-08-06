@@ -1,6 +1,7 @@
-import { Link, useMatches } from 'react-router-dom';
-import { Bell, Search, User } from 'lucide-react';
+import { Link, useMatches, useNavigate } from 'react-router-dom';
+import { Bell, LogOut, Search, User } from 'lucide-react';
 
+import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
 import {
   Breadcrumb,
@@ -29,7 +30,14 @@ type TopbarProps = {
 };
 
 export function Topbar({ onOpenCommandPalette }: TopbarProps) {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const matches = useMatches();
+
+  async function handleLogout() {
+    await logout();
+    navigate('/login', { replace: true });
+  }
   const crumbs = matches
     .filter((match) => (match.handle as RouteHandle | undefined)?.breadcrumb)
     .map((match) => ({
@@ -112,12 +120,15 @@ export function Topbar({ onOpenCommandPalette }: TopbarProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Administrateur</DropdownMenuLabel>
+            <DropdownMenuLabel className="truncate">{user?.fullName ?? 'Compte'}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem>Profil</DropdownMenuItem>
             <DropdownMenuItem>Paramètres</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Déconnexion</DropdownMenuItem>
+            <DropdownMenuItem onClick={handleLogout} className="text-destructive">
+              <LogOut className="h-4 w-4" />
+              Déconnexion
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

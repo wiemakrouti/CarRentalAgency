@@ -1,6 +1,7 @@
 import { createBrowserRouter, type RouteObject } from 'react-router-dom';
 
 import { AppShell } from '@/components/layout/app-shell';
+import { ProtectedRoute } from '@/components/layout/protected-route';
 import { CarsPage } from '@/features/cars/pages/CarsPage';
 import { ClientsPage } from '@/features/clients/pages/ClientsPage';
 import { RentalsPage } from '@/features/rentals/pages/RentalsPage';
@@ -23,24 +24,36 @@ const devRoutes: RouteObject[] = import.meta.env.DEV
 
 export const router = createBrowserRouter([
   {
-    path: '/',
-    element: <AppShell />,
+    path: '/login',
+    lazy: async () => {
+      const { LoginPage } = await import('@/features/auth/pages/LoginPage');
+      return { Component: LoginPage };
+    },
+  },
+  {
+    element: <ProtectedRoute />,
     children: [
       {
-        index: true,
-        handle: { breadcrumb: 'Tableau de bord' },
-        lazy: async () => {
-          const { DashboardPage } = await import('@/features/dashboard/pages/DashboardPage');
-          return { Component: DashboardPage };
-        },
+        path: '/',
+        element: <AppShell />,
+        children: [
+          {
+            index: true,
+            handle: { breadcrumb: 'Tableau de bord' },
+            lazy: async () => {
+              const { DashboardPage } = await import('@/features/dashboard/pages/DashboardPage');
+              return { Component: DashboardPage };
+            },
+          },
+          { path: 'cars', handle: { breadcrumb: 'Gestion des voitures' }, element: <CarsPage /> },
+          { path: 'clients', handle: { breadcrumb: 'Gestion des clients' }, element: <ClientsPage /> },
+          { path: 'rentals', handle: { breadcrumb: 'Gestion des locations' }, element: <RentalsPage /> },
+          { path: 'finances', handle: { breadcrumb: 'Finances' }, element: <FinancesPage /> },
+          { path: 'maintenance', handle: { breadcrumb: 'Maintenance' }, element: <MaintenancePage /> },
+          { path: 'reports', handle: { breadcrumb: 'Rapports' }, element: <ReportsPage /> },
+          { path: 'settings', handle: { breadcrumb: 'Paramètres' }, element: <SettingsPage /> },
+        ],
       },
-      { path: 'cars', handle: { breadcrumb: 'Gestion des voitures' }, element: <CarsPage /> },
-      { path: 'clients', handle: { breadcrumb: 'Gestion des clients' }, element: <ClientsPage /> },
-      { path: 'rentals', handle: { breadcrumb: 'Gestion des locations' }, element: <RentalsPage /> },
-      { path: 'finances', handle: { breadcrumb: 'Finances' }, element: <FinancesPage /> },
-      { path: 'maintenance', handle: { breadcrumb: 'Maintenance' }, element: <MaintenancePage /> },
-      { path: 'reports', handle: { breadcrumb: 'Rapports' }, element: <ReportsPage /> },
-      { path: 'settings', handle: { breadcrumb: 'Paramètres' }, element: <SettingsPage /> },
     ],
   },
   ...devRoutes,

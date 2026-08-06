@@ -18,6 +18,7 @@ Money fields use `Decimal(10,3)` — TND (Tunisian Dinar) has 3 decimal places (
 | `MaintenanceRecord` | Per-car service history + `nextDueDate`/`nextDueMileage` |
 | `Setting` | Singleton row: agency profile, currency, contract languages, deposit default, tax rate |
 | `AuditLog` | Who did what, when, before/after — see `docs/architecture.md` |
+| `RefreshToken` | One row per login session/device — see "Authentication" below |
 
 ## Soft delete
 
@@ -28,6 +29,16 @@ CREATE UNIQUE INDEX "cars_license_plate_active_key" ON "cars"("licensePlate") WH
 CREATE UNIQUE INDEX "cars_vin_active_key" ON "cars"("vin") WHERE "deletedAt" IS NULL AND "vin" IS NOT NULL;
 CREATE UNIQUE INDEX "clients_email_active_key" ON "clients"("email") WHERE "deletedAt" IS NULL AND "email" IS NOT NULL;
 ```
+
+## Authentication
+
+`RefreshToken` is stateful by design (not a self-contained JWT): the access token is a short-lived JWT (15m, `JWT_ACCESS_SECRET`), verified by signature only; the refresh token is a random opaque value, hashed (SHA-256, not bcrypt — the token is already high-entropy so a slow KDF buys nothing) and stored as `RefreshToken.tokenHash`. One row per session/device — logging in on a second device doesn't touch the first device's row.
+
+- **Login** creates a new row.
+- **Refresh rotates**: the presented row is marked `revokedAt` and linked to its replacement via `replacedByTokenId`; a *new* row is created and its raw token sent back in the cookie. The old row's raw value is worthless afterward (only its hash was ever stored, and it's now flagged revoked).
+- **Reuse of a revoked token is treated as theft** — the refresh endpoint responds by revoking every other active row for that user, forcing all sessions to re-login.
+- **Logout** deletes the current row outright (a session record, not a business entity — the soft-delete policy below doesn't apply to it).
+- **Cleanup**: expired/revoked rows are not deleted on read; a future scheduled job prunes them (`RefreshTokenRepository` exposes the query already, see `backend/src/repositories/refresh-token.repository.ts`).
 
 ## Key design decisions
 

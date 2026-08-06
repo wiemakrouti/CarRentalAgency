@@ -8,6 +8,8 @@ COPY backend/package.json backend/package.json
 RUN npm ci --workspace=@car-rental/frontend --workspace=@car-rental/shared --include-workspace-root
 
 COPY packages/shared packages/shared
+RUN npm run build --workspace=@car-rental/shared
+
 COPY frontend frontend
 
 WORKDIR /app/frontend
