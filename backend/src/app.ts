@@ -6,6 +6,7 @@ import { env } from './config/env.js';
 import { healthRouter } from './routes/health.routes.js';
 import { authRouter } from './routes/auth.routes.js';
 import { carsRouter } from './routes/cars.routes.js';
+import { clientsRouter } from './routes/clients.routes.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { AppError } from './utils/app-error.js';
 
@@ -21,8 +22,9 @@ export function createApp() {
   api.use(healthRouter);
   api.use(authRouter);
   api.use(carsRouter);
-  // Feature routers (clients, rentals, finances, maintenance, reports,
-  // settings, audit-logs) are mounted here starting Phase 3.
+  api.use(clientsRouter);
+  // Feature routers (rentals, finances, maintenance, reports, settings,
+  // audit-logs) are mounted here starting Phase 4.
   app.use('/api/v1', api);
 
   app.use((_req, _res, next) => {

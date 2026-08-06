@@ -1,5 +1,6 @@
 import type { CarCategory, CarStatus, CreateCarInput, FuelType, Transmission, UpdateCarInput } from '@car-rental/shared';
 import { apiClient } from '@/lib/api-client';
+import { buildQueryString } from '@/lib/query-string';
 
 export type CarImage = {
   id: string;
@@ -46,17 +47,6 @@ export type CarListParams = {
   fuelType?: string;
   includeArchived?: boolean;
 };
-
-function buildQueryString(params: Record<string, unknown>): string {
-  const query = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== '') {
-      query.set(key, String(value));
-    }
-  });
-  const qs = query.toString();
-  return qs ? `?${qs}` : '';
-}
 
 export const carsApi = {
   list: (params: CarListParams) => apiClient.getPaginated<Car>(`/cars${buildQueryString(params)}`),

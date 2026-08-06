@@ -3,3 +3,4 @@ export * from './api-envelope.js';
 export * from './schemas/pagination.schema.js';
 export * from './schemas/auth.schema.js';
 export * from './schemas/car.schema.js';
+export * from './schemas/client.schema.js';

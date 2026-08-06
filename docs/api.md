@@ -33,10 +33,9 @@ Implemented:
 - `GET /health` — liveness check, no auth required.
 - **Auth** — `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me` (see "Authentication" above).
 - **Cars** — `GET/POST /cars`, `GET/PATCH/DELETE /cars/:id`, `POST /cars/:id/restore`, `GET /cars/available?pickupDate=&returnDate=`, `POST /cars/:id/images` (multipart, field `image` + optional `isPrimary`), `DELETE /cars/:id/images/:imageId`, `POST /cars/:id/images/:imageId/primary`. Duplicate `licensePlate` (among non-archived cars) → `409 DUPLICATE_LICENSE_PLATE`. Image uploads: 5MB max, JPEG/PNG/WebP only, stored via Cloudinary — a missing Cloudinary config fails fast with `503 IMAGE_STORAGE_NOT_CONFIGURED` rather than an opaque SDK error.
+- **Clients** — `GET/POST /clients`, `GET/PATCH/DELETE /clients/:id`, `POST /clients/:id/restore`, `POST /clients/:id/documents` (multipart, field `document` + `type` + optional `expiryDate`), `DELETE /clients/:id/documents/:documentId`. Duplicate `email` (among non-archived clients) → `409 DUPLICATE_EMAIL`. Same image constraints as Cars (5MB, JPEG/PNG/WebP) via the same shared upload middleware. List supports `?blacklisted=true|false` (boolean query params go through `booleanQueryParam()` in `packages/shared` — plain `z.coerce.boolean()` treats the string `"false"` as truthy, a real bug caught while building this filter).
 
 Planned (see `docs/roadmap.md` for the phase each ships in):
-
-**Clients** — `GET/POST /clients`, `GET/PATCH/DELETE /clients/:id`, `POST /clients/:id/restore`, `POST/DELETE /clients/:id/documents(/:docId)`
 
 **Rentals** — `GET/POST /rentals`, `GET/PATCH /rentals/:id`, `POST /rentals/:id/activate`, `POST /rentals/:id/return` (auto-computes late fee), `POST /rentals/:id/extend`, `POST /rentals/:id/cancel`, `GET /rentals/:id/contract`, `GET /rentals/history?clientId=|carId=`
 

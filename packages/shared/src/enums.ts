@@ -91,6 +91,8 @@ export const AUDIT_ACTIONS = [
   'CAR_IMAGE_ADD',
   'CAR_IMAGE_REMOVE',
   'CAR_IMAGE_SET_PRIMARY',
+  'CLIENT_DOCUMENT_ADD',
+  'CLIENT_DOCUMENT_REMOVE',
   'SETTINGS_UPDATE',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
