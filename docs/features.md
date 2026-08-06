@@ -2,7 +2,9 @@
 
 User-facing description of each module. UI text is French; this doc uses the English module names for cross-referencing code (see `docs/business-rules.md` for the naming convention).
 
-Status: **Phase 0** — schema and scaffolding only, no feature UI/API yet. This file is filled in module-by-module as each ships (see `docs/roadmap.md`).
+Status: **Phase 2 shipped** (design system, app shell, authentication, Cars). This file is filled in module-by-module as each ships (see `docs/roadmap.md`).
+
+Every module from Cars onward fetches and mutates server data through TanStack Query, not ad-hoc `useEffect`/`useState` — one `QueryClient`, one query-key-factory convention per module, one shared loading/empty/error pattern (see `docs/architecture.md` "Server state (TanStack Query)"). This is a standing architectural decision, not something each module re-evaluates.
 
 - **Authentication** — single administrator login.
 - **Dashboard** — KPI overview (active rentals, revenue, overdue returns, fleet utilization).

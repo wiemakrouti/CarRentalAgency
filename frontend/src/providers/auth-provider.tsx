@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { LoginInput } from '@car-rental/shared';
 import { authApi, type AuthUser } from '@/features/auth/api/auth.api';
-import { getAccessToken, refreshAccessToken, setAccessToken } from '@/lib/auth-session';
+import { getAccessToken, onSessionExpired, refreshAccessToken, setAccessToken } from '@/lib/auth-session';
 
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 
@@ -48,6 +48,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    return onSessionExpired(() => {
+      setAccessToken(null);
+      setUser(null);
+      setStatus('unauthenticated');
+    });
   }, []);
 
   async function login(input: LoginInput) {

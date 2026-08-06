@@ -19,6 +19,22 @@ export function setAccessToken(token: string | null): void {
   accessToken = token;
 }
 
+// Lets apiClient tell AuthProvider "the session is truly dead" from anywhere
+// a request fails after an unsuccessful silent refresh — not just the
+// initial page load. Matters once background queries (TanStack Query
+// refetch-on-focus, etc.) can hit a 401 long after the app has mounted.
+type SessionListener = () => void;
+const sessionExpiredListeners = new Set<SessionListener>();
+
+export function onSessionExpired(listener: SessionListener): () => void {
+  sessionExpiredListeners.add(listener);
+  return () => sessionExpiredListeners.delete(listener);
+}
+
+export function notifySessionExpired(): void {
+  sessionExpiredListeners.forEach((listener) => listener());
+}
+
 export function refreshAccessToken(): Promise<string | null> {
   if (!refreshPromise) {
     refreshPromise = performRefresh().finally(() => {

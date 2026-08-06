@@ -1,5 +1,5 @@
-import type { ApiResponse } from '@car-rental/shared';
-import { getAccessToken, refreshAccessToken } from './auth-session';
+import type { ApiResponse, ApiSuccess } from '@car-rental/shared';
+import { getAccessToken, notifySessionExpired, refreshAccessToken } from './auth-session';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api/v1';
 
@@ -18,12 +18,16 @@ export class ApiClientError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit, isRetry = false): Promise<T> {
+async function requestRaw<T>(path: string, init?: RequestInit, isRetry = false): Promise<ApiSuccess<T>> {
   const token = getAccessToken();
+  const isFormData = init?.body instanceof FormData;
+
   const res = await fetch(`${API_BASE_URL}${path}`, {
     credentials: 'include',
     headers: {
-      'Content-Type': 'application/json',
+      // Omit Content-Type for FormData so the browser sets the multipart
+      // boundary itself — setting it manually breaks multer's parsing.
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init?.headers,
     },
@@ -33,8 +37,9 @@ async function request<T>(path: string, init?: RequestInit, isRetry = false): Pr
   if (res.status === 401 && !isRetry && !NO_RETRY_PATHS.includes(path)) {
     const newToken = await refreshAccessToken();
     if (newToken) {
-      return request<T>(path, init, true);
+      return requestRaw<T>(path, init, true);
     }
+    notifySessionExpired();
   }
 
   const body = (await res.json()) as ApiResponse<T>;
@@ -43,13 +48,25 @@ async function request<T>(path: string, init?: RequestInit, isRetry = false): Pr
     throw new ApiClientError(body.error.code, body.error.message);
   }
 
+  return body;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const body = await requestRaw<T>(path, init);
   return body.data;
+}
+
+async function requestPaginated<T>(path: string): Promise<{ items: T[]; meta: NonNullable<ApiSuccess<T[]>['meta']> }> {
+  const body = await requestRaw<T[]>(path);
+  return { items: body.data, meta: body.meta! };
 }
 
 export const apiClient = {
   get: <T>(path: string) => request<T>(path),
+  getPaginated: <T>(path: string) => requestPaginated<T>(path),
   post: <T>(path: string, data?: unknown) =>
     request<T>(path, { method: 'POST', body: data ? JSON.stringify(data) : undefined }),
+  postForm: <T>(path: string, formData: FormData) => request<T>(path, { method: 'POST', body: formData }),
   patch: <T>(path: string, data?: unknown) =>
     request<T>(path, { method: 'PATCH', body: data ? JSON.stringify(data) : undefined }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),

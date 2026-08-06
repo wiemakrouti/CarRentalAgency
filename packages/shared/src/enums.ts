@@ -88,6 +88,9 @@ export const AUDIT_ACTIONS = [
   'RENTAL_RETURN',
   'RENTAL_EXTEND',
   'RENTAL_CANCEL',
+  'CAR_IMAGE_ADD',
+  'CAR_IMAGE_REMOVE',
+  'CAR_IMAGE_SET_PRIMARY',
   'SETTINGS_UPDATE',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

@@ -2,7 +2,6 @@ import { createBrowserRouter, type RouteObject } from 'react-router-dom';
 
 import { AppShell } from '@/components/layout/app-shell';
 import { ProtectedRoute } from '@/components/layout/protected-route';
-import { CarsPage } from '@/features/cars/pages/CarsPage';
 import { ClientsPage } from '@/features/clients/pages/ClientsPage';
 import { RentalsPage } from '@/features/rentals/pages/RentalsPage';
 import { FinancesPage } from '@/features/finances/pages/FinancesPage';
@@ -45,7 +44,14 @@ export const router = createBrowserRouter([
               return { Component: DashboardPage };
             },
           },
-          { path: 'cars', handle: { breadcrumb: 'Gestion des voitures' }, element: <CarsPage /> },
+          {
+            path: 'cars',
+            handle: { breadcrumb: 'Gestion des voitures' },
+            lazy: async () => {
+              const { CarsPage } = await import('@/features/cars/pages/CarsPage');
+              return { Component: CarsPage };
+            },
+          },
           { path: 'clients', handle: { breadcrumb: 'Gestion des clients' }, element: <ClientsPage /> },
           { path: 'rentals', handle: { breadcrumb: 'Gestion des locations' }, element: <RentalsPage /> },
           { path: 'finances', handle: { breadcrumb: 'Finances' }, element: <FinancesPage /> },

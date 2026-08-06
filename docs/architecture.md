@@ -52,3 +52,27 @@ npm workspaces: `backend/`, `frontend/`, `packages/shared/` (enums + Zod schemas
 ## Frontend
 
 Feature-based folders (`frontend/src/features/{cars,clients,rentals,finances,maintenance,reports,settings,auth,dashboard}`), not type-based — each module owns its API calls, hooks, and pages. Shared UI lives in `frontend/src/components`: `ui/` (shadcn/Radix primitives), `common/` (composite building blocks — empty/loading/error states, page header/container, KPI/chart cards, search/filter/pagination), `layout/` (app shell — sidebar, topbar, mobile nav, command palette). Theme state lives in `frontend/src/providers`; the nav config (`frontend/src/lib/navigation.ts`) drives both the sidebar and the command palette. Full token/component reference: `docs/design-system.md`.
+
+### Server state (TanStack Query)
+
+Standing decision, applies to every feature module (Cars, Clients, Rentals, Finances, Maintenance, Reports, Settings) — not something each module re-decides. `QueryClient` is configured once in `frontend/src/lib/query-client.ts` (`staleTime: 30s`, `retry: 1`) and provided at the root in `main.tsx`, above the router. Dev-only Devtools (`frontend/src/dev/query-devtools.tsx`) follow the same DEV-gated dynamic-import pattern as the `/design-system` route — excluded from the production bundle, not just hidden.
+
+Per feature module, three kinds of file, none optional:
+
+- **`features/{module}/api/{module}.api.ts`** — the *only* place that calls `apiClient` for that module. Plain async functions (`list`, `getById`, `create`, `update`, `archive`, `restore`, ...), no React.
+- **`features/{module}/api/{module}.keys.ts`** — a query key factory (e.g. `carKeys`), the pattern every module copies:
+  ```ts
+  export const carKeys = {
+    all: ['cars'] as const,
+    lists: () => [...carKeys.all, 'list'] as const,
+    list: (filters: CarListParams) => [...carKeys.lists(), filters] as const,
+    detail: (id: string) => [...carKeys.all, 'detail', id] as const,
+  };
+  ```
+- **`features/{module}/hooks/use-{module}.ts`** — `useQuery`/`useMutation` wrappers pages actually import. Mutations invalidate the affected `{module}Keys` on success (e.g. creating a car invalidates `carKeys.lists()`; updating one invalidates both its `detail(id)` and `lists()`). Optimistic updates only where a mutation's outcome is predictable enough to be worth it (e.g. archive/restore toggling a list row) — not a default for every mutation.
+
+Pages call only the hooks layer, never `apiClient` or `useQuery`/`useMutation` directly. Loading/empty/error rendering is not ad-hoc per page — hooks' `isLoading`/`isError`/empty-array states map onto the Phase 1 `LoadingState`/`EmptyState`/`ErrorState` composites (`docs/design-system.md`), the same three states every page already uses.
+
+TanStack Query's job stops at fetching, caching, synchronization, and request lifecycle (retries, refetch-on-focus, optimistic updates) — it never contains business logic; that stays server-side per the layering above. No feature page hand-rolls `useEffect` + `useState` for server data.
+
+A 401 that survives `apiClient`'s silent-refresh retry (`frontend/src/lib/auth-session.ts`) calls `notifySessionExpired()`, which `AuthProvider` listens for to flip to `unauthenticated` and let `ProtectedRoute` redirect — this covers session death from a background query refetch, not just the initial page load.

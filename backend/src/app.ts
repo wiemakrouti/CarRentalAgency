@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import { env } from './config/env.js';
 import { healthRouter } from './routes/health.routes.js';
 import { authRouter } from './routes/auth.routes.js';
+import { carsRouter } from './routes/cars.routes.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { AppError } from './utils/app-error.js';
 
@@ -19,8 +20,9 @@ export function createApp() {
   const api = express.Router();
   api.use(healthRouter);
   api.use(authRouter);
-  // Feature routers (cars, clients, rentals, finances, maintenance, reports,
-  // settings, audit-logs) are mounted here starting Phase 2.
+  api.use(carsRouter);
+  // Feature routers (clients, rentals, finances, maintenance, reports,
+  // settings, audit-logs) are mounted here starting Phase 3.
   app.use('/api/v1', api);
 
   app.use((_req, _res, next) => {
