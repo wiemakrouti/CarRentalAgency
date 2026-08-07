@@ -18,6 +18,14 @@ export function useCarQuery(id: string) {
   });
 }
 
+export function useAvailableCarsQuery(pickupDate: string, returnDate: string) {
+  return useQuery({
+    queryKey: carKeys.available(pickupDate, returnDate),
+    queryFn: () => carsApi.available(pickupDate, returnDate),
+    enabled: Boolean(pickupDate && returnDate && returnDate > pickupDate),
+  });
+}
+
 export function useCreateCarMutation() {
   const queryClient = useQueryClient();
   return useMutation({

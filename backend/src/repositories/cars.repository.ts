@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 import type { CreateCarInput, UpdateCarInput } from '@car-rental/shared';
 import { prisma } from '../lib/prisma-client.js';
 import { archive, notDeleted, restore } from './soft-delete.js';
+import { overlappingRentalsFilter } from '../lib/rental-availability.js';
 import type { CarListQuery } from '../validators/car.validator.js';
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -94,13 +95,7 @@ export const CarsRepository = {
   findAvailable(params: { pickupDate: Date; returnDate: Date }, db: Db = prisma) {
     const availabilityFilter: Prisma.CarWhereInput = {
       status: 'AVAILABLE',
-      rentals: {
-        none: {
-          status: { in: ['RESERVED', 'ACTIVE'] },
-          pickupDate: { lt: params.returnDate },
-          plannedReturnDate: { gt: params.pickupDate },
-        },
-      },
+      rentals: { none: overlappingRentalsFilter(params) },
     };
 
     return db.car.findMany({
