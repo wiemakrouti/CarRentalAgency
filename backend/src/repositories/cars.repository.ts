@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from '@prisma/client';
+import type { CarStatus, Prisma, PrismaClient } from '@prisma/client';
 import type { CreateCarInput, UpdateCarInput } from '@car-rental/shared';
 import { prisma } from '../lib/prisma-client.js';
 import { archive, notDeleted, restore } from './soft-delete.js';
@@ -58,6 +58,22 @@ export const CarsRepository = {
 
   update(id: string, data: UpdateCarInput, db: Db = prisma) {
     return db.car.update({ where: { id }, data, include: { images: true } });
+  },
+
+  // Same atomic status-guard pattern as RentalsRepository.updateGuarded —
+  // used by the rental lifecycle to prevent activating/returning a car that
+  // changed status underneath a concurrent request.
+  async updateStatusGuarded(
+    id: string,
+    expectedStatuses: readonly CarStatus[],
+    data: Prisma.CarUncheckedUpdateManyInput,
+    db: Db = prisma,
+  ): Promise<boolean> {
+    const result = await db.car.updateMany({
+      where: { id, status: { in: [...expectedStatuses] }, deletedAt: null },
+      data,
+    });
+    return result.count === 1;
   },
 
   archiveById(id: string, db: Db = prisma) {

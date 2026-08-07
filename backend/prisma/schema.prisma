@@ -56,10 +56,11 @@ enum ClientDocumentType {
   OTHER
 }
 
-// OVERDUE is not flipped by a background job (no scheduler in v1, see
-// RemindersService) — it's set by the return flow when a rental is returned
-// late, and treated as a derived condition (ACTIVE + past plannedReturnDate)
-// by read-side queries such as the dashboard "overdue rentals" widget.
+// OVERDUE is never written to the database — it's a purely computed,
+// read-side condition (status: ACTIVE + plannedReturnDate in the past),
+// derived by the frontend and by queries such as the dashboard "overdue
+// rentals" widget. Kept as an enum value so those read-side checks and any
+// future filter/badge can treat it as a first-class status value.
 enum RentalStatus {
   RESERVED
   ACTIVE

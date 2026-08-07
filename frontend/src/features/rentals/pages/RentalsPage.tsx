@@ -20,6 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 
 import { useRentalsQuery } from '../hooks/use-rentals';
 import { RentalFormDialog } from '../components/rental-form-dialog';
+import { RentalRowActions } from '../components/rental-row-actions';
 import type { Rental } from '../api/rentals.api';
 import { RENTAL_STATUS_BADGE_VARIANT, RENTAL_STATUS_LABELS } from '../lib/rental-labels';
 
@@ -59,6 +60,11 @@ const columns = [
   columnHelper.accessor('totalAmount', {
     header: 'Total',
     cell: ({ getValue }) => `${Number(getValue()).toLocaleString('fr-TN')} DT`,
+  }),
+  columnHelper.display({
+    id: 'actions',
+    header: '',
+    cell: ({ row }) => <RentalRowActions rental={row.original} />,
   }),
 ];
 

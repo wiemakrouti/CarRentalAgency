@@ -1,8 +1,17 @@
 import { Prisma } from '@prisma/client';
-import type { CreateRentalInput } from '@car-rental/shared';
+import type {
+  ActivateRentalInput,
+  CancelRentalInput,
+  CreateRentalInput,
+  ExtendRentalInput,
+  ReturnRentalInput,
+} from '@car-rental/shared';
 import { prisma } from '../lib/prisma-client.js';
 import { AppError } from '../utils/app-error.js';
 import { RentalsRepository } from '../repositories/rentals.repository.js';
+import { CarsRepository } from '../repositories/cars.repository.js';
+import { PaymentsRepository } from '../repositories/payments.repository.js';
+import { RentalExtensionsRepository } from '../repositories/rental-extensions.repository.js';
 import { CarsService } from './cars.service.js';
 import { ClientsService } from './clients.service.js';
 import { AuditService } from './audit.service.js';
@@ -11,6 +20,13 @@ import type { RentalListQuery } from '../validators/rental.validator.js';
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
 const MAX_RENTAL_NUMBER_ATTEMPTS = 5;
+const LIFECYCLE_ISOLATION = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable };
+
+// Auto-generated charges (late fee, extension) have no payment-collection UI
+// yet (Phase 5) — CASH is a placeholder method and PENDING reflects that the
+// amount is owed but not actually collected. Corrected/settled in Phase 5.
+const AUTO_PAYMENT_METHOD = 'CASH';
+const AUTO_PAYMENT_STATUS = 'PENDING';
 
 function generateRentalNumber(): string {
   const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -102,5 +118,291 @@ export const RentalsService = {
     }
 
     throw new AppError(500, 'RENTAL_NUMBER_GENERATION_FAILED', 'Impossible de générer un numéro de location.');
+  },
+
+  async activate(id: string, input: ActivateRentalInput, userId: string, ipAddress?: string) {
+    const rental = await RentalsService.getById(id);
+
+    if (rental.status !== 'RESERVED') {
+      throw new AppError(
+        409,
+        'INVALID_RENTAL_STATE',
+        `Impossible d'activer une location au statut ${rental.status}.`,
+      );
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const rentalGuarded = await RentalsRepository.updateGuarded(
+        id,
+        ['RESERVED'],
+        {
+          status: 'ACTIVE',
+          mileageAtPickup: input.mileageAtPickup,
+          fuelLevelAtPickup: input.fuelLevelAtPickup,
+        },
+        tx,
+      );
+      if (!rentalGuarded) {
+        throw new AppError(
+          409,
+          'INVALID_RENTAL_STATE',
+          'Cette location a été modifiée entre-temps, veuillez réessayer.',
+        );
+      }
+
+      const carGuarded = await CarsRepository.updateStatusGuarded(
+        rental.carId,
+        ['AVAILABLE'],
+        { status: 'RENTED' },
+        tx,
+      );
+      if (!carGuarded) {
+        throw new AppError(
+          409,
+          'CAR_NOT_AVAILABLE',
+          "Cette voiture n'est pas disponible pour la prise en charge actuellement.",
+        );
+      }
+
+      const updated = await RentalsRepository.findById(id, undefined, tx);
+      await AuditService.record(tx, {
+        userId,
+        action: 'RENTAL_ACTIVATE',
+        entityType: 'Rental',
+        entityId: id,
+        before: rental,
+        after: updated,
+        ipAddress,
+      });
+      return updated;
+    }, LIFECYCLE_ISOLATION);
+  },
+
+  async returnRental(id: string, input: ReturnRentalInput, userId: string, ipAddress?: string) {
+    const rental = await RentalsService.getById(id);
+
+    if (rental.status !== 'ACTIVE') {
+      throw new AppError(
+        409,
+        'INVALID_RENTAL_STATE',
+        `Impossible de clôturer une location au statut ${rental.status}.`,
+      );
+    }
+
+    if (rental.mileageAtPickup !== null && input.mileageAtReturn < rental.mileageAtPickup) {
+      throw new AppError(
+        400,
+        'INVALID_MILEAGE',
+        'Le kilométrage au retour ne peut pas être inférieur au kilométrage au départ.',
+      );
+    }
+
+    const actualReturnDate = new Date();
+    const lateDays =
+      actualReturnDate > rental.plannedReturnDate
+        ? Math.ceil((actualReturnDate.getTime() - rental.plannedReturnDate.getTime()) / MS_PER_DAY)
+        : 0;
+    const lateFeeAmount = lateDays * Number(rental.dailyRate);
+
+    return prisma.$transaction(async (tx) => {
+      const rentalGuarded = await RentalsRepository.updateGuarded(
+        id,
+        ['ACTIVE'],
+        {
+          status: 'COMPLETED',
+          actualReturnDate,
+          mileageAtReturn: input.mileageAtReturn,
+          fuelLevelAtReturn: input.fuelLevelAtReturn,
+        },
+        tx,
+      );
+      if (!rentalGuarded) {
+        throw new AppError(
+          409,
+          'INVALID_RENTAL_STATE',
+          'Cette location a été modifiée entre-temps, veuillez réessayer.',
+        );
+      }
+
+      const carGuarded = await CarsRepository.updateStatusGuarded(
+        rental.carId,
+        ['RENTED'],
+        { status: 'AVAILABLE', mileage: input.mileageAtReturn },
+        tx,
+      );
+      if (!carGuarded) {
+        throw new AppError(
+          409,
+          'CAR_STATE_CONFLICT',
+          "L'état de la voiture a changé de manière inattendue.",
+        );
+      }
+
+      if (lateFeeAmount > 0) {
+        await PaymentsRepository.create(
+          {
+            rentalId: id,
+            amount: lateFeeAmount,
+            method: AUTO_PAYMENT_METHOD,
+            type: 'LATE_FEE',
+            status: AUTO_PAYMENT_STATUS,
+            notes: `Retard de ${lateDays} jour${lateDays > 1 ? 's' : ''}.`,
+          },
+          tx,
+        );
+      }
+
+      if (input.damageFeeAmount) {
+        await PaymentsRepository.create(
+          {
+            rentalId: id,
+            amount: input.damageFeeAmount,
+            method: AUTO_PAYMENT_METHOD,
+            type: 'DAMAGE_FEE',
+            status: AUTO_PAYMENT_STATUS,
+            notes: input.damageFeeNotes ?? null,
+          },
+          tx,
+        );
+      }
+
+      const updated = await RentalsRepository.findById(id, undefined, tx);
+      await AuditService.record(tx, {
+        userId,
+        action: 'RENTAL_RETURN',
+        entityType: 'Rental',
+        entityId: id,
+        before: rental,
+        after: updated,
+        ipAddress,
+      });
+      return updated;
+    }, LIFECYCLE_ISOLATION);
+  },
+
+  async extend(id: string, input: ExtendRentalInput, userId: string, ipAddress?: string) {
+    const rental = await RentalsService.getById(id);
+
+    if (rental.status !== 'ACTIVE') {
+      throw new AppError(
+        409,
+        'INVALID_RENTAL_STATE',
+        `Impossible de prolonger une location au statut ${rental.status}.`,
+      );
+    }
+
+    if (input.newReturnDate <= rental.plannedReturnDate) {
+      throw new AppError(
+        400,
+        'INVALID_EXTENSION_DATE',
+        'La nouvelle date de retour doit être postérieure à la date de retour actuelle.',
+      );
+    }
+
+    const previousNights = calculateNights(rental.pickupDate, rental.plannedReturnDate);
+    const newNights = calculateNights(rental.pickupDate, input.newReturnDate);
+    const additionalAmount = (newNights - previousNights) * Number(rental.dailyRate);
+
+    return prisma.$transaction(async (tx) => {
+      const overlapping = await RentalsRepository.hasOverlap(
+        rental.carId,
+        { pickupDate: rental.pickupDate, returnDate: input.newReturnDate, excludeRentalId: id },
+        tx,
+      );
+      if (overlapping) {
+        throw new AppError(409, 'CAR_NOT_AVAILABLE', 'Cette voiture est déjà réservée pour ces dates.');
+      }
+
+      const rentalGuarded = await RentalsRepository.updateGuarded(
+        id,
+        ['ACTIVE'],
+        {
+          plannedReturnDate: input.newReturnDate,
+          totalAmount: { increment: additionalAmount },
+        },
+        tx,
+      );
+      if (!rentalGuarded) {
+        throw new AppError(
+          409,
+          'INVALID_RENTAL_STATE',
+          'Cette location a été modifiée entre-temps, veuillez réessayer.',
+        );
+      }
+
+      await RentalExtensionsRepository.create(
+        {
+          rentalId: id,
+          previousReturnDate: rental.plannedReturnDate,
+          newReturnDate: input.newReturnDate,
+          additionalAmount,
+        },
+        tx,
+      );
+
+      await PaymentsRepository.create(
+        {
+          rentalId: id,
+          amount: additionalAmount,
+          method: AUTO_PAYMENT_METHOD,
+          type: 'EXTENSION_PAYMENT',
+          status: AUTO_PAYMENT_STATUS,
+          notes: `Prolongation de ${newNights - previousNights} jour(s).`,
+        },
+        tx,
+      );
+
+      const updated = await RentalsRepository.findById(id, undefined, tx);
+      await AuditService.record(tx, {
+        userId,
+        action: 'RENTAL_EXTEND',
+        entityType: 'Rental',
+        entityId: id,
+        before: rental,
+        after: updated,
+        ipAddress,
+      });
+      return updated;
+    }, LIFECYCLE_ISOLATION);
+  },
+
+  async cancel(id: string, input: CancelRentalInput, userId: string, ipAddress?: string) {
+    const rental = await RentalsService.getById(id);
+
+    if (rental.status !== 'RESERVED') {
+      throw new AppError(
+        409,
+        'INVALID_RENTAL_STATE',
+        `Impossible d'annuler une location au statut ${rental.status}.`,
+      );
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const rentalGuarded = await RentalsRepository.updateGuarded(
+        id,
+        ['RESERVED'],
+        { status: 'CANCELLED', cancelledReason: input.cancelledReason ?? null },
+        tx,
+      );
+      if (!rentalGuarded) {
+        throw new AppError(
+          409,
+          'INVALID_RENTAL_STATE',
+          'Cette location a été modifiée entre-temps, veuillez réessayer.',
+        );
+      }
+
+      const updated = await RentalsRepository.findById(id, undefined, tx);
+      await AuditService.record(tx, {
+        userId,
+        action: 'RENTAL_CANCEL',
+        entityType: 'Rental',
+        entityId: id,
+        before: rental,
+        after: updated,
+        ipAddress,
+      });
+      return updated;
+    });
   },
 };

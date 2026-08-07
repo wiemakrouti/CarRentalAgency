@@ -25,6 +25,10 @@ Client (React SPA)  --HTTP/JSON-->  API (Express)  -->  Prisma  -->  PostgreSQL
 
 `AuditService.record(...)` (`backend/src/services/audit.service.ts`) is called **explicitly** from inside each mutating service method — login/logout, create/update/delete/restore, rental activate/return/extend/cancel, settings changes — in the same Prisma transaction as the business write. Explicit calls (not generic middleware) because a generic "log every request" hook can't produce meaningful before/after diffs or domain-specific action names. See `AuditLog` in `docs/database.md`.
 
+## Guarded state transitions (concurrency)
+
+Any status transition that must not race (Rental activate/return/extend/cancel, and Car's status flips within them) goes through an atomic DB-level guard rather than a read-then-write: `repository.updateGuarded(id, expectedStatuses, data, tx)` issues `db.<model>.updateMany({ where: { id, status: { in: expectedStatuses } }, data })` and the caller checks `count === 1` — Postgres's row lock during the `UPDATE` makes this safe under concurrent requests without hand-rolled locking, and a `count` of `0` means someone else already moved it, surfaced as a clear `409` domain error rather than a silent double-transition. `RentalsService.activate`/`returnRental`/`extend` additionally run their transaction under Postgres `Serializable` isolation, because `extend` performs a read (the overlap check) then a write and needs protection against write-skew, not just a single-row race. Any future module with its own state machine (e.g. Maintenance `scheduled → in_progress → done`) should reuse this pattern rather than inventing a new one.
+
 ## Soft delete
 
 Car, Client, Rental, Payment, Expense, MaintenanceRecord are never hard-deleted. Repositories filter `deletedAt IS NULL` by default (`notDeleted()` helper); an explicit `includeArchived` flag opts into seeing archived rows (reports, audit views). `DELETE` API endpoints archive; `POST .../restore` un-archives.

@@ -9,10 +9,12 @@ export const OVERLAPPING_RENTAL_STATUSES = ['RESERVED', 'ACTIVE'] as const;
 export function overlappingRentalsFilter(params: {
   pickupDate: Date;
   returnDate: Date;
+  excludeRentalId?: string;
 }): Prisma.RentalWhereInput {
   return {
     status: { in: [...OVERLAPPING_RENTAL_STATUSES] },
     pickupDate: { lt: params.returnDate },
     plannedReturnDate: { gt: params.pickupDate },
+    ...(params.excludeRentalId ? { id: { not: params.excludeRentalId } } : {}),
   };
 }

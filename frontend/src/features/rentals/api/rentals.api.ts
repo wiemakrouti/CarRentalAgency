@@ -1,8 +1,39 @@
-import type { CreateRentalInput, RentalStatus } from '@car-rental/shared';
+import type {
+  ActivateRentalInput,
+  CancelRentalInput,
+  CreateRentalInput,
+  ExtendRentalInput,
+  PaymentMethod,
+  PaymentStatus,
+  PaymentType,
+  RentalStatus,
+  ReturnRentalInput,
+} from '@car-rental/shared';
 import type { Car } from '@/features/cars/api/cars.api';
 import type { Client } from '@/features/clients/api/clients.api';
 import { apiClient } from '@/lib/api-client';
 import { buildQueryString } from '@/lib/query-string';
+
+export type RentalExtension = {
+  id: string;
+  rentalId: string;
+  previousReturnDate: string;
+  newReturnDate: string;
+  additionalAmount: string;
+  createdAt: string;
+};
+
+export type Payment = {
+  id: string;
+  rentalId: string;
+  amount: string;
+  method: PaymentMethod;
+  type: PaymentType;
+  status: PaymentStatus;
+  paidAt: string | null;
+  notes: string | null;
+  createdAt: string;
+};
 
 export type Rental = {
   id: string;
@@ -29,6 +60,8 @@ export type Rental = {
   updatedAt: string;
   car: Car;
   client: Client;
+  extensions: RentalExtension[];
+  payments: Payment[];
 };
 
 export type RentalListParams = {
@@ -45,4 +78,8 @@ export const rentalsApi = {
   list: (params: RentalListParams) => apiClient.getPaginated<Rental>(`/rentals${buildQueryString(params)}`),
   getById: (id: string) => apiClient.get<Rental>(`/rentals/${id}`),
   create: (input: CreateRentalInput) => apiClient.post<Rental>('/rentals', input),
+  activate: (id: string, input: ActivateRentalInput) => apiClient.post<Rental>(`/rentals/${id}/activate`, input),
+  returnRental: (id: string, input: ReturnRentalInput) => apiClient.post<Rental>(`/rentals/${id}/return`, input),
+  extend: (id: string, input: ExtendRentalInput) => apiClient.post<Rental>(`/rentals/${id}/extend`, input),
+  cancel: (id: string, input: CancelRentalInput) => apiClient.post<Rental>(`/rentals/${id}/cancel`, input),
 };
