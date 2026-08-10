@@ -5,3 +5,4 @@ export * from './schemas/auth.schema.js';
 export * from './schemas/car.schema.js';
 export * from './schemas/client.schema.js';
 export * from './schemas/rental.schema.js';
+export * from './schemas/finance.schema.js';

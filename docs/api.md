@@ -43,11 +43,19 @@ Implemented:
     - `POST /rentals/:id/cancel` — `RESERVED` only. Body: optional `cancelledReason`. Never touches `Car` — a `RESERVED` rental never marked the car `RENTED`.
     - `OVERDUE` is never written by any of these — it's a purely computed, read-side condition (`status: ACTIVE` + `plannedReturnDate` in the past).
 
+- **Finances (Phase 5)** — `GET/POST /finances/payments`, `GET/PATCH/DELETE /finances/payments/:id`, `POST /finances/payments/:id/restore`, `POST/DELETE /finances/payments/:id/attachments(/:attachmentId)`, `GET/POST /finances/expenses`, `GET/PATCH/DELETE /finances/expenses/:id`, `POST /finances/expenses/:id/restore`, `GET /finances/summary?from=&to=`.
+
+  **Payments** — `POST /finances/payments` records a payment already collected (cash/card/bank transfer/check): it's always written `status: COMPLETED` — `status` isn't client-settable on create — with `paidAt` defaulting to now if omitted. This is how the admin settles the `PENDING` `CASH`-placeholder rows Rentals auto-generates for `LATE_FEE`/`DAMAGE_FEE`/`EXTENSION_PAYMENT` (Phase 4b): `PATCH /finances/payments/:id` corrects amount/method/status/paidAt/notes on the existing row — `type` is immutable, since it's what the payment *is* (e.g. it drives the `DEPOSIT_REFUND` rule below), not a correctable detail. A `type: DEPOSIT_REFUND` payment atomically sets `Rental.depositReturned = true` in the same transaction — the payment record is the single source of truth for "was the deposit given back", instead of a separate manual toggle that could drift from it. List/get responses embed `rental: { car, client }` (Finances shows payments across every rental, unlike Rentals' own nested `payments[]` which already sits under its rental and only embeds `attachments`). Soft-deletable like every other module (`DELETE` archives, `POST .../restore` un-archives).
+
+  **Payment attachments** — 1–N Cloudinary photos per payment (used in practice for `DAMAGE_FEE`), via `POST /finances/payments/:id/attachments` (multipart, field `attachment`) / `DELETE .../attachments/:attachmentId`. Same 5MB JPEG/PNG/WebP constraints and `503 IMAGE_STORAGE_NOT_CONFIGURED` fallback as Cars/Clients uploads. A rental's own `GET /rentals/:id` also embeds each payment's `attachments[]`, so damage photos show up right where the damage was recorded, not only in the standalone Finances list.
+
+  **Expenses** — plain CRUD (`category`, `amount`, optional `carId` for a per-vehicle expense vs. a general agency expense, `description`, `date`, optional `receiptUrl` — a URL field, not a Cloudinary upload). Soft-deletable with the same archive/restore convention.
+
+  **Summary** — `GET /finances/summary?from=&to=` returns `{ period, revenue: { total, byType }, expenses: { total, byCategory }, pendingTotal, net }`. `byType`/`byCategory` are zero-filled for every `PaymentType`/`ExpenseCategory`, not just the ones with rows in range, so the frontend never special-cases "no data yet". Revenue/pending are bounded by `Payment.createdAt` (uniform across every status, since `paidAt` is null until a `PENDING` row is settled); expenses are bounded by `Expense.date` (the business date it was incurred, not `createdAt`).
+
 Planned (see `docs/roadmap.md` for the phase each ships in):
 
 **Rentals (contract PDF — Phase 4c)** — `GET /rentals/:id/contract`
-
-**Finances** — `GET/POST /finances/payments`, `POST/DELETE /finances/payments/:id/attachments(/:attachmentId)`, `GET/POST /finances/expenses`, `PATCH/DELETE /finances/expenses/:id`, `GET /finances/summary?from=&to=`
 
 **Maintenance** — `GET/POST /maintenance`, `GET/PATCH/DELETE /maintenance/:id`, `GET /cars/:id/maintenance`
 

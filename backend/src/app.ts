@@ -8,6 +8,7 @@ import { authRouter } from './routes/auth.routes.js';
 import { carsRouter } from './routes/cars.routes.js';
 import { clientsRouter } from './routes/clients.routes.js';
 import { rentalsRouter } from './routes/rentals.routes.js';
+import { financesRouter } from './routes/finances.routes.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { AppError } from './utils/app-error.js';
 
@@ -25,8 +26,9 @@ export function createApp() {
   api.use(carsRouter);
   api.use(clientsRouter);
   api.use(rentalsRouter);
-  // Feature routers (finances, maintenance, reports, settings, audit-logs)
-  // are mounted here starting Phase 4b.
+  api.use(financesRouter);
+  // Remaining feature routers (maintenance, reports, settings, audit-logs)
+  // are mounted here as their phases ship.
   app.use('/api/v1', api);
 
   app.use((_req, _res, next) => {

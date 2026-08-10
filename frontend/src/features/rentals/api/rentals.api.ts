@@ -3,14 +3,12 @@ import type {
   CancelRentalInput,
   CreateRentalInput,
   ExtendRentalInput,
-  PaymentMethod,
-  PaymentStatus,
-  PaymentType,
   RentalStatus,
   ReturnRentalInput,
 } from '@car-rental/shared';
 import type { Car } from '@/features/cars/api/cars.api';
 import type { Client } from '@/features/clients/api/clients.api';
+import type { Payment } from '@/features/finances/api/finances.api';
 import { apiClient } from '@/lib/api-client';
 import { buildQueryString } from '@/lib/query-string';
 
@@ -20,18 +18,6 @@ export type RentalExtension = {
   previousReturnDate: string;
   newReturnDate: string;
   additionalAmount: string;
-  createdAt: string;
-};
-
-export type Payment = {
-  id: string;
-  rentalId: string;
-  amount: string;
-  method: PaymentMethod;
-  type: PaymentType;
-  status: PaymentStatus;
-  paidAt: string | null;
-  notes: string | null;
   createdAt: string;
 };
 

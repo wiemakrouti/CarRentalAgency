@@ -10,7 +10,7 @@ Each phase is a reviewable, testable increment (`CLAUDE.md`: "no feature without
 - [x] **Phase 4a** — Rentals — creation: availability check (car status + date-overlap, shared with `/cars/available`), price calc (snapshotted from `Car.dailyRate` × nights), deposit (from `Setting` default, overridable), server-generated `rentalNumber`, create; audited. List/get + create only — no activate/return/extend/cancel yet (Phase 4b). See `docs/api.md`.
 - [x] **Phase 4b** — Rentals — lifecycle: activate/return (auto late fee)/extend/cancel, each an atomic transaction (Rental + Car sync + Payment + AuditLog), guarded against invalid-state races. "History" reuses `GET /rentals?carId=|clientId=` (no new endpoint); "audit trail" is each rental's `extensions` array, not a generic AuditLog viewer (that's Phase 10). See `docs/api.md`.
 - [ ] **Phase 4c** — Contract PDF: HTML template + Puppeteer, French/Arabic (RTL), Cloudinary upload.
-- [ ] **Phase 5** — Finances: payments ledger, expenses CRUD, damage-fee attachments, aggregate-based summary.
+- [x] **Phase 5** — Finances: payments ledger (settle/correct Phase 4b's auto-generated `PENDING` charges, `DEPOSIT_REFUND` syncs `Rental.depositReturned` atomically), expenses CRUD, damage-fee attachments, aggregate-based summary (`GET /finances/summary`). Phase 4c (contract PDF) intentionally left untouched — resumes from the existing `lib/pdf-generator/` reference work. See `docs/api.md`.
 - [ ] **Phase 6** — Maintenance: CRUD, cost tracking, due-date/mileage fields.
 - [ ] **Phase 7** — Reports & Dashboard KPIs: aggregate queries, Recharts UI, overdue-rentals widget.
 - [ ] **Phase 8** — Settings module: agency profile, currency, contract languages, deposit default; changes audited.

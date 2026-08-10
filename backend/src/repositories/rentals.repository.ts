@@ -6,7 +6,15 @@ import type { RentalListQuery } from '../validators/rental.validator.js';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
-const RENTAL_INCLUDE = { car: true, client: true, extensions: true, payments: true } as const;
+// payments.attachments (Phase 5): damage-fee photos are most useful right
+// where the damage was recorded — a rental's own detail view — not just in
+// the standalone Finances payments list.
+const RENTAL_INCLUDE = {
+  car: true,
+  client: true,
+  extensions: true,
+  payments: { include: { attachments: true } },
+} as const;
 
 function buildWhere(query: RentalListQuery): Prisma.RentalWhereInput {
   const where = notDeleted<Prisma.RentalWhereInput>(
@@ -84,5 +92,14 @@ export const RentalsRepository = {
       data,
     });
     return result.count === 1;
+  },
+
+  // Not status-guarded like the lifecycle transitions above: a deposit can
+  // legitimately be handed back at any point after it was collected, so
+  // there's no single expected Rental.status to check against. Called from
+  // PaymentsService.create inside the same transaction as the
+  // DEPOSIT_REFUND payment row (Phase 5 business rule).
+  markDepositReturned(id: string, db: Db = prisma) {
+    return db.rental.update({ where: { id }, data: { depositReturned: true } });
   },
 };
