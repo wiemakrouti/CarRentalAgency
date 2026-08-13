@@ -10,10 +10,11 @@ import { carKeys } from '@/features/cars/api/cars.keys';
 import { rentalsApi, type RentalListParams } from '../api/rentals.api';
 import { rentalKeys } from '../api/rentals.keys';
 
-export function useRentalsQuery(params: RentalListParams) {
+export function useRentalsQuery(params: RentalListParams, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: rentalKeys.list(params),
     queryFn: () => rentalsApi.list(params),
+    enabled: options?.enabled,
   });
 }
 
@@ -42,7 +43,8 @@ export function useCreateRentalMutation() {
 export function useActivateRentalMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: ActivateRentalInput }) => rentalsApi.activate(id, input),
+    mutationFn: ({ id, input }: { id: string; input: ActivateRentalInput }) =>
+      rentalsApi.activate(id, input),
     onSuccess: (rental) => {
       queryClient.invalidateQueries({ queryKey: rentalKeys.lists() });
       queryClient.setQueryData(rentalKeys.detail(rental.id), rental);
@@ -56,7 +58,8 @@ export function useActivateRentalMutation() {
 export function useCancelRentalMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: CancelRentalInput }) => rentalsApi.cancel(id, input),
+    mutationFn: ({ id, input }: { id: string; input: CancelRentalInput }) =>
+      rentalsApi.cancel(id, input),
     onSuccess: (rental) => {
       queryClient.invalidateQueries({ queryKey: rentalKeys.lists() });
       queryClient.setQueryData(rentalKeys.detail(rental.id), rental);
@@ -68,7 +71,8 @@ export function useCancelRentalMutation() {
 export function useReturnRentalMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: ReturnRentalInput }) => rentalsApi.returnRental(id, input),
+    mutationFn: ({ id, input }: { id: string; input: ReturnRentalInput }) =>
+      rentalsApi.returnRental(id, input),
     onSuccess: (rental) => {
       queryClient.invalidateQueries({ queryKey: rentalKeys.lists() });
       queryClient.setQueryData(rentalKeys.detail(rental.id), rental);
@@ -81,7 +85,8 @@ export function useReturnRentalMutation() {
 export function useExtendRentalMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: ExtendRentalInput }) => rentalsApi.extend(id, input),
+    mutationFn: ({ id, input }: { id: string; input: ExtendRentalInput }) =>
+      rentalsApi.extend(id, input),
     onSuccess: (rental) => {
       queryClient.invalidateQueries({ queryKey: rentalKeys.lists() });
       queryClient.setQueryData(rentalKeys.detail(rental.id), rental);

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { CreateCarInput, UpdateCarInput } from '@car-rental/shared';
+import type { CarStatus, CreateCarInput, UpdateCarInput } from '@car-rental/shared';
 import { carsApi, type CarListParams } from '../api/cars.api';
 import { carKeys } from '../api/cars.keys';
 
@@ -14,6 +14,14 @@ export function useCarQuery(id: string) {
   return useQuery({
     queryKey: carKeys.detail(id),
     queryFn: () => carsApi.getById(id),
+    enabled: Boolean(id),
+  });
+}
+
+export function useCarStatsQuery(id: string | undefined) {
+  return useQuery({
+    queryKey: carKeys.stats(id ?? ''),
+    queryFn: () => carsApi.getStats(id!),
     enabled: Boolean(id),
   });
 }
@@ -69,6 +77,27 @@ export function useRestoreCarMutation() {
   });
 }
 
+export function useBulkArchiveCarsMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => carsApi.bulkArchive(ids),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: carKeys.lists() });
+    },
+  });
+}
+
+export function useBulkUpdateCarStatusMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ids, status }: { ids: string[]; status: CarStatus }) =>
+      carsApi.bulkUpdateStatus(ids, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: carKeys.lists() });
+    },
+  });
+}
+
 function invalidateCarImages(queryClient: ReturnType<typeof useQueryClient>, carId: string) {
   queryClient.invalidateQueries({ queryKey: carKeys.detail(carId) });
   queryClient.invalidateQueries({ queryKey: carKeys.lists() });
@@ -86,7 +115,8 @@ export function useUploadCarImageMutation() {
 export function useDeleteCarImageMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ carId, imageId }: { carId: string; imageId: string }) => carsApi.deleteImage(carId, imageId),
+    mutationFn: ({ carId, imageId }: { carId: string; imageId: string }) =>
+      carsApi.deleteImage(carId, imageId),
     onSuccess: (_result, variables) => invalidateCarImages(queryClient, variables.carId),
   });
 }
@@ -94,7 +124,8 @@ export function useDeleteCarImageMutation() {
 export function useSetPrimaryImageMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ carId, imageId }: { carId: string; imageId: string }) => carsApi.setPrimaryImage(carId, imageId),
+    mutationFn: ({ carId, imageId }: { carId: string; imageId: string }) =>
+      carsApi.setPrimaryImage(carId, imageId),
     onSuccess: (_image, variables) => invalidateCarImages(queryClient, variables.carId),
   });
 }

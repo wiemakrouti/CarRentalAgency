@@ -1,4 +1,11 @@
-import type { CarCategory, CarStatus, CreateCarInput, FuelType, Transmission, UpdateCarInput } from '@car-rental/shared';
+import type {
+  CarCategory,
+  CarStatus,
+  CreateCarInput,
+  FuelType,
+  Transmission,
+  UpdateCarInput,
+} from '@car-rental/shared';
 import { apiClient } from '@/lib/api-client';
 import { buildQueryString } from '@/lib/query-string';
 
@@ -35,7 +42,13 @@ export type Car = {
   createdAt: string;
   updatedAt: string;
   images: CarImage[];
+  // Set only while status is RENTED — the rental currently holding this car.
+  activeRental: { plannedReturnDate: string } | null;
 };
+
+export type CarSortField =
+  'brand' | 'licensePlate' | 'category' | 'status' | 'dailyRate' | 'year' | 'mileage' | 'createdAt';
+export type SortOrder = 'asc' | 'desc';
 
 export type CarListParams = {
   page?: number;
@@ -46,11 +59,27 @@ export type CarListParams = {
   transmission?: string;
   fuelType?: string;
   includeArchived?: boolean;
+  minDailyRate?: number;
+  maxDailyRate?: number;
+  minYear?: number;
+  maxYear?: number;
+  minMileage?: number;
+  maxMileage?: number;
+  sortBy?: CarSortField;
+  sortOrder?: SortOrder;
+};
+
+export type CarStats = {
+  totalRentals: number;
+  completedRentals: number;
+  totalRevenue: number;
+  lastRentalDate: string | null;
 };
 
 export const carsApi = {
   list: (params: CarListParams) => apiClient.getPaginated<Car>(`/cars${buildQueryString(params)}`),
   getById: (id: string) => apiClient.get<Car>(`/cars/${id}`),
+  getStats: (id: string) => apiClient.get<CarStats>(`/cars/${id}/stats`),
   create: (input: CreateCarInput) => apiClient.post<Car>('/cars', input),
   update: (id: string, input: UpdateCarInput) => apiClient.patch<Car>(`/cars/${id}`, input),
   archive: (id: string) => apiClient.delete<Car>(`/cars/${id}`),
@@ -67,4 +96,9 @@ export const carsApi = {
     apiClient.post<CarImage>(`/cars/${carId}/images/${imageId}/primary`),
   available: (pickupDate: string, returnDate: string) =>
     apiClient.get<Car[]>(`/cars/available?pickupDate=${pickupDate}&returnDate=${returnDate}`),
+  exportCsv: (params: Omit<CarListParams, 'page' | 'pageSize'>) =>
+    apiClient.download(`/cars/export${buildQueryString(params)}`),
+  bulkArchive: (ids: string[]) => apiClient.post<Car[]>('/cars/bulk/archive', { ids }),
+  bulkUpdateStatus: (ids: string[], status: CarStatus) =>
+    apiClient.patch<Car[]>('/cars/bulk/status', { ids, status }),
 };

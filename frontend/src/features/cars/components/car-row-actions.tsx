@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MoreHorizontal } from 'lucide-react';
+import { CalendarDays, MoreHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { ApiClientError } from '@/lib/api-client';
@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ConfirmDialog } from '@/components/common/confirm-dialog';
 import type { Car } from '../api/cars.api';
 import { useArchiveCarMutation, useRestoreCarMutation } from '../hooks/use-cars';
@@ -22,9 +23,17 @@ type CarRowActionsProps = {
   car: Car;
   onEdit: (car: Car) => void;
   onManageImages: (car: Car) => void;
+  onViewDetails: (car: Car) => void;
+  onOpenCalendar: (car: Car) => void;
 };
 
-export function CarRowActions({ car, onEdit, onManageImages }: CarRowActionsProps) {
+export function CarRowActions({
+  car,
+  onEdit,
+  onManageImages,
+  onViewDetails,
+  onOpenCalendar,
+}: CarRowActionsProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const archiveMutation = useArchiveCarMutation();
   const restoreMutation = useRestoreCarMutation();
@@ -32,33 +41,53 @@ export function CarRowActions({ car, onEdit, onManageImages }: CarRowActionsProp
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" aria-label="Actions">
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => onEdit(car)}>Modifier</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onManageImages(car)}>Gérer les images</DropdownMenuItem>
-          {isArchived ? (
-            <DropdownMenuItem
-              onClick={() =>
-                restoreMutation.mutate(car.id, {
-                  onSuccess: () => toast.success('Voiture restaurée.'),
-                  onError: (err) => toast.error(errorMessage(err, 'Erreur lors de la restauration.')),
-                })
-              }
+      <div className="flex items-center justify-end gap-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Calendrier des locations"
+              onClick={() => onOpenCalendar(car)}
             >
-              Restaurer
+              <CalendarDays className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Calendrier des locations</TooltipContent>
+        </Tooltip>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" aria-label="Actions">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => onViewDetails(car)}>Voir les détails</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onEdit(car)}>Modifier</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onManageImages(car)}>
+              Gérer les images
             </DropdownMenuItem>
-          ) : (
-            <DropdownMenuItem className="text-destructive" onClick={() => setConfirmOpen(true)}>
-              Archiver
-            </DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+            {isArchived ? (
+              <DropdownMenuItem
+                onClick={() =>
+                  restoreMutation.mutate(car.id, {
+                    onSuccess: () => toast.success('Voiture restaurée.'),
+                    onError: (err) =>
+                      toast.error(errorMessage(err, 'Erreur lors de la restauration.')),
+                  })
+                }
+              >
+                Restaurer
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem className="text-destructive" onClick={() => setConfirmOpen(true)}>
+                Archiver
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
 
       <ConfirmDialog
         open={confirmOpen}

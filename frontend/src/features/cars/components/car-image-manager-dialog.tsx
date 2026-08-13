@@ -23,10 +23,13 @@ import { EmptyState } from '@/components/common/empty-state';
 import { ConfirmDialog } from '@/components/common/confirm-dialog';
 
 import type { CarImage } from '../api/cars.api';
-import { useCarQuery, useDeleteCarImageMutation, useSetPrimaryImageMutation, useUploadCarImageMutation } from '../hooks/use-cars';
-
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-const MAX_SIZE_BYTES = 5 * 1024 * 1024;
+import {
+  useCarQuery,
+  useDeleteCarImageMutation,
+  useSetPrimaryImageMutation,
+  useUploadCarImageMutation,
+} from '../hooks/use-cars';
+import { validateCarImageFile } from '../lib/car-image-validation';
 
 type CarImageManagerDialogProps = {
   open: boolean;
@@ -51,12 +54,9 @@ export function CarImageManagerDialog({ open, onOpenChange, carId }: CarImageMan
     event.target.value = '';
     if (!file || !carId) return;
 
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      toast.error('Seules les images JPEG, PNG ou WEBP sont autorisées.');
-      return;
-    }
-    if (file.size > MAX_SIZE_BYTES) {
-      toast.error('Le fichier dépasse la taille maximale autorisée (5 Mo).');
+    const validationError = validateCarImageFile(file);
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
 
@@ -87,7 +87,9 @@ export function CarImageManagerDialog({ open, onOpenChange, carId }: CarImageMan
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Images{car ? ` — ${car.brand} ${car.model}` : ''}</DialogTitle>
-            <DialogDescription>Formats acceptés : JPEG, PNG, WEBP. Taille maximale : 5 Mo.</DialogDescription>
+            <DialogDescription>
+              Formats acceptés : JPEG, PNG, WEBP. Taille maximale : 5 Mo.
+            </DialogDescription>
           </DialogHeader>
 
           {isLoading && <LoadingState message="Chargement des images..." />}
@@ -103,7 +105,10 @@ export function CarImageManagerDialog({ open, onOpenChange, carId }: CarImageMan
               ) : (
                 <div className="grid grid-cols-3 gap-3">
                   {car.images.map((image) => (
-                    <div key={image.id} className="relative overflow-hidden rounded-lg border border-border">
+                    <div
+                      key={image.id}
+                      className="relative overflow-hidden rounded-lg border border-border"
+                    >
                       <img src={image.url} alt="" className="h-32 w-full object-cover" />
                       {image.isPrimary && (
                         <Badge className="absolute left-2 top-2">Principale</Badge>

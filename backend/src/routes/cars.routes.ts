@@ -8,6 +8,9 @@ import { uploadCarImage } from '../middleware/upload.js';
 import { CarsController } from '../controllers/cars.controller.js';
 import {
   availableQuerySchema,
+  bulkCarIdsSchema,
+  bulkCarStatusSchema,
+  carExportQuerySchema,
   carIdParamSchema,
   carImageIdParamSchema,
   carListQuerySchema,
@@ -17,18 +20,53 @@ export const carsRouter = Router();
 
 carsRouter.use('/cars', authenticate, authorize('ADMIN'));
 
-// Must be registered before /cars/:id so "available" isn't matched as an id.
-carsRouter.get('/cars/available', validate({ query: availableQuerySchema }), asyncHandler(CarsController.available));
+// Must be registered before /cars/:id so "available"/"export" aren't matched as an id.
+carsRouter.get(
+  '/cars/available',
+  validate({ query: availableQuerySchema }),
+  asyncHandler(CarsController.available),
+);
+carsRouter.get(
+  '/cars/export',
+  validate({ query: carExportQuerySchema }),
+  asyncHandler(CarsController.exportCsv),
+);
+
+// Three path segments (/cars/bulk/*), so these never collide with /cars/:id
+// regardless of registration order — unlike /available and /export above.
+carsRouter.post(
+  '/cars/bulk/archive',
+  validate({ body: bulkCarIdsSchema }),
+  asyncHandler(CarsController.bulkArchive),
+);
+carsRouter.patch(
+  '/cars/bulk/status',
+  validate({ body: bulkCarStatusSchema }),
+  asyncHandler(CarsController.bulkUpdateStatus),
+);
 
 carsRouter.get('/cars', validate({ query: carListQuerySchema }), asyncHandler(CarsController.list));
 carsRouter.post('/cars', validate({ body: createCarSchema }), asyncHandler(CarsController.create));
-carsRouter.get('/cars/:id', validate({ params: carIdParamSchema }), asyncHandler(CarsController.getById));
+carsRouter.get(
+  '/cars/:id',
+  validate({ params: carIdParamSchema }),
+  asyncHandler(CarsController.getById),
+);
+carsRouter.get(
+  '/cars/:id/stats',
+  validate({ params: carIdParamSchema }),
+  asyncHandler(CarsController.getStats),
+);
 carsRouter.patch(
   '/cars/:id',
   validate({ params: carIdParamSchema, body: updateCarSchema }),
   asyncHandler(CarsController.update),
 );
-carsRouter.delete('/cars/:id', validate({ params: carIdParamSchema }), asyncHandler(CarsController.archive));
+carsRouter.delete(
+  '/cars/:id',
+  validate({ params: carIdParamSchema }),
+  asyncHandler(CarsController.archive),
+);
 carsRouter.post(
   '/cars/:id/restore',
   validate({ params: carIdParamSchema }),

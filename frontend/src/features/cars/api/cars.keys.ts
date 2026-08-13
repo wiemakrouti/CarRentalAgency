@@ -8,6 +8,7 @@ export const carKeys = {
   list: (params: CarListParams) => [...carKeys.lists(), params] as const,
   details: () => [...carKeys.all, 'detail'] as const,
   detail: (id: string) => [...carKeys.details(), id] as const,
+  stats: (id: string) => [...carKeys.all, 'stats', id] as const,
   available: (pickupDate: string, returnDate: string) =>
     [...carKeys.all, 'available', pickupDate, returnDate] as const,
 };

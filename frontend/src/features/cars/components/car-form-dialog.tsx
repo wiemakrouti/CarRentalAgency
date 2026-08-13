@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import type { Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -27,10 +28,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 import type { Car } from '../api/cars.api';
-import { useCreateCarMutation, useUpdateCarMutation } from '../hooks/use-cars';
+import {
+  useCreateCarMutation,
+  useUpdateCarMutation,
+  useUploadCarImageMutation,
+} from '../hooks/use-cars';
+import { CarPhotoField } from './car-photo-field';
 import {
   CAR_CATEGORY_LABELS,
   CAR_STATUS_LABELS,
@@ -71,7 +83,9 @@ function buildDefaultValues(car?: Car): UpdateCarInput {
     technicalInspectionExpiryDate: car.technicalInspectionExpiryDate
       ? new Date(car.technicalInspectionExpiryDate)
       : null,
-    registrationExpiryDate: car.registrationExpiryDate ? new Date(car.registrationExpiryDate) : null,
+    registrationExpiryDate: car.registrationExpiryDate
+      ? new Date(car.registrationExpiryDate)
+      : null,
     status: car.status,
   };
 }
@@ -84,7 +98,19 @@ export function CarFormDialog({ open, onOpenChange, car }: CarFormDialogProps) {
   const isEdit = Boolean(car);
   const createMutation = useCreateCarMutation();
   const updateMutation = useUpdateCarMutation();
-  const isPending = createMutation.isPending || updateMutation.isPending;
+  const uploadImageMutation = useUploadCarImageMutation();
+  const isPending =
+    createMutation.isPending || updateMutation.isPending || uploadImageMutation.isPending;
+
+  // Not a form field — the car has to exist before an image can be
+  // associated with it, so this is only ever sent (via the existing Cars
+  // image API, isPrimary: true) after the create/update mutation below
+  // resolves. Radix unmounts DialogContent on close, so this naturally
+  // resets to null each time the dialog reopens, same as react-hook-form's
+  // defaultValues below.
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const existingImageUrl =
+    car?.images.find((img) => img.isPrimary)?.url ?? car?.images[0]?.url ?? null;
 
   const {
     register,
@@ -97,18 +123,39 @@ export function CarFormDialog({ open, onOpenChange, car }: CarFormDialogProps) {
   });
 
   async function onSubmit(values: UpdateCarInput) {
+    let savedCar: Car;
     try {
       if (isEdit && car) {
-        await updateMutation.mutateAsync({ id: car.id, input: values });
+        savedCar = await updateMutation.mutateAsync({ id: car.id, input: values });
         toast.success('Voiture mise à jour.');
       } else {
-        await createMutation.mutateAsync(values as CreateCarInput);
+        savedCar = await createMutation.mutateAsync(values as CreateCarInput);
         toast.success('Voiture ajoutée.');
       }
-      onOpenChange(false);
     } catch (err) {
       toast.error(errorMessage(err, "Erreur lors de l'enregistrement."));
+      return;
     }
+
+    if (photoFile) {
+      try {
+        await uploadImageMutation.mutateAsync({
+          carId: savedCar.id,
+          file: photoFile,
+          isPrimary: true,
+        });
+        toast.success('Photo ajoutée.');
+      } catch (err) {
+        toast.error(
+          errorMessage(
+            err,
+            'La voiture a été enregistrée, mais l\'envoi de la photo a échoué. Réessayez depuis "Gérer les images".',
+          ),
+        );
+      }
+    }
+
+    onOpenChange(false);
   }
 
   return (
@@ -124,6 +171,15 @@ export function CarFormDialog({ open, onOpenChange, car }: CarFormDialogProps) {
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
+          <CarPhotoField
+            existingImageUrl={existingImageUrl}
+            file={photoFile}
+            onFileChange={setPhotoFile}
+            disabled={isPending}
+          />
+
+          <Separator />
+
           <div className="space-y-4">
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Informations générales
@@ -132,7 +188,9 @@ export function CarFormDialog({ open, onOpenChange, car }: CarFormDialogProps) {
               <div className="space-y-2">
                 <Label htmlFor="licensePlate">Immatriculation</Label>
                 <Input id="licensePlate" {...register('licensePlate')} />
-                {errors.licensePlate && <p className="text-sm text-destructive">{errors.licensePlate.message}</p>}
+                {errors.licensePlate && (
+                  <p className="text-sm text-destructive">{errors.licensePlate.message}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="vin">VIN (optionnel)</Label>
@@ -167,7 +225,9 @@ export function CarFormDialog({ open, onOpenChange, car }: CarFormDialogProps) {
           <Separator />
 
           <div className="space-y-4">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Caractéristiques</p>
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Caractéristiques
+            </p>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Catégorie</Label>
@@ -189,7 +249,9 @@ export function CarFormDialog({ open, onOpenChange, car }: CarFormDialogProps) {
                     </Select>
                   )}
                 />
-                {errors.category && <p className="text-sm text-destructive">{errors.category.message}</p>}
+                {errors.category && (
+                  <p className="text-sm text-destructive">{errors.category.message}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Transmission</Label>
@@ -211,7 +273,9 @@ export function CarFormDialog({ open, onOpenChange, car }: CarFormDialogProps) {
                     </Select>
                   )}
                 />
-                {errors.transmission && <p className="text-sm text-destructive">{errors.transmission.message}</p>}
+                {errors.transmission && (
+                  <p className="text-sm text-destructive">{errors.transmission.message}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Carburant</Label>
@@ -233,7 +297,9 @@ export function CarFormDialog({ open, onOpenChange, car }: CarFormDialogProps) {
                     </Select>
                   )}
                 />
-                {errors.fuelType && <p className="text-sm text-destructive">{errors.fuelType.message}</p>}
+                {errors.fuelType && (
+                  <p className="text-sm text-destructive">{errors.fuelType.message}</p>
+                )}
               </div>
               {isEdit && (
                 <div className="space-y-2">
@@ -265,8 +331,14 @@ export function CarFormDialog({ open, onOpenChange, car }: CarFormDialogProps) {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="mileage">Kilométrage</Label>
-                <Input id="mileage" type="number" {...register('mileage', { setValueAs: Number })} />
-                {errors.mileage && <p className="text-sm text-destructive">{errors.mileage.message}</p>}
+                <Input
+                  id="mileage"
+                  type="number"
+                  {...register('mileage', { setValueAs: Number })}
+                />
+                {errors.mileage && (
+                  <p className="text-sm text-destructive">{errors.mileage.message}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="dailyRate">Tarif / jour (DT)</Label>
@@ -276,7 +348,9 @@ export function CarFormDialog({ open, onOpenChange, car }: CarFormDialogProps) {
                   step="0.001"
                   {...register('dailyRate', { setValueAs: Number })}
                 />
-                {errors.dailyRate && <p className="text-sm text-destructive">{errors.dailyRate.message}</p>}
+                {errors.dailyRate && (
+                  <p className="text-sm text-destructive">{errors.dailyRate.message}</p>
+                )}
               </div>
             </div>
           </div>
@@ -294,7 +368,9 @@ export function CarFormDialog({ open, onOpenChange, car }: CarFormDialogProps) {
                   id="purchaseDate"
                   type="date"
                   defaultValue={car?.purchaseDate ? toDateInputValue(car.purchaseDate) : undefined}
-                  {...register('purchaseDate', { setValueAs: (v) => (v === '' ? null : new Date(v)) })}
+                  {...register('purchaseDate', {
+                    setValueAs: (v) => (v === '' ? null : new Date(v)),
+                  })}
                 />
               </div>
               <div className="space-y-2">
@@ -303,17 +379,25 @@ export function CarFormDialog({ open, onOpenChange, car }: CarFormDialogProps) {
                   id="purchasePrice"
                   type="number"
                   step="0.001"
-                  {...register('purchasePrice', { setValueAs: (v) => (v === '' ? null : Number(v)) })}
+                  {...register('purchasePrice', {
+                    setValueAs: (v) => (v === '' ? null : Number(v)),
+                  })}
                 />
-                {errors.purchasePrice && <p className="text-sm text-destructive">{errors.purchasePrice.message}</p>}
+                {errors.purchasePrice && (
+                  <p className="text-sm text-destructive">{errors.purchasePrice.message}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="insuranceExpiryDate">Expiration assurance</Label>
                 <Input
                   id="insuranceExpiryDate"
                   type="date"
-                  defaultValue={car?.insuranceExpiryDate ? toDateInputValue(car.insuranceExpiryDate) : undefined}
-                  {...register('insuranceExpiryDate', { setValueAs: (v) => (v === '' ? null : new Date(v)) })}
+                  defaultValue={
+                    car?.insuranceExpiryDate ? toDateInputValue(car.insuranceExpiryDate) : undefined
+                  }
+                  {...register('insuranceExpiryDate', {
+                    setValueAs: (v) => (v === '' ? null : new Date(v)),
+                  })}
                 />
               </div>
               <div className="space-y-2">
@@ -337,9 +421,13 @@ export function CarFormDialog({ open, onOpenChange, car }: CarFormDialogProps) {
                   id="registrationExpiryDate"
                   type="date"
                   defaultValue={
-                    car?.registrationExpiryDate ? toDateInputValue(car.registrationExpiryDate) : undefined
+                    car?.registrationExpiryDate
+                      ? toDateInputValue(car.registrationExpiryDate)
+                      : undefined
                   }
-                  {...register('registrationExpiryDate', { setValueAs: (v) => (v === '' ? null : new Date(v)) })}
+                  {...register('registrationExpiryDate', {
+                    setValueAs: (v) => (v === '' ? null : new Date(v)),
+                  })}
                 />
               </div>
             </div>

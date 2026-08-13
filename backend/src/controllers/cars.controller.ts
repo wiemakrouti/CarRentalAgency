@@ -2,7 +2,13 @@ import type { Request, Response } from 'express';
 import type { CreateCarInput, UpdateCarInput } from '@car-rental/shared';
 import { AppError } from '../utils/app-error.js';
 import { CarsService } from '../services/cars.service.js';
-import type { AvailableQuery, CarListQuery } from '../validators/car.validator.js';
+import type {
+  AvailableQuery,
+  BulkCarIdsInput,
+  BulkCarStatusInput,
+  CarExportQuery,
+  CarListQuery,
+} from '../validators/car.validator.js';
 
 export const CarsController = {
   async list(req: Request, res: Response) {
@@ -15,6 +21,15 @@ export const CarsController = {
     });
   },
 
+  async exportCsv(req: Request, res: Response) {
+    const query = req.query as unknown as CarExportQuery;
+    const csv = await CarsService.exportCsv(query);
+    res.status(200);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="voitures.csv"');
+    res.send(csv);
+  },
+
   async available(req: Request, res: Response) {
     const query = req.query as unknown as AvailableQuery;
     const cars = await CarsService.getAvailable(query);
@@ -24,6 +39,11 @@ export const CarsController = {
   async getById(req: Request, res: Response) {
     const car = await CarsService.getById(req.params.id!);
     res.status(200).json({ success: true, data: car });
+  },
+
+  async getStats(req: Request, res: Response) {
+    const stats = await CarsService.getStats(req.params.id!);
+    res.status(200).json({ success: true, data: stats });
   },
 
   async create(req: Request, res: Response) {
@@ -53,7 +73,13 @@ export const CarsController = {
       throw new AppError(400, 'IMAGE_REQUIRED', 'Un fichier image est requis.');
     }
     const isPrimary = req.body.isPrimary === 'true';
-    const image = await CarsService.addImage(req.params.id!, req.file, isPrimary, req.user!.id, req.ip);
+    const image = await CarsService.addImage(
+      req.params.id!,
+      req.file,
+      isPrimary,
+      req.user!.id,
+      req.ip,
+    );
     res.status(201).json({ success: true, data: image });
   },
 
@@ -63,7 +89,24 @@ export const CarsController = {
   },
 
   async setPrimaryImage(req: Request, res: Response) {
-    const image = await CarsService.setPrimaryImage(req.params.id!, req.params.imageId!, req.user!.id, req.ip);
+    const image = await CarsService.setPrimaryImage(
+      req.params.id!,
+      req.params.imageId!,
+      req.user!.id,
+      req.ip,
+    );
     res.status(200).json({ success: true, data: image });
+  },
+
+  async bulkArchive(req: Request, res: Response) {
+    const { ids } = req.body as BulkCarIdsInput;
+    const archived = await CarsService.bulkArchive(ids, req.user!.id, req.ip);
+    res.status(200).json({ success: true, data: archived });
+  },
+
+  async bulkUpdateStatus(req: Request, res: Response) {
+    const { ids, status } = req.body as BulkCarStatusInput;
+    const updated = await CarsService.bulkUpdateStatus(ids, status, req.user!.id, req.ip);
+    res.status(200).json({ success: true, data: updated });
   },
 };

@@ -8,7 +8,7 @@ Every module from Cars onward fetches and mutates server data through TanStack Q
 
 - **Authentication** — single administrator login.
 - **Dashboard** — KPI overview (active rentals, revenue, overdue returns, fleet utilization).
-- **Cars** — fleet inventory, photos, status, availability.
+- **Cars** — fleet inventory, photos, status, availability (shows planned return date while rented), document-expiry alerts (insurance/inspection/registration), sortable/range-filterable table + a photo grid view, per-car detail panel (specs, stats, rental history), CSV export, bulk archive/status-change.
 - **Clients** — renter records, ID/license documents, blacklist flag.
 - **Rentals** — full lifecycle: create (availability check, auto price calc, deposit), activate (pickup), return (late fee auto-computed, damage charges), extend, cancel, history, bilingual (FR/AR) PDF contract.
 - **Finances** — payments ledger, expenses, revenue/expense summary.

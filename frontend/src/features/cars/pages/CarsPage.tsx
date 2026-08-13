@@ -1,9 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useSearchParams } from 'react-router-dom';
-import { flexRender, getCoreRowModel, useReactTable, createColumnHelper } from '@tanstack/react-table';
+import {
+  flexRender,
+  getCoreRowModel,
+  useReactTable,
+  createColumnHelper,
+  type RowSelectionState,
+} from '@tanstack/react-table';
 import { CAR_CATEGORIES, CAR_STATUSES, TRANSMISSIONS } from '@car-rental/shared';
-import { CarFront, ImageOff, Plus } from 'lucide-react';
+import { CarFront, Download, ImageOff, LayoutGrid, Plus, Table2 } from 'lucide-react';
+import { useMutation } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { ApiClientError } from '@/lib/api-client';
+import { saveBlobAsFile } from '@/lib/download-file';
 
 import { PageContainer } from '@/components/common/page-container';
 import { PageHeader } from '@/components/common/page-header';
@@ -15,6 +25,7 @@ import { FilterBar } from '@/components/common/filter-bar';
 import { Pagination } from '@/components/common/pagination';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -22,22 +33,93 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 import { useCarsQuery } from '../hooks/use-cars';
-import type { Car } from '../api/cars.api';
+import { carsApi, type Car, type CarSortField, type SortOrder } from '../api/cars.api';
 import { CarRowActions } from '../components/car-row-actions';
 import { CarFormDialog } from '../components/car-form-dialog';
 import { CarImageManagerDialog } from '../components/car-image-manager-dialog';
-import { CAR_CATEGORY_LABELS, CAR_STATUS_BADGE_VARIANT, CAR_STATUS_LABELS, TRANSMISSION_LABELS } from '../lib/car-labels';
+import { CarDetailSheet } from '../components/car-detail-sheet';
+import { CarCalendarDialog } from '../components/car-calendar-dialog';
+import { CarGrid } from '../components/car-grid';
+import { CarBulkActionsBar } from '../components/car-bulk-actions-bar';
+import { CarExpiryAlerts } from '../components/car-expiry-alerts';
+import { CarRangeFilters, type RangeFilters } from '../components/car-range-filters';
+import { SortableHeader } from '../components/sortable-header';
+import {
+  CAR_CATEGORY_LABELS,
+  CAR_STATUS_BADGE_VARIANT,
+  CAR_STATUS_LABELS,
+  TRANSMISSION_LABELS,
+} from '../lib/car-labels';
 
 const ALL_VALUE = '__all__';
 const PAGE_SIZE = 20;
+const VIEW_MODE_STORAGE_KEY = 'cars-view-mode';
+
+type ViewMode = 'table' | 'grid';
+
+function readStoredViewMode(): ViewMode {
+  return localStorage.getItem(VIEW_MODE_STORAGE_KEY) === 'grid' ? 'grid' : 'table';
+}
 
 const columnHelper = createColumnHelper<Car>();
 
-function buildColumns(onEdit: (car: Car) => void, onManageImages: (car: Car) => void) {
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('fr-TN');
+}
+
+type SortState = { sortBy: CarSortField; sortOrder: SortOrder };
+
+function buildColumns(
+  onEdit: (car: Car) => void,
+  onManageImages: (car: Car) => void,
+  onViewDetails: (car: Car) => void,
+  onOpenCalendar: (car: Car) => void,
+  sort: SortState,
+  onSort: (field: CarSortField) => void,
+) {
+  function sortableHeader(label: string, field: CarSortField) {
+    return () => (
+      <SortableHeader
+        label={label}
+        field={field}
+        sortBy={sort.sortBy}
+        sortOrder={sort.sortOrder}
+        onSort={onSort}
+      />
+    );
+  }
+
   return [
+    columnHelper.display({
+      id: 'select',
+      header: ({ table }) => (
+        <Checkbox
+          checked={
+            table.getIsAllPageRowsSelected() ||
+            (table.getIsSomePageRowsSelected() && 'indeterminate')
+          }
+          onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))}
+          aria-label="Tout sélectionner"
+        />
+      ),
+      cell: ({ row }) => (
+        <Checkbox
+          checked={row.getIsSelected()}
+          onCheckedChange={(value) => row.toggleSelected(Boolean(value))}
+          aria-label="Sélectionner"
+        />
+      ),
+    }),
     columnHelper.display({
       id: 'thumbnail',
       header: '',
@@ -54,27 +136,51 @@ function buildColumns(onEdit: (car: Car) => void, onManageImages: (car: Car) => 
     }),
     columnHelper.accessor((row) => `${row.brand} ${row.model}`, {
       id: 'brandModel',
-      header: 'Marque / Modèle',
+      header: sortableHeader('Marque / Modèle', 'brand'),
     }),
-    columnHelper.accessor('licensePlate', { header: 'Immatriculation' }),
+    columnHelper.accessor('licensePlate', {
+      header: sortableHeader('Immatriculation', 'licensePlate'),
+    }),
     columnHelper.accessor('category', {
-      header: 'Catégorie',
+      header: sortableHeader('Catégorie', 'category'),
       cell: ({ getValue }) => CAR_CATEGORY_LABELS[getValue()],
     }),
     columnHelper.accessor('status', {
-      header: 'Statut',
-      cell: ({ getValue }) => (
-        <Badge variant={CAR_STATUS_BADGE_VARIANT[getValue()]}>{CAR_STATUS_LABELS[getValue()]}</Badge>
+      header: sortableHeader('Statut', 'status'),
+      cell: ({ getValue, row }) => (
+        <div className="space-y-0.5">
+          <Badge variant={CAR_STATUS_BADGE_VARIANT[getValue()]}>
+            {CAR_STATUS_LABELS[getValue()]}
+          </Badge>
+          {row.original.activeRental && (
+            <p className="text-xs text-muted-foreground">
+              Retour prévu le {formatDate(row.original.activeRental.plannedReturnDate)}
+            </p>
+          )}
+        </div>
       ),
     }),
     columnHelper.accessor('dailyRate', {
-      header: 'Tarif / jour',
+      header: sortableHeader('Tarif / jour', 'dailyRate'),
       cell: ({ getValue }) => `${Number(getValue()).toLocaleString('fr-TN')} DT`,
+    }),
+    columnHelper.display({
+      id: 'alerts',
+      header: 'Documents',
+      cell: ({ row }) => <CarExpiryAlerts car={row.original} />,
     }),
     columnHelper.display({
       id: 'actions',
       header: '',
-      cell: ({ row }) => <CarRowActions car={row.original} onEdit={onEdit} onManageImages={onManageImages} />,
+      cell: ({ row }) => (
+        <CarRowActions
+          car={row.original}
+          onEdit={onEdit}
+          onManageImages={onManageImages}
+          onViewDetails={onViewDetails}
+          onOpenCalendar={onOpenCalendar}
+        />
+      ),
     }),
   ];
 }
@@ -84,12 +190,26 @@ export function CarsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingCar, setEditingCar] = useState<Car | undefined>(undefined);
   const [imageManagerCarId, setImageManagerCarId] = useState<string | undefined>(undefined);
+  const [detailCarId, setDetailCarId] = useState<string | undefined>(undefined);
+  const [calendarCar, setCalendarCar] = useState<Car | undefined>(undefined);
+  const [viewMode, setViewMode] = useState<ViewMode>(readStoredViewMode);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const page = Number(searchParams.get('page') ?? '1');
   const search = searchParams.get('search') ?? '';
   const category = searchParams.get('category') ?? undefined;
   const status = searchParams.get('status') ?? undefined;
   const transmission = searchParams.get('transmission') ?? undefined;
+  const sortBy = (searchParams.get('sortBy') as CarSortField | null) ?? 'createdAt';
+  const sortOrder = (searchParams.get('sortOrder') as SortOrder | null) ?? 'desc';
+  const rangeFilters: RangeFilters = {
+    minDailyRate: searchParams.get('minDailyRate') ?? undefined,
+    maxDailyRate: searchParams.get('maxDailyRate') ?? undefined,
+    minYear: searchParams.get('minYear') ?? undefined,
+    maxYear: searchParams.get('maxYear') ?? undefined,
+    minMileage: searchParams.get('minMileage') ?? undefined,
+    maxMileage: searchParams.get('maxMileage') ?? undefined,
+  };
 
   const [searchInput, setSearchInput] = useState(search);
   const debouncedSearch = useDebouncedValue(searchInput);
@@ -101,14 +221,47 @@ export function CarsPage() {
     category,
     status,
     transmission,
+    sortBy,
+    sortOrder,
+    minDailyRate: rangeFilters.minDailyRate ? Number(rangeFilters.minDailyRate) : undefined,
+    maxDailyRate: rangeFilters.maxDailyRate ? Number(rangeFilters.maxDailyRate) : undefined,
+    minYear: rangeFilters.minYear ? Number(rangeFilters.minYear) : undefined,
+    maxYear: rangeFilters.maxYear ? Number(rangeFilters.maxYear) : undefined,
+    minMileage: rangeFilters.minMileage ? Number(rangeFilters.minMileage) : undefined,
+    maxMileage: rangeFilters.maxMileage ? Number(rangeFilters.maxMileage) : undefined,
   });
 
   function updateParam(key: string, value: string | undefined) {
+    updateParams({ [key]: value });
+  }
+
+  function updateParams(values: Record<string, string | undefined>) {
     const next = new URLSearchParams(searchParams);
-    if (value) next.set(key, value);
-    else next.delete(key);
-    if (key !== 'page') next.delete('page');
+    for (const [key, value] of Object.entries(values)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
+    if (!('page' in values)) next.delete('page');
     setSearchParams(next);
+  }
+
+  function handleSort(field: CarSortField) {
+    if (sortBy !== field) {
+      updateParams({ sortBy: field, sortOrder: 'asc' });
+    } else {
+      updateParams({ sortOrder: sortOrder === 'asc' ? 'desc' : 'asc' });
+    }
+  }
+
+  function applyRangeFilters(next: RangeFilters) {
+    updateParams({
+      minDailyRate: next.minDailyRate,
+      maxDailyRate: next.maxDailyRate,
+      minYear: next.minYear,
+      maxYear: next.maxYear,
+      minMileage: next.minMileage,
+      maxMileage: next.maxMileage,
+    });
   }
 
   // Debounces the search box so typing doesn't fire a request per keystroke —
@@ -125,7 +278,9 @@ export function CarsPage() {
     setSearchParams({});
   }
 
-  const activeFilterCount = [category, status, transmission].filter(Boolean).length;
+  const rangeFilterCount = Object.values(rangeFilters).filter(Boolean).length;
+  const activeFilterCount =
+    [category, status, transmission].filter(Boolean).length + rangeFilterCount;
 
   function openCreateForm() {
     setEditingCar(undefined);
@@ -141,13 +296,71 @@ export function CarsPage() {
     setImageManagerCarId(car.id);
   }
 
-  const columns = useMemo(() => buildColumns(openEditForm, openImageManager), []);
+  function openDetail(car: Car) {
+    setDetailCarId(car.id);
+  }
+
+  function openCalendar(car: Car) {
+    setCalendarCar(car);
+  }
+
+  function changeViewMode(mode: ViewMode) {
+    setViewMode(mode);
+    localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
+  }
+
+  const exportMutation = useMutation({
+    mutationFn: () =>
+      carsApi.exportCsv({
+        search: search || undefined,
+        category,
+        status,
+        transmission,
+        sortBy,
+        sortOrder,
+        minDailyRate: rangeFilters.minDailyRate ? Number(rangeFilters.minDailyRate) : undefined,
+        maxDailyRate: rangeFilters.maxDailyRate ? Number(rangeFilters.maxDailyRate) : undefined,
+        minYear: rangeFilters.minYear ? Number(rangeFilters.minYear) : undefined,
+        maxYear: rangeFilters.maxYear ? Number(rangeFilters.maxYear) : undefined,
+        minMileage: rangeFilters.minMileage ? Number(rangeFilters.minMileage) : undefined,
+        maxMileage: rangeFilters.maxMileage ? Number(rangeFilters.maxMileage) : undefined,
+      }),
+    onSuccess: (blob) => {
+      saveBlobAsFile(blob, `voitures-${new Date().toISOString().slice(0, 10)}.csv`);
+      toast.success('Export CSV téléchargé.');
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiClientError ? err.message : "Erreur lors de l'export.");
+    },
+  });
+
+  const columns = useMemo(
+    () =>
+      buildColumns(
+        openEditForm,
+        openImageManager,
+        openDetail,
+        openCalendar,
+        { sortBy, sortOrder },
+        handleSort,
+      ),
+    // handleSort is recreated every render but only ever reads sortBy/sortOrder
+    // (already tracked here) and the stable setSearchParams — safe to omit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sortBy, sortOrder],
+  );
 
   const table = useReactTable({
     data: data?.items ?? [],
     columns,
     getCoreRowModel: getCoreRowModel(),
+    getRowId: (row) => row.id,
+    enableRowSelection: true,
+    state: { rowSelection },
+    onRowSelectionChange: setRowSelection,
   });
+
+  const selectedIds = Object.keys(rowSelection).filter((id) => rowSelection[id]);
 
   return (
     <PageContainer>
@@ -155,10 +368,20 @@ export function CarsPage() {
         title="Gestion des voitures"
         description="Ajoutez, modifiez et suivez la disponibilité de votre flotte de véhicules."
         actions={
-          <Button onClick={openCreateForm}>
-            <Plus className="h-4 w-4" />
-            Ajouter une voiture
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => exportMutation.mutate()}
+              disabled={exportMutation.isPending}
+            >
+              <Download className="h-4 w-4" />
+              Exporter
+            </Button>
+            <Button onClick={openCreateForm}>
+              <Plus className="h-4 w-4" />
+              Ajouter une voiture
+            </Button>
+          </div>
         }
       />
 
@@ -172,7 +395,9 @@ export function CarsPage() {
         <FilterBar activeCount={activeFilterCount} onClearAll={clearAllFilters}>
           <Select
             value={category ?? ALL_VALUE}
-            onValueChange={(value) => updateParam('category', value === ALL_VALUE ? undefined : value)}
+            onValueChange={(value) =>
+              updateParam('category', value === ALL_VALUE ? undefined : value)
+            }
           >
             <SelectTrigger className="w-44">
               <SelectValue placeholder="Catégorie" />
@@ -189,7 +414,9 @@ export function CarsPage() {
 
           <Select
             value={status ?? ALL_VALUE}
-            onValueChange={(value) => updateParam('status', value === ALL_VALUE ? undefined : value)}
+            onValueChange={(value) =>
+              updateParam('status', value === ALL_VALUE ? undefined : value)
+            }
           >
             <SelectTrigger className="w-40">
               <SelectValue placeholder="Statut" />
@@ -206,7 +433,9 @@ export function CarsPage() {
 
           <Select
             value={transmission ?? ALL_VALUE}
-            onValueChange={(value) => updateParam('transmission', value === ALL_VALUE ? undefined : value)}
+            onValueChange={(value) =>
+              updateParam('transmission', value === ALL_VALUE ? undefined : value)
+            }
           >
             <SelectTrigger className="w-44">
               <SelectValue placeholder="Transmission" />
@@ -220,8 +449,39 @@ export function CarsPage() {
               ))}
             </SelectContent>
           </Select>
+
+          <CarRangeFilters
+            value={rangeFilters}
+            onApply={applyRangeFilters}
+            activeCount={rangeFilterCount}
+          />
         </FilterBar>
+
+        <div className="ml-auto flex items-center gap-1 rounded-md border border-border p-1">
+          <Button
+            variant={viewMode === 'table' ? 'secondary' : 'ghost'}
+            size="icon"
+            className="h-7 w-7"
+            aria-label="Vue tableau"
+            onClick={() => changeViewMode('table')}
+          >
+            <Table2 className="h-4 w-4" />
+          </Button>
+          <Button
+            variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+            size="icon"
+            className="h-7 w-7"
+            aria-label="Vue grille"
+            onClick={() => changeViewMode('grid')}
+          >
+            <LayoutGrid className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
+
+      {viewMode === 'table' && (
+        <CarBulkActionsBar selectedIds={selectedIds} onClearSelection={() => setRowSelection({})} />
+      )}
 
       {isLoading && <LoadingState message="Chargement des voitures..." />}
 
@@ -237,30 +497,55 @@ export function CarsPage() {
 
       {!isLoading && !isError && data && data.items.length > 0 && (
         <>
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <Table>
-              <TableHeader>
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => (
-                      <TableHead key={header.id}>
-                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableHeader>
-              <TableBody>
-                {table.getRowModel().rows.map((row) => (
-                  <TableRow key={row.id}>
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+          {viewMode === 'table' ? (
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <Table>
+                <TableHeader>
+                  {table.getHeaderGroups().map((headerGroup) => (
+                    <TableRow key={headerGroup.id}>
+                      {headerGroup.headers.map((header) => (
+                        <TableHead key={header.id}>
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(header.column.columnDef.header, header.getContext())}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableHeader>
+                <TableBody>
+                  {table.getRowModel().rows.map((row) => (
+                    <TableRow
+                      key={row.id}
+                      className="cursor-pointer"
+                      onClick={() => openDetail(row.original)}
+                    >
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell
+                          key={cell.id}
+                          onClick={
+                            cell.column.id === 'actions' || cell.column.id === 'select'
+                              ? (e) => e.stopPropagation()
+                              : undefined
+                          }
+                        >
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <CarGrid
+              cars={data.items}
+              onEdit={openEditForm}
+              onManageImages={openImageManager}
+              onViewDetails={openDetail}
+              onOpenCalendar={openCalendar}
+            />
+          )}
 
           <Pagination
             page={data.meta.page}
@@ -275,6 +560,16 @@ export function CarsPage() {
         open={Boolean(imageManagerCarId)}
         onOpenChange={(next) => !next && setImageManagerCarId(undefined)}
         carId={imageManagerCarId}
+      />
+      <CarDetailSheet
+        open={Boolean(detailCarId)}
+        onOpenChange={(next) => !next && setDetailCarId(undefined)}
+        carId={detailCarId}
+      />
+      <CarCalendarDialog
+        open={Boolean(calendarCar)}
+        onOpenChange={(next) => !next && setCalendarCar(undefined)}
+        car={calendarCar}
       />
     </PageContainer>
   );
