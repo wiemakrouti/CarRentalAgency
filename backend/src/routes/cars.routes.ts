@@ -31,13 +31,23 @@ carsRouter.get(
   validate({ query: carExportQuerySchema }),
   asyncHandler(CarsController.exportCsv),
 );
+carsRouter.get(
+  '/cars/export/xlsx',
+  validate({ query: carExportQuerySchema }),
+  asyncHandler(CarsController.exportXlsx),
+);
 
 // Three path segments (/cars/bulk/*), so these never collide with /cars/:id
 // regardless of registration order — unlike /available and /export above.
 carsRouter.post(
-  '/cars/bulk/archive',
+  '/cars/bulk/deletable',
   validate({ body: bulkCarIdsSchema }),
-  asyncHandler(CarsController.bulkArchive),
+  asyncHandler(CarsController.checkBulkDeletable),
+);
+carsRouter.post(
+  '/cars/bulk/delete',
+  validate({ body: bulkCarIdsSchema }),
+  asyncHandler(CarsController.bulkDelete),
 );
 carsRouter.patch(
   '/cars/bulk/status',
@@ -62,15 +72,15 @@ carsRouter.patch(
   validate({ params: carIdParamSchema, body: updateCarSchema }),
   asyncHandler(CarsController.update),
 );
+carsRouter.get(
+  '/cars/:id/deletable',
+  validate({ params: carIdParamSchema }),
+  asyncHandler(CarsController.checkDeletable),
+);
 carsRouter.delete(
   '/cars/:id',
   validate({ params: carIdParamSchema }),
-  asyncHandler(CarsController.archive),
-);
-carsRouter.post(
-  '/cars/:id/restore',
-  validate({ params: carIdParamSchema }),
-  asyncHandler(CarsController.restore),
+  asyncHandler(CarsController.delete),
 );
 
 carsRouter.post(

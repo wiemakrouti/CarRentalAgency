@@ -1,10 +1,9 @@
 import { ImageOff } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import type { Car } from '../api/cars.api';
 import { CarRowActions } from './car-row-actions';
+import { CarStatusBadge } from './car-status-badge';
 import { CarExpiryAlerts } from './car-expiry-alerts';
-import { CAR_STATUS_BADGE_VARIANT, CAR_STATUS_LABELS } from '../lib/car-labels';
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('fr-TN');
@@ -13,18 +12,11 @@ function formatDate(iso: string): string {
 type CarGridProps = {
   cars: Car[];
   onEdit: (car: Car) => void;
-  onManageImages: (car: Car) => void;
   onViewDetails: (car: Car) => void;
   onOpenCalendar: (car: Car) => void;
 };
 
-export function CarGrid({
-  cars,
-  onEdit,
-  onManageImages,
-  onViewDetails,
-  onOpenCalendar,
-}: CarGridProps) {
+export function CarGrid({ cars, onEdit, onViewDetails, onOpenCalendar }: CarGridProps) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {cars.map((car) => {
@@ -47,7 +39,6 @@ export function CarGrid({
                 <CarRowActions
                   car={car}
                   onEdit={onEdit}
-                  onManageImages={onManageImages}
                   onViewDetails={onViewDetails}
                   onOpenCalendar={onOpenCalendar}
                 />
@@ -61,9 +52,7 @@ export function CarGrid({
                   </p>
                   <p className="text-xs text-muted-foreground">{car.licensePlate}</p>
                 </div>
-                <Badge variant={CAR_STATUS_BADGE_VARIANT[car.status]}>
-                  {CAR_STATUS_LABELS[car.status]}
-                </Badge>
+                <CarStatusBadge car={car} />
               </div>
 
               {car.activeRental && (

@@ -20,6 +20,13 @@ export type FuelType = (typeof FUEL_TYPES)[number];
 export const CAR_STATUSES = ['AVAILABLE', 'RENTED', 'MAINTENANCE', 'OUT_OF_SERVICE'] as const;
 export type CarStatus = (typeof CAR_STATUSES)[number];
 
+// RENTED is never chosen manually — it's set automatically by the rental
+// lifecycle (RentalsService.activate/returnRental via
+// CarsRepository.updateStatusGuarded), never through the general car update
+// path. Admin-facing status pickers (edit form, quick-change menu, detail
+// sheet) only offer these three.
+export const MANUALLY_SETTABLE_CAR_STATUSES = ['AVAILABLE', 'MAINTENANCE', 'OUT_OF_SERVICE'] as const;
+
 export const CLIENT_DOCUMENT_TYPES = [
   'ID_CARD',
   'DRIVING_LICENSE',
@@ -84,6 +91,7 @@ export const AUDIT_ACTIONS = [
   'UPDATE',
   'DELETE',
   'RESTORE',
+  'CAR_HARD_DELETE',
   'RENTAL_ACTIVATE',
   'RENTAL_RETURN',
   'RENTAL_EXTEND',

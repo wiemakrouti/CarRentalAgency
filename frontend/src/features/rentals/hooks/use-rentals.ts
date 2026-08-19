@@ -76,7 +76,8 @@ export function useReturnRentalMutation() {
     onSuccess: (rental) => {
       queryClient.invalidateQueries({ queryKey: rentalKeys.lists() });
       queryClient.setQueryData(rentalKeys.detail(rental.id), rental);
-      // Return flips Car.status back to AVAILABLE and updates its mileage.
+      // Return flips Car.status (to AVAILABLE, or whatever carStatusAfterReturn
+      // was chosen) and updates its mileage.
       queryClient.invalidateQueries({ queryKey: carKeys.all });
     },
   });

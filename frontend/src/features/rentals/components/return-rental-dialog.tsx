@@ -1,8 +1,12 @@
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
-import { returnRentalSchema, type ReturnRentalInput } from '@car-rental/shared';
+import {
+  MANUALLY_SETTABLE_CAR_STATUSES,
+  returnRentalSchema,
+  type ReturnRentalInput,
+} from '@car-rental/shared';
 
 import { ApiClientError } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
@@ -10,6 +14,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -21,6 +32,7 @@ import {
 
 import type { Rental } from '../api/rentals.api';
 import { useReturnRentalMutation } from '../hooks/use-rentals';
+import { CAR_STATUS_LABELS } from '@/features/cars/lib/car-labels';
 
 type ReturnRentalDialogProps = {
   open: boolean;
@@ -39,13 +51,18 @@ export function ReturnRentalDialog({ open, onOpenChange, rental }: ReturnRentalD
 
   const {
     register,
+    control,
     handleSubmit,
     watch,
     reset,
     formState: { errors },
   } = useForm<ReturnRentalInput>({
     resolver: zodResolver(returnRentalSchema),
-    defaultValues: { mileageAtReturn: rental.car.mileage, fuelLevelAtReturn: '' },
+    defaultValues: {
+      mileageAtReturn: rental.car.mileage,
+      fuelLevelAtReturn: '',
+      carStatusAfterReturn: 'AVAILABLE',
+    },
   });
 
   const damageFeeAmount = watch('damageFeeAmount');
@@ -102,6 +119,34 @@ export function ReturnRentalDialog({ open, onOpenChange, rental }: ReturnRentalD
                 <p className="text-sm text-destructive">{errors.fuelLevelAtReturn.message}</p>
               )}
             </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <Label>État de la voiture après retour</Label>
+            <Controller
+              name="carStatusAfterReturn"
+              control={control}
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MANUALLY_SETTABLE_CAR_STATUSES.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {CAR_STATUS_LABELS[s]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            <p className="text-xs text-muted-foreground">
+              Par défaut la voiture redevient disponible. Choisissez Maintenance ou Hors service si
+              elle ne peut pas repartir immédiatement (panne, dommage à réparer...).
+            </p>
           </div>
 
           <Separator />

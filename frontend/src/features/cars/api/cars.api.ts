@@ -3,11 +3,18 @@ import type {
   CarStatus,
   CreateCarInput,
   FuelType,
+  MANUALLY_SETTABLE_CAR_STATUSES,
   Transmission,
   UpdateCarInput,
 } from '@car-rental/shared';
 import { apiClient } from '@/lib/api-client';
 import { buildQueryString } from '@/lib/query-string';
+
+// Only status a manual change (edit form's earlier status field, quick-change
+// menu, bulk action) may set — RENTED is exclusively set by the rental
+// lifecycle. Mirrors the backend's MANUALLY_SETTABLE_CAR_STATUSES-restricted
+// updateCarSchema/bulkCarStatusSchema.
+export type ManualCarStatus = (typeof MANUALLY_SETTABLE_CAR_STATUSES)[number];
 
 export type CarImage = {
   id: string;
@@ -38,7 +45,6 @@ export type Car = {
   insuranceExpiryDate: string | null;
   technicalInspectionExpiryDate: string | null;
   registrationExpiryDate: string | null;
-  deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
   images: CarImage[];
@@ -58,7 +64,6 @@ export type CarListParams = {
   status?: string;
   transmission?: string;
   fuelType?: string;
-  includeArchived?: boolean;
   minDailyRate?: number;
   maxDailyRate?: number;
   minYear?: number;
@@ -76,14 +81,19 @@ export type CarStats = {
   lastRentalDate: string | null;
 };
 
+export type CarDeletable = {
+  canDelete: boolean;
+  reason: string | null;
+};
+
 export const carsApi = {
   list: (params: CarListParams) => apiClient.getPaginated<Car>(`/cars${buildQueryString(params)}`),
   getById: (id: string) => apiClient.get<Car>(`/cars/${id}`),
   getStats: (id: string) => apiClient.get<CarStats>(`/cars/${id}/stats`),
+  checkDeletable: (id: string) => apiClient.get<CarDeletable>(`/cars/${id}/deletable`),
   create: (input: CreateCarInput) => apiClient.post<Car>('/cars', input),
   update: (id: string, input: UpdateCarInput) => apiClient.patch<Car>(`/cars/${id}`, input),
-  archive: (id: string) => apiClient.delete<Car>(`/cars/${id}`),
-  restore: (id: string) => apiClient.post<Car>(`/cars/${id}/restore`),
+  delete: (id: string) => apiClient.delete<{ deleted: boolean }>(`/cars/${id}`),
   uploadImage: (id: string, file: File, isPrimary: boolean) => {
     const formData = new FormData();
     formData.append('image', file);
@@ -98,7 +108,8 @@ export const carsApi = {
     apiClient.get<Car[]>(`/cars/available?pickupDate=${pickupDate}&returnDate=${returnDate}`),
   exportCsv: (params: Omit<CarListParams, 'page' | 'pageSize'>) =>
     apiClient.download(`/cars/export${buildQueryString(params)}`),
-  bulkArchive: (ids: string[]) => apiClient.post<Car[]>('/cars/bulk/archive', { ids }),
-  bulkUpdateStatus: (ids: string[], status: CarStatus) =>
-    apiClient.patch<Car[]>('/cars/bulk/status', { ids, status }),
+  exportXlsx: (params: Omit<CarListParams, 'page' | 'pageSize'>) =>
+    apiClient.download(`/cars/export/xlsx${buildQueryString(params)}`),
+  updateStatus: (id: string, status: ManualCarStatus) =>
+    apiClient.patch<Car>(`/cars/${id}`, { status }),
 };

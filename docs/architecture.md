@@ -31,7 +31,9 @@ Any status transition that must not race (Rental activate/return/extend/cancel, 
 
 ## Soft delete
 
-Car, Client, Rental, Payment, Expense, MaintenanceRecord are never hard-deleted. Repositories filter `deletedAt IS NULL` by default (`notDeleted()` helper); an explicit `includeArchived` flag opts into seeing archived rows (reports, audit views). `DELETE` API endpoints archive; `POST .../restore` un-archives.
+Client, Rental, Payment, Expense, MaintenanceRecord are never hard-deleted. Repositories filter `deletedAt IS NULL` by default (`notDeleted()` helper); an explicit `includeArchived` flag opts into seeing archived rows (reports, audit views). `DELETE` API endpoints archive; `POST .../restore` un-archives.
+
+Car is the one exception: it has no `deletedAt` and no archive/restore — `CarStatus` (e.g. `OUT_OF_SERVICE`) is how an admin takes a car out of rotation without erasing it, and `DELETE /cars/:id` (`CarsService.delete`) hard-deletes for real. That delete is guarded, not soft: `CarsRepository.countRelations` blocks it (`409 CAR_HAS_HISTORY`) if the car has any Rental, Expense, or MaintenanceRecord row, since none of those relations cascade on purpose — losing that history isn't recoverable the way un-archiving is.
 
 ## Roles
 

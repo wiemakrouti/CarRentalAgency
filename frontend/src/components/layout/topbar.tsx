@@ -1,5 +1,5 @@
 import { Link, useMatches, useNavigate } from 'react-router-dom';
-import { Bell, LogOut, Search, User } from 'lucide-react';
+import { LogOut, Search, User } from 'lucide-react';
 
 import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,7 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { MobileNav } from '@/components/layout/mobile-nav';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
+import { NotificationsMenu } from '@/features/notifications/components/notifications-menu';
 
 type RouteHandle = { breadcrumb?: string };
 
@@ -92,20 +93,7 @@ export function Topbar({ onOpenCommandPalette }: TopbarProps) {
           <Search className="h-4 w-4" />
         </Button>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label="Notifications">
-              <Bell className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-72">
-            <DropdownMenuLabel>Notifications</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <div className="px-2 py-6 text-center text-sm text-muted-foreground">
-              Aucune notification pour le moment.
-            </div>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <NotificationsMenu />
 
         <ThemeToggle />
 

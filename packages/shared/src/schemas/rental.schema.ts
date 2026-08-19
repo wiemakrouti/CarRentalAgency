@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MANUALLY_SETTABLE_CAR_STATUSES } from '../enums.js';
 
 export const createRentalSchema = z
   .object({
@@ -28,6 +29,12 @@ export const returnRentalSchema = z.object({
   fuelLevelAtReturn: z.string().trim().min(1, 'Le niveau de carburant est requis.'),
   damageFeeAmount: z.coerce.number().positive('Le montant des dommages doit être positif.').optional(),
   damageFeeNotes: z.string().trim().min(1).optional(),
+  // What the car becomes once this rental closes — AVAILABLE by default, but
+  // MAINTENANCE/OUT_OF_SERVICE when the return itself is why the car needs
+  // to come out of rotation (e.g. it broke down during the rental). This is
+  // the only path that may take a car out of RENTED — see
+  // docs/architecture.md § Car status.
+  carStatusAfterReturn: z.enum(MANUALLY_SETTABLE_CAR_STATUSES).default('AVAILABLE'),
 });
 
 export type ReturnRentalInput = z.infer<typeof returnRentalSchema>;

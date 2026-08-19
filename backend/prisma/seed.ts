@@ -18,10 +18,9 @@ import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
-// Car.licensePlate/vin are only *logically* unique among non-archived rows —
-// enforced by a partial unique index (see schema.prisma header), which
-// Prisma's typed `upsert` can't target. So cars are seeded findFirst-then-
-// create instead of upsert, same pattern already used below for Setting.
+// Cars are seeded findFirst-then-create rather than upsert, same pattern
+// already used below for Setting — kept as-is even though licensePlate is
+// now a plain @unique field Prisma's typed upsert could target directly.
 function daysFromNow(days: number): Date {
   const date = new Date();
   date.setDate(date.getDate() + days);
@@ -357,7 +356,7 @@ const DEMO_CARS: Prisma.CarCreateManyInput[] = [
 // at the top of this file), just against different lists.
 async function seedCarBatch(cars: Prisma.CarCreateManyInput[], label: string) {
   const existing = await prisma.car.findMany({
-    where: { deletedAt: null, licensePlate: { in: cars.map((c) => c.licensePlate) } },
+    where: { licensePlate: { in: cars.map((c) => c.licensePlate) } },
     select: { licensePlate: true },
   });
   const existingPlates = new Set(existing.map((c) => c.licensePlate));
@@ -672,7 +671,7 @@ function calcNights(pickup: Date, plannedReturn: Date): number {
 
 async function seedDemoRentals(adminUserId: string) {
   const cars = await prisma.car.findMany({
-    where: { deletedAt: null, licensePlate: { in: RENTAL_SCENARIOS.map((s) => s.licensePlate) } },
+    where: { licensePlate: { in: RENTAL_SCENARIOS.map((s) => s.licensePlate) } },
   });
   const carByPlate = new Map(cars.map((c) => [c.licensePlate, c]));
 
@@ -1167,7 +1166,7 @@ const CALENDAR_SCENARIOS: CalendarScenario[] = [
 
 async function seedCalendarTestRentals(adminUserId: string) {
   const cars = await prisma.car.findMany({
-    where: { deletedAt: null, licensePlate: { in: CALENDAR_SCENARIOS.map((s) => s.licensePlate) } },
+    where: { licensePlate: { in: CALENDAR_SCENARIOS.map((s) => s.licensePlate) } },
   });
   const carByPlate = new Map(cars.map((c) => [c.licensePlate, c]));
   const clients = await seedDemoClients(); // idempotent — reuses the same 8 demo clients

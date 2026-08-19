@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { CAR_CATEGORIES, CAR_STATUSES, FUEL_TYPES, TRANSMISSIONS } from '../enums.js';
+import {
+  CAR_CATEGORIES,
+  FUEL_TYPES,
+  MANUALLY_SETTABLE_CAR_STATUSES,
+  TRANSMISSIONS,
+} from '../enums.js';
 
 const currentYear = new Date().getFullYear();
 
@@ -26,7 +31,7 @@ export const createCarSchema = z.object({
 export type CreateCarInput = z.infer<typeof createCarSchema>;
 
 export const updateCarSchema = createCarSchema.partial().extend({
-  status: z.enum(CAR_STATUSES).optional(),
+  status: z.enum(MANUALLY_SETTABLE_CAR_STATUSES).optional(),
 });
 
 export type UpdateCarInput = z.infer<typeof updateCarSchema>;

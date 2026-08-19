@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { CarStatus, CreateCarInput, UpdateCarInput } from '@car-rental/shared';
-import { carsApi, type CarListParams } from '../api/cars.api';
+import type { CreateCarInput, UpdateCarInput } from '@car-rental/shared';
+import { carsApi, type CarListParams, type ManualCarStatus } from '../api/cars.api';
 import { carKeys } from '../api/cars.keys';
 
 export function useCarsQuery(params: CarListParams) {
@@ -23,6 +23,17 @@ export function useCarStatsQuery(id: string | undefined) {
     queryKey: carKeys.stats(id ?? ''),
     queryFn: () => carsApi.getStats(id!),
     enabled: Boolean(id),
+  });
+}
+
+// Powers the delete confirmation dialog: checked as soon as it opens so the
+// dialog can show a destructive confirm or an explanatory notice up front,
+// instead of only finding out after the admin submits.
+export function useCarDeletableQuery(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: carKeys.deletable(id),
+    queryFn: () => carsApi.checkDeletable(id),
+    enabled: Boolean(id) && enabled,
   });
 }
 
@@ -55,45 +66,24 @@ export function useUpdateCarMutation() {
   });
 }
 
-export function useArchiveCarMutation() {
+export function useDeleteCarMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => carsApi.archive(id),
-    onSuccess: (car) => {
-      queryClient.invalidateQueries({ queryKey: carKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: carKeys.detail(car.id) });
-    },
-  });
-}
-
-export function useRestoreCarMutation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => carsApi.restore(id),
-    onSuccess: (car) => {
-      queryClient.invalidateQueries({ queryKey: carKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: carKeys.detail(car.id) });
-    },
-  });
-}
-
-export function useBulkArchiveCarsMutation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (ids: string[]) => carsApi.bulkArchive(ids),
+    mutationFn: (id: string) => carsApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: carKeys.lists() });
     },
   });
 }
 
-export function useBulkUpdateCarStatusMutation() {
+export function useUpdateCarStatusMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ ids, status }: { ids: string[]; status: CarStatus }) =>
-      carsApi.bulkUpdateStatus(ids, status),
-    onSuccess: () => {
+    mutationFn: ({ id, status }: { id: string; status: ManualCarStatus }) =>
+      carsApi.updateStatus(id, status),
+    onSuccess: (car) => {
       queryClient.invalidateQueries({ queryKey: carKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: carKeys.detail(car.id) });
     },
   });
 }

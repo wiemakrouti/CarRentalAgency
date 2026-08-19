@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useSearchParams } from 'react-router-dom';
+import { flexRender, getCoreRowModel, useReactTable, createColumnHelper } from '@tanstack/react-table';
 import {
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-  createColumnHelper,
-  type RowSelectionState,
-} from '@tanstack/react-table';
-import { CAR_CATEGORIES, CAR_STATUSES, TRANSMISSIONS } from '@car-rental/shared';
-import { CarFront, Download, ImageOff, LayoutGrid, Plus, Table2 } from 'lucide-react';
+  CarFront,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  ImageOff,
+  LayoutGrid,
+  Plus,
+  Table2,
+} from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ApiClientError } from '@/lib/api-client';
@@ -23,16 +25,13 @@ import { ErrorState } from '@/components/common/error-state';
 import { SearchBar } from '@/components/common/search-bar';
 import { FilterBar } from '@/components/common/filter-bar';
 import { Pagination } from '@/components/common/pagination';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Table,
   TableBody,
@@ -45,23 +44,17 @@ import {
 import { useCarsQuery } from '../hooks/use-cars';
 import { carsApi, type Car, type CarSortField, type SortOrder } from '../api/cars.api';
 import { CarRowActions } from '../components/car-row-actions';
+import { CarStatusBadge } from '../components/car-status-badge';
 import { CarFormDialog } from '../components/car-form-dialog';
 import { CarImageManagerDialog } from '../components/car-image-manager-dialog';
 import { CarDetailSheet } from '../components/car-detail-sheet';
 import { CarCalendarDialog } from '../components/car-calendar-dialog';
 import { CarGrid } from '../components/car-grid';
-import { CarBulkActionsBar } from '../components/car-bulk-actions-bar';
 import { CarExpiryAlerts } from '../components/car-expiry-alerts';
-import { CarRangeFilters, type RangeFilters } from '../components/car-range-filters';
+import { CarFiltersPopover, type CarFilters } from '../components/car-filters-popover';
 import { SortableHeader } from '../components/sortable-header';
-import {
-  CAR_CATEGORY_LABELS,
-  CAR_STATUS_BADGE_VARIANT,
-  CAR_STATUS_LABELS,
-  TRANSMISSION_LABELS,
-} from '../lib/car-labels';
+import { CAR_CATEGORY_LABELS } from '../lib/car-labels';
 
-const ALL_VALUE = '__all__';
 const PAGE_SIZE = 20;
 const VIEW_MODE_STORAGE_KEY = 'cars-view-mode';
 
@@ -81,7 +74,6 @@ type SortState = { sortBy: CarSortField; sortOrder: SortOrder };
 
 function buildColumns(
   onEdit: (car: Car) => void,
-  onManageImages: (car: Car) => void,
   onViewDetails: (car: Car) => void,
   onOpenCalendar: (car: Car) => void,
   sort: SortState,
@@ -100,26 +92,6 @@ function buildColumns(
   }
 
   return [
-    columnHelper.display({
-      id: 'select',
-      header: ({ table }) => (
-        <Checkbox
-          checked={
-            table.getIsAllPageRowsSelected() ||
-            (table.getIsSomePageRowsSelected() && 'indeterminate')
-          }
-          onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))}
-          aria-label="Tout sélectionner"
-        />
-      ),
-      cell: ({ row }) => (
-        <Checkbox
-          checked={row.getIsSelected()}
-          onCheckedChange={(value) => row.toggleSelected(Boolean(value))}
-          aria-label="Sélectionner"
-        />
-      ),
-    }),
     columnHelper.display({
       id: 'thumbnail',
       header: '',
@@ -147,11 +119,9 @@ function buildColumns(
     }),
     columnHelper.accessor('status', {
       header: sortableHeader('Statut', 'status'),
-      cell: ({ getValue, row }) => (
+      cell: ({ row }) => (
         <div className="space-y-0.5">
-          <Badge variant={CAR_STATUS_BADGE_VARIANT[getValue()]}>
-            {CAR_STATUS_LABELS[getValue()]}
-          </Badge>
+          <CarStatusBadge car={row.original} />
           {row.original.activeRental && (
             <p className="text-xs text-muted-foreground">
               Retour prévu le {formatDate(row.original.activeRental.plannedReturnDate)}
@@ -176,7 +146,6 @@ function buildColumns(
         <CarRowActions
           car={row.original}
           onEdit={onEdit}
-          onManageImages={onManageImages}
           onViewDetails={onViewDetails}
           onOpenCalendar={onOpenCalendar}
         />
@@ -193,7 +162,6 @@ export function CarsPage() {
   const [detailCarId, setDetailCarId] = useState<string | undefined>(undefined);
   const [calendarCar, setCalendarCar] = useState<Car | undefined>(undefined);
   const [viewMode, setViewMode] = useState<ViewMode>(readStoredViewMode);
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const page = Number(searchParams.get('page') ?? '1');
   const search = searchParams.get('search') ?? '';
@@ -202,7 +170,10 @@ export function CarsPage() {
   const transmission = searchParams.get('transmission') ?? undefined;
   const sortBy = (searchParams.get('sortBy') as CarSortField | null) ?? 'createdAt';
   const sortOrder = (searchParams.get('sortOrder') as SortOrder | null) ?? 'desc';
-  const rangeFilters: RangeFilters = {
+  const filters: CarFilters = {
+    category,
+    status,
+    transmission,
     minDailyRate: searchParams.get('minDailyRate') ?? undefined,
     maxDailyRate: searchParams.get('maxDailyRate') ?? undefined,
     minYear: searchParams.get('minYear') ?? undefined,
@@ -223,12 +194,12 @@ export function CarsPage() {
     transmission,
     sortBy,
     sortOrder,
-    minDailyRate: rangeFilters.minDailyRate ? Number(rangeFilters.minDailyRate) : undefined,
-    maxDailyRate: rangeFilters.maxDailyRate ? Number(rangeFilters.maxDailyRate) : undefined,
-    minYear: rangeFilters.minYear ? Number(rangeFilters.minYear) : undefined,
-    maxYear: rangeFilters.maxYear ? Number(rangeFilters.maxYear) : undefined,
-    minMileage: rangeFilters.minMileage ? Number(rangeFilters.minMileage) : undefined,
-    maxMileage: rangeFilters.maxMileage ? Number(rangeFilters.maxMileage) : undefined,
+    minDailyRate: filters.minDailyRate ? Number(filters.minDailyRate) : undefined,
+    maxDailyRate: filters.maxDailyRate ? Number(filters.maxDailyRate) : undefined,
+    minYear: filters.minYear ? Number(filters.minYear) : undefined,
+    maxYear: filters.maxYear ? Number(filters.maxYear) : undefined,
+    minMileage: filters.minMileage ? Number(filters.minMileage) : undefined,
+    maxMileage: filters.maxMileage ? Number(filters.maxMileage) : undefined,
   });
 
   function updateParam(key: string, value: string | undefined) {
@@ -253,8 +224,11 @@ export function CarsPage() {
     }
   }
 
-  function applyRangeFilters(next: RangeFilters) {
+  function applyFilters(next: CarFilters) {
     updateParams({
+      category: next.category,
+      status: next.status,
+      transmission: next.transmission,
       minDailyRate: next.minDailyRate,
       maxDailyRate: next.maxDailyRate,
       minYear: next.minYear,
@@ -278,9 +252,7 @@ export function CarsPage() {
     setSearchParams({});
   }
 
-  const rangeFilterCount = Object.values(rangeFilters).filter(Boolean).length;
-  const activeFilterCount =
-    [category, status, transmission].filter(Boolean).length + rangeFilterCount;
+  const activeFilterCount = Object.values(filters).filter(Boolean).length;
 
   function openCreateForm() {
     setEditingCar(undefined);
@@ -292,8 +264,8 @@ export function CarsPage() {
     setFormOpen(true);
   }
 
-  function openImageManager(car: Car) {
-    setImageManagerCarId(car.id);
+  function openImageManager(carId: string) {
+    setImageManagerCarId(carId);
   }
 
   function openDetail(car: Car) {
@@ -310,24 +282,27 @@ export function CarsPage() {
   }
 
   const exportMutation = useMutation({
-    mutationFn: () =>
-      carsApi.exportCsv({
+    mutationFn: (format: 'csv' | 'xlsx') => {
+      const params = {
         search: search || undefined,
         category,
         status,
         transmission,
         sortBy,
         sortOrder,
-        minDailyRate: rangeFilters.minDailyRate ? Number(rangeFilters.minDailyRate) : undefined,
-        maxDailyRate: rangeFilters.maxDailyRate ? Number(rangeFilters.maxDailyRate) : undefined,
-        minYear: rangeFilters.minYear ? Number(rangeFilters.minYear) : undefined,
-        maxYear: rangeFilters.maxYear ? Number(rangeFilters.maxYear) : undefined,
-        minMileage: rangeFilters.minMileage ? Number(rangeFilters.minMileage) : undefined,
-        maxMileage: rangeFilters.maxMileage ? Number(rangeFilters.maxMileage) : undefined,
-      }),
-    onSuccess: (blob) => {
-      saveBlobAsFile(blob, `voitures-${new Date().toISOString().slice(0, 10)}.csv`);
-      toast.success('Export CSV téléchargé.');
+        minDailyRate: filters.minDailyRate ? Number(filters.minDailyRate) : undefined,
+        maxDailyRate: filters.maxDailyRate ? Number(filters.maxDailyRate) : undefined,
+        minYear: filters.minYear ? Number(filters.minYear) : undefined,
+        maxYear: filters.maxYear ? Number(filters.maxYear) : undefined,
+        minMileage: filters.minMileage ? Number(filters.minMileage) : undefined,
+        maxMileage: filters.maxMileage ? Number(filters.maxMileage) : undefined,
+      };
+      return format === 'xlsx' ? carsApi.exportXlsx(params) : carsApi.exportCsv(params);
+    },
+    onSuccess: (blob, format) => {
+      const date = new Date().toISOString().slice(0, 10);
+      saveBlobAsFile(blob, `voitures-${date}.${format}`);
+      toast.success(format === 'xlsx' ? 'Export Excel téléchargé.' : 'Export CSV téléchargé.');
     },
     onError: (err) => {
       toast.error(err instanceof ApiClientError ? err.message : "Erreur lors de l'export.");
@@ -336,14 +311,7 @@ export function CarsPage() {
 
   const columns = useMemo(
     () =>
-      buildColumns(
-        openEditForm,
-        openImageManager,
-        openDetail,
-        openCalendar,
-        { sortBy, sortOrder },
-        handleSort,
-      ),
+      buildColumns(openEditForm, openDetail, openCalendar, { sortBy, sortOrder }, handleSort),
     // handleSort is recreated every render but only ever reads sortBy/sortOrder
     // (already tracked here) and the stable setSearchParams — safe to omit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -354,13 +322,7 @@ export function CarsPage() {
     data: data?.items ?? [],
     columns,
     getCoreRowModel: getCoreRowModel(),
-    getRowId: (row) => row.id,
-    enableRowSelection: true,
-    state: { rowSelection },
-    onRowSelectionChange: setRowSelection,
   });
-
-  const selectedIds = Object.keys(rowSelection).filter((id) => rowSelection[id]);
 
   return (
     <PageContainer>
@@ -369,14 +331,24 @@ export function CarsPage() {
         description="Ajoutez, modifiez et suivez la disponibilité de votre flotte de véhicules."
         actions={
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => exportMutation.mutate()}
-              disabled={exportMutation.isPending}
-            >
-              <Download className="h-4 w-4" />
-              Exporter
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" disabled={exportMutation.isPending}>
+                  <Download className="h-4 w-4" />
+                  Exporter
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => exportMutation.mutate('csv')}>
+                  <FileText className="h-4 w-4" />
+                  CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportMutation.mutate('xlsx')}>
+                  <FileSpreadsheet className="h-4 w-4" />
+                  Excel (.xlsx)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button onClick={openCreateForm}>
               <Plus className="h-4 w-4" />
               Ajouter une voiture
@@ -393,68 +365,7 @@ export function CarsPage() {
           className="w-80"
         />
         <FilterBar activeCount={activeFilterCount} onClearAll={clearAllFilters}>
-          <Select
-            value={category ?? ALL_VALUE}
-            onValueChange={(value) =>
-              updateParam('category', value === ALL_VALUE ? undefined : value)
-            }
-          >
-            <SelectTrigger className="w-44">
-              <SelectValue placeholder="Catégorie" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_VALUE}>Toutes les catégories</SelectItem>
-              {CAR_CATEGORIES.map((c) => (
-                <SelectItem key={c} value={c}>
-                  {CAR_CATEGORY_LABELS[c]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={status ?? ALL_VALUE}
-            onValueChange={(value) =>
-              updateParam('status', value === ALL_VALUE ? undefined : value)
-            }
-          >
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="Statut" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_VALUE}>Tous les statuts</SelectItem>
-              {CAR_STATUSES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {CAR_STATUS_LABELS[s]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={transmission ?? ALL_VALUE}
-            onValueChange={(value) =>
-              updateParam('transmission', value === ALL_VALUE ? undefined : value)
-            }
-          >
-            <SelectTrigger className="w-44">
-              <SelectValue placeholder="Transmission" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_VALUE}>Toutes les transmissions</SelectItem>
-              {TRANSMISSIONS.map((t) => (
-                <SelectItem key={t} value={t}>
-                  {TRANSMISSION_LABELS[t]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <CarRangeFilters
-            value={rangeFilters}
-            onApply={applyRangeFilters}
-            activeCount={rangeFilterCount}
-          />
+          <CarFiltersPopover value={filters} onApply={applyFilters} activeCount={activeFilterCount} />
         </FilterBar>
 
         <div className="ml-auto flex items-center gap-1 rounded-md border border-border p-1">
@@ -478,10 +389,6 @@ export function CarsPage() {
           </Button>
         </div>
       </div>
-
-      {viewMode === 'table' && (
-        <CarBulkActionsBar selectedIds={selectedIds} onClearSelection={() => setRowSelection({})} />
-      )}
 
       {isLoading && <LoadingState message="Chargement des voitures..." />}
 
@@ -524,9 +431,7 @@ export function CarsPage() {
                         <TableCell
                           key={cell.id}
                           onClick={
-                            cell.column.id === 'actions' || cell.column.id === 'select'
-                              ? (e) => e.stopPropagation()
-                              : undefined
+                            cell.column.id === 'actions' ? (e) => e.stopPropagation() : undefined
                           }
                         >
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -541,7 +446,6 @@ export function CarsPage() {
             <CarGrid
               cars={data.items}
               onEdit={openEditForm}
-              onManageImages={openImageManager}
               onViewDetails={openDetail}
               onOpenCalendar={openCalendar}
             />
@@ -565,6 +469,7 @@ export function CarsPage() {
         open={Boolean(detailCarId)}
         onOpenChange={(next) => !next && setDetailCarId(undefined)}
         carId={detailCarId}
+        onManageImages={() => detailCarId && openImageManager(detailCarId)}
       />
       <CarCalendarDialog
         open={Boolean(calendarCar)}

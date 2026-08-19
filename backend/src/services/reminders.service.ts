@@ -14,19 +14,36 @@ export interface Reminder {
   entityType: 'Rental' | 'MaintenanceRecord' | 'Client' | 'Car';
   entityId: string;
   dueDate: Date;
+  // True once dueDate is in the past (expired/overdue) rather than merely
+  // approaching — the frontend uses this to color the notification
+  // destructive vs. warning, same distinction as the Cars module's own
+  // expiry badges (see features/cars/lib/car-alerts.ts).
+  overdue: boolean;
   label: string;
 }
 
-// Query-only in v1: nothing calls this on a schedule (no cron, no email/SMS
-// channel — deliberately out of scope, see docs/architecture.md §1). It exists
-// so a future scheduler has a single, already-correct place to read reminders
-// from, instead of the data model needing to change when reminders are built.
+const CAR_DOCUMENT_FIELDS = [
+  { field: 'insuranceExpiryDate', type: 'CAR_INSURANCE_EXPIRING', label: 'Assurance' },
+  {
+    field: 'technicalInspectionExpiryDate',
+    type: 'CAR_TECHNICAL_INSPECTION_EXPIRING',
+    label: 'Contrôle technique',
+  },
+  { field: 'registrationExpiryDate', type: 'CAR_REGISTRATION_EXPIRING', label: 'Carte grise' },
+] as const satisfies { field: string; type: ReminderType; label: string }[];
+
+function formatDate(date: Date): string {
+  return date.toLocaleDateString('fr-TN');
+}
+
+// Consumed by the notification bell (Topbar) — see docs/architecture.md §1
+// for why this stays a plain query rather than a cron/email job in v1.
 export class RemindersService {
   static async getUpcoming(withinDays = 7): Promise<Reminder[]> {
     const now = new Date();
     const horizon = new Date(now.getTime() + withinDays * 24 * 60 * 60 * 1000);
 
-    const [dueSoonRentals, overdueRentals, maintenanceDue, licensesExpiring, carsExpiring] =
+    const [dueSoonRentals, overdueRentals, maintenanceDue, licensesExpiring, carsWithDocuments] =
       await Promise.all([
         prisma.rental.findMany({
           where: { status: 'ACTIVE', plannedReturnDate: { gte: now, lte: horizon } },
@@ -34,66 +51,83 @@ export class RemindersService {
         prisma.rental.findMany({
           where: { status: 'ACTIVE', plannedReturnDate: { lt: now } },
         }),
+        // No lower bound: a maintenance due date already in the past is
+        // still due (overdue), not filtered out — same fix as the car
+        // documents below.
         prisma.maintenanceRecord.findMany({
-          where: { deletedAt: null, nextDueDate: { gte: now, lte: horizon } },
+          where: { deletedAt: null, nextDueDate: { not: null, lte: horizon } },
         }),
         prisma.client.findMany({
-          where: { deletedAt: null, drivingLicenseExpiry: { gte: now, lte: horizon } },
+          where: { deletedAt: null, drivingLicenseExpiry: { not: null, lte: horizon } },
         }),
         prisma.car.findMany({
           where: {
-            deletedAt: null,
-            OR: [
-              { insuranceExpiryDate: { gte: now, lte: horizon } },
-              { technicalInspectionExpiryDate: { gte: now, lte: horizon } },
-              { registrationExpiryDate: { gte: now, lte: horizon } },
-            ],
+            OR: CAR_DOCUMENT_FIELDS.map(({ field }) => ({ [field]: { not: null, lte: horizon } })),
           },
         }),
       ]);
 
     const reminders: Reminder[] = [
-      ...dueSoonRentals.map((r) => ({
-        type: 'RENTAL_RETURN_UPCOMING' as const,
-        entityType: 'Rental' as const,
-        entityId: r.id,
-        dueDate: r.plannedReturnDate,
-        label: `Rental ${r.rentalNumber} due back ${r.plannedReturnDate.toISOString()}`,
-      })),
-      ...overdueRentals.map((r) => ({
-        type: 'RENTAL_OVERDUE' as const,
-        entityType: 'Rental' as const,
-        entityId: r.id,
-        dueDate: r.plannedReturnDate,
-        label: `Rental ${r.rentalNumber} is overdue since ${r.plannedReturnDate.toISOString()}`,
-      })),
-      ...maintenanceDue.map((m) => ({
-        type: 'MAINTENANCE_DUE' as const,
-        entityType: 'MaintenanceRecord' as const,
-        entityId: m.id,
-        dueDate: m.nextDueDate as Date,
-        label: `Maintenance due for car ${m.carId}`,
-      })),
-      ...licensesExpiring.map((c) => ({
-        type: 'DRIVING_LICENSE_EXPIRING' as const,
-        entityType: 'Client' as const,
-        entityId: c.id,
-        dueDate: c.drivingLicenseExpiry as Date,
-        label: `Driving license expiring for ${c.firstName} ${c.lastName}`,
-      })),
-      ...carsExpiring.map((car) => ({
-        type: (car.insuranceExpiryDate && car.insuranceExpiryDate <= horizon
-          ? 'CAR_INSURANCE_EXPIRING'
-          : car.technicalInspectionExpiryDate && car.technicalInspectionExpiryDate <= horizon
-            ? 'CAR_TECHNICAL_INSPECTION_EXPIRING'
-            : 'CAR_REGISTRATION_EXPIRING') as ReminderType,
-        entityType: 'Car' as const,
-        entityId: car.id,
-        dueDate: (car.insuranceExpiryDate ??
-          car.technicalInspectionExpiryDate ??
-          car.registrationExpiryDate) as Date,
-        label: `${car.brand} ${car.model} (${car.licensePlate}) has an expiring document`,
-      })),
+      ...dueSoonRentals.map(
+        (r): Reminder => ({
+          type: 'RENTAL_RETURN_UPCOMING',
+          entityType: 'Rental',
+          entityId: r.id,
+          dueDate: r.plannedReturnDate,
+          overdue: false,
+          label: `Location ${r.rentalNumber} à rendre le ${formatDate(r.plannedReturnDate)}`,
+        }),
+      ),
+      ...overdueRentals.map(
+        (r): Reminder => ({
+          type: 'RENTAL_OVERDUE',
+          entityType: 'Rental',
+          entityId: r.id,
+          dueDate: r.plannedReturnDate,
+          overdue: true,
+          label: `Location ${r.rentalNumber} en retard depuis le ${formatDate(r.plannedReturnDate)}`,
+        }),
+      ),
+      ...maintenanceDue.map((m): Reminder => {
+        const dueDate = m.nextDueDate as Date;
+        return {
+          type: 'MAINTENANCE_DUE',
+          entityType: 'MaintenanceRecord',
+          entityId: m.id,
+          dueDate,
+          overdue: dueDate < now,
+          label: `Maintenance ${dueDate < now ? 'en retard depuis' : 'prévue pour'} le ${formatDate(dueDate)}`,
+        };
+      }),
+      ...licensesExpiring.map((c): Reminder => {
+        const dueDate = c.drivingLicenseExpiry as Date;
+        const overdue = dueDate < now;
+        return {
+          type: 'DRIVING_LICENSE_EXPIRING',
+          entityType: 'Client',
+          entityId: c.id,
+          dueDate,
+          overdue,
+          label: `Permis de conduire de ${c.firstName} ${c.lastName} ${overdue ? 'expiré depuis' : 'expire'} le ${formatDate(dueDate)}`,
+        };
+      }),
+      ...carsWithDocuments.flatMap((car) =>
+        CAR_DOCUMENT_FIELDS.filter(({ field }) => {
+          const date = car[field];
+          return date !== null && date <= horizon;
+        }).map(({ field, type, label }): Reminder => {
+          const dueDate = car[field] as Date;
+          const overdue = dueDate < now;
+          return {
+            type,
+            entityType: 'Car',
+            entityId: car.id,
+            dueDate,
+            overdue,
+            label: `${label} de ${car.brand} ${car.model} (${car.licensePlate}) ${overdue ? 'expirée depuis' : 'expire'} le ${formatDate(dueDate)}`,
+          };
+        }),
+      ),
     ];
 
     return reminders.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());

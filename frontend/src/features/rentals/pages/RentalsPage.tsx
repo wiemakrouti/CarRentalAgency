@@ -18,9 +18,11 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
-import { useRentalsQuery } from '../hooks/use-rentals';
+import { toast } from 'sonner';
+import { useRentalQuery, useRentalsQuery } from '../hooks/use-rentals';
 import { RentalFormDialog } from '../components/rental-form-dialog';
 import { RentalRowActions } from '../components/rental-row-actions';
+import { ReturnRentalDialog } from '../components/return-rental-dialog';
 import type { Rental } from '../api/rentals.api';
 import { RENTAL_STATUS_BADGE_VARIANT, RENTAL_STATUS_LABELS } from '../lib/rental-labels';
 
@@ -71,10 +73,19 @@ const columns = [
 export function RentalsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [formOpen, setFormOpen] = useState(false);
+  const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+  // Snapshotted once the deep link resolves — kept in local state (not
+  // re-derived from the URL) so clearing returnRentalId below doesn't blank
+  // it out from under the still-open dialog.
+  const [rentalToReturn, setRentalToReturn] = useState<Rental | null>(null);
 
   const page = Number(searchParams.get('page') ?? '1');
   const search = searchParams.get('search') ?? '';
   const status = searchParams.get('status') ?? undefined;
+  // One-shot deep link from the Cars module's "Consulter la location" —
+  // see CarRentedNoticeDialog. Landing here re-opens Return directly on
+  // this rental instead of making the admin find it in the list first.
+  const returnRentalId = searchParams.get('returnRentalId');
 
   const [searchInput, setSearchInput] = useState(search);
   const debouncedSearch = useDebouncedValue(searchInput);
@@ -85,6 +96,7 @@ export function RentalsPage() {
     search: search || undefined,
     status,
   });
+  const { data: deepLinkedRental } = useRentalQuery(returnRentalId ?? '');
 
   function updateParam(key: string, value: string | undefined) {
     const next = new URLSearchParams(searchParams);
@@ -100,6 +112,25 @@ export function RentalsPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, search]);
+
+  useEffect(() => {
+    if (!returnRentalId || !deepLinkedRental) return;
+    if (deepLinkedRental.status === 'ACTIVE') {
+      setRentalToReturn(deepLinkedRental);
+      setSearchInput(deepLinkedRental.rentalNumber);
+      setReturnDialogOpen(true);
+    } else {
+      toast.warning('Cette location a déjà été clôturée.');
+    }
+    // One-shot: drop returnRentalId so re-opening/closing the dialog later
+    // doesn't reopen it, and filter the list down to this rental.
+    const next = new URLSearchParams(searchParams);
+    next.delete('returnRentalId');
+    next.set('search', deepLinkedRental.rentalNumber);
+    next.delete('page');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkedRental]);
 
   function clearAllFilters() {
     setSearchInput('');
@@ -202,6 +233,16 @@ export function RentalsPage() {
       )}
 
       <RentalFormDialog open={formOpen} onOpenChange={setFormOpen} />
+      {rentalToReturn && (
+        <ReturnRentalDialog
+          open={returnDialogOpen}
+          onOpenChange={(next) => {
+            setReturnDialogOpen(next);
+            if (!next) setRentalToReturn(null);
+          }}
+          rental={rentalToReturn}
+        />
+      )}
     </PageContainer>
   );
 }

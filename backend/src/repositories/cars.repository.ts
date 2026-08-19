@@ -1,7 +1,6 @@
 import type { CarStatus, Prisma, PrismaClient } from '@prisma/client';
 import type { CreateCarInput, UpdateCarInput } from '@car-rental/shared';
 import { prisma } from '../lib/prisma-client.js';
-import { archive, notDeleted, restore } from './soft-delete.js';
 import { overlappingRentalsFilter } from '../lib/rental-availability.js';
 import type { CarExportQuery, CarListQuery } from '../validators/car.validator.js';
 
@@ -12,16 +11,17 @@ type Db = PrismaClient | Prisma.TransactionClient;
 // below reads.
 type CarFilterQuery = CarExportQuery;
 
+// Cars have no soft-delete: a car is either in the fleet or permanently
+// deleted (CarsService.delete, guarded by countRelations below). Taking a
+// car out of active rotation without erasing it is what CarStatus is for
+// (e.g. OUT_OF_SERVICE) — see docs/architecture.md §1.
 function buildWhere(query: CarFilterQuery): Prisma.CarWhereInput {
-  const where = notDeleted<Prisma.CarWhereInput>(
-    {
-      category: query.category,
-      status: query.status,
-      transmission: query.transmission,
-      fuelType: query.fuelType,
-    },
-    { includeArchived: query.includeArchived },
-  );
+  const where: Prisma.CarWhereInput = {
+    category: query.category,
+    status: query.status,
+    transmission: query.transmission,
+    fuelType: query.fuelType,
+  };
 
   if (query.search) {
     where.OR = [
@@ -81,9 +81,9 @@ export const CarsRepository = {
     return { items: items.map(withActiveRental), total };
   },
 
-  async findById(id: string, options?: { includeArchived?: boolean }, db: Db = prisma) {
+  async findById(id: string, db: Db = prisma) {
     const car = await db.car.findFirst({
-      where: notDeleted({ id }, options),
+      where: { id },
       include: { images: true, ...ACTIVE_RENTAL_INCLUDE },
     });
     return car ? withActiveRental(car) : null;
@@ -107,18 +107,10 @@ export const CarsRepository = {
     db: Db = prisma,
   ): Promise<boolean> {
     const result = await db.car.updateMany({
-      where: { id, status: { in: [...expectedStatuses] }, deletedAt: null },
+      where: { id, status: { in: [...expectedStatuses] } },
       data,
     });
     return result.count === 1;
-  },
-
-  archiveById(id: string, db: Db = prisma) {
-    return db.car.update({ where: { id }, data: archive(), include: { images: true } });
-  },
-
-  restoreById(id: string, db: Db = prisma) {
-    return db.car.update({ where: { id }, data: restore(), include: { images: true } });
   },
 
   addImage(
@@ -146,6 +138,28 @@ export const CarsRepository = {
 
   deleteImageById(imageId: string, db: Db = prisma) {
     return db.carImage.delete({ where: { id: imageId } });
+  },
+
+  // Powers the delete guard: a car with any of this history is never
+  // deleted (no cascade is configured on these relations on purpose —
+  // losing rental/financial/maintenance records isn't recoverable). Counts
+  // ignore deletedAt on the related rows: even a cancelled rental or a
+  // soft-deleted expense is still real history that must block deletion.
+  async countRelations(carId: string, db: Db = prisma) {
+    const [rentals, expenses, maintenanceRecords] = await Promise.all([
+      db.rental.count({ where: { carId } }),
+      db.expense.count({ where: { carId } }),
+      db.maintenanceRecord.count({ where: { carId } }),
+    ]);
+    return { rentals, expenses, maintenanceRecords };
+  },
+
+  deleteAllImages(carId: string, db: Db = prisma) {
+    return db.carImage.deleteMany({ where: { carId } });
+  },
+
+  deleteById(id: string, db: Db = prisma) {
+    return db.car.delete({ where: { id } });
   },
 
   findAllForExport(query: CarExportQuery, db: Db = prisma) {
@@ -189,7 +203,7 @@ export const CarsRepository = {
     };
 
     return db.car.findMany({
-      where: notDeleted(availabilityFilter),
+      where: availabilityFilter,
       include: { images: true },
       orderBy: { brand: 'asc' },
     });

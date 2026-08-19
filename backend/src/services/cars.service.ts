@@ -4,6 +4,7 @@ import type { CreateCarInput, UpdateCarInput } from '@car-rental/shared';
 import { prisma } from '../lib/prisma-client.js';
 import { AppError } from '../utils/app-error.js';
 import { toCsv } from '../utils/csv.js';
+import { toXlsxBuffer } from '../utils/xlsx.js';
 import {
   deleteCloudinaryImage,
   isCloudinaryConfigured,
@@ -44,6 +45,20 @@ function formatCsvDate(date: Date | null): string {
   return date ? date.toISOString().slice(0, 10) : '';
 }
 
+const HAS_HISTORY_MESSAGE =
+  'Cette voiture a un historique (locations, dépenses ou maintenance) et ne peut pas être supprimée définitivement.';
+
+async function hasHistory(carId: string): Promise<boolean> {
+  const relations = await CarsRepository.countRelations(carId);
+  return relations.rentals > 0 || relations.expenses > 0 || relations.maintenanceRecords > 0;
+}
+
+async function assertNoHistory(carId: string): Promise<void> {
+  if (await hasHistory(carId)) {
+    throw new AppError(409, 'CAR_HAS_HISTORY', HAS_HISTORY_MESSAGE);
+  }
+}
+
 const UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
 
 function toDuplicateLicensePlateError(err: unknown): never {
@@ -66,8 +81,8 @@ export const CarsService = {
     return { items, total, page: query.page, pageSize: query.pageSize };
   },
 
-  async getById(id: string, options?: { includeArchived?: boolean }) {
-    const car = await CarsRepository.findById(id, options);
+  async getById(id: string) {
+    const car = await CarsRepository.findById(id);
     if (!car) {
       throw new AppError(404, 'CAR_NOT_FOUND', 'Voiture introuvable.');
     }
@@ -95,6 +110,16 @@ export const CarsService = {
 
   async update(id: string, input: UpdateCarInput, userId: string, ipAddress?: string) {
     const existing = await CarsService.getById(id);
+    // The only way to take a car out of RENTED is returning its rental
+    // (RentalsService.returnRental, via CarsRepository.updateStatusGuarded) —
+    // never trust the client to have checked this itself.
+    if (input.status && existing.status === 'RENTED') {
+      throw new AppError(
+        409,
+        'CAR_CURRENTLY_RENTED',
+        'Cette voiture est en cours de location. Retournez la location pour changer son statut.',
+      );
+    }
     try {
       return await prisma.$transaction(async (tx) => {
         const updated = await CarsRepository.update(id, input, tx);
@@ -114,60 +139,104 @@ export const CarsService = {
     }
   },
 
-  async archive(id: string, userId: string, ipAddress?: string) {
+  // Non-mutating precheck so the frontend's delete confirmation dialog can
+  // show the right content (destructive confirm vs. explanatory notice)
+  // before the admin ever clicks the button, instead of only finding out
+  // after submitting that CAR_HAS_HISTORY was going to reject it.
+  async checkDeletable(id: string) {
     await CarsService.getById(id);
-    return prisma.$transaction(async (tx) => {
-      const archived = await CarsRepository.archiveById(id, tx);
-      await AuditService.record(tx, {
-        userId,
-        action: 'DELETE',
-        entityType: 'Car',
-        entityId: id,
-        ipAddress,
-      });
-      return archived;
-    });
+    const blocked = await hasHistory(id);
+    return { canDelete: !blocked, reason: blocked ? HAS_HISTORY_MESSAGE : null };
   },
 
-  async restore(id: string, userId: string, ipAddress?: string) {
-    await CarsService.getById(id, { includeArchived: true });
-    return prisma.$transaction(async (tx) => {
-      const restored = await CarsRepository.restoreById(id, tx);
-      await AuditService.record(tx, {
-        userId,
-        action: 'RESTORE',
-        entityType: 'Car',
-        entityId: id,
-        ipAddress,
-      });
-      return restored;
-    });
+  async checkBulkDeletable(ids: string[]) {
+    await Promise.all(ids.map((id) => CarsService.getById(id)));
+    const results = await Promise.all(ids.map((id) => hasHistory(id)));
+    const blockedCount = results.filter(Boolean).length;
+    return {
+      canDelete: blockedCount === 0,
+      blockedCount,
+      reason:
+        blockedCount > 0
+          ? `${blockedCount} voiture(s) sur ${ids.length} ${blockedCount > 1 ? 'ont' : 'a'} un historique (locations, dépenses ou maintenance) et ne peuvent pas être supprimées définitivement.`
+          : null,
+    };
   },
 
-  // All-or-nothing: one transaction touching every id, same guarantee as
-  // archiving/updating a single car — a partial bulk failure would leave the
-  // admin unsure which of their selection actually changed.
-  async bulkArchive(ids: string[], userId: string, ipAddress?: string) {
-    return prisma.$transaction(async (tx) => {
-      const existing = await tx.car.findMany({ where: { id: { in: ids }, deletedAt: null } });
-      if (existing.length !== ids.length) {
-        throw new AppError(404, 'CAR_NOT_FOUND', 'Une ou plusieurs voitures sont introuvables.');
+  // Cars have no soft-delete: this is the only way to remove one, and it's
+  // guarded — a car with any history in another module (rentals, expenses,
+  // maintenance) is never deletable, since none of those relations cascade
+  // on purpose. CarStatus (e.g. OUT_OF_SERVICE) is how an admin takes a car
+  // out of rotation without erasing it; the frontend surfaces
+  // CAR_HAS_HISTORY as an explanatory alert rather than a silent failure.
+  async delete(id: string, userId: string, ipAddress?: string) {
+    const car = await CarsService.getById(id);
+    await assertNoHistory(id);
+
+    await prisma.$transaction(async (tx) => {
+      await CarsRepository.deleteAllImages(id, tx);
+      await CarsRepository.deleteById(id, tx);
+      await AuditService.record(tx, {
+        userId,
+        action: 'CAR_HARD_DELETE',
+        entityType: 'Car',
+        entityId: id,
+        before: car,
+        ipAddress,
+      });
+    });
+
+    // Same best-effort-after-commit pattern as removeImage: a leftover
+    // Cloudinary asset is a harmless cost, and the DB row is already gone
+    // either way by this point.
+    for (const image of car.images) {
+      try {
+        await deleteCloudinaryImage(image.publicId);
+      } catch (err) {
+        console.error(`Failed to delete Cloudinary asset ${image.publicId}:`, err);
       }
-      const archived = [];
-      for (const car of existing) {
-        archived.push(await CarsRepository.archiveById(car.id, tx));
+    }
+
+    return car;
+  },
+
+  async bulkDelete(ids: string[], userId: string, ipAddress?: string) {
+    const cars = await Promise.all(ids.map((id) => CarsService.getById(id)));
+    await Promise.all(ids.map((id) => assertNoHistory(id)));
+
+    await prisma.$transaction(async (tx) => {
+      for (const id of ids) {
+        await CarsRepository.deleteAllImages(id, tx);
+        await CarsRepository.deleteById(id, tx);
+      }
+      for (const car of cars) {
         await AuditService.record(tx, {
           userId,
-          action: 'DELETE',
+          action: 'CAR_HARD_DELETE',
           entityType: 'Car',
           entityId: car.id,
+          before: car,
           ipAddress,
         });
       }
-      return archived;
     });
+
+    for (const car of cars) {
+      for (const image of car.images) {
+        try {
+          await deleteCloudinaryImage(image.publicId);
+        } catch (err) {
+          console.error(`Failed to delete Cloudinary asset ${image.publicId}:`, err);
+        }
+      }
+    }
+
+    return cars;
   },
 
+  // All-or-nothing: one transaction touching every id, same guarantee as
+  // updating a single car — a partial bulk failure would leave the admin
+  // unsure which of their selection actually changed.
   async bulkUpdateStatus(
     ids: string[],
     status: UpdateCarInput['status'],
@@ -175,9 +244,16 @@ export const CarsService = {
     ipAddress?: string,
   ) {
     return prisma.$transaction(async (tx) => {
-      const existing = await tx.car.findMany({ where: { id: { in: ids }, deletedAt: null } });
+      const existing = await tx.car.findMany({ where: { id: { in: ids } } });
       if (existing.length !== ids.length) {
         throw new AppError(404, 'CAR_NOT_FOUND', 'Une ou plusieurs voitures sont introuvables.');
+      }
+      if (existing.some((car) => car.status === 'RENTED')) {
+        throw new AppError(
+          409,
+          'CAR_CURRENTLY_RENTED',
+          'Une ou plusieurs voitures sélectionnées sont en cours de location. Retournez leur location pour changer leur statut.',
+        );
       }
       const updated = [];
       for (const car of existing) {
@@ -202,7 +278,7 @@ export const CarsService = {
   },
 
   async getStats(id: string) {
-    await CarsService.getById(id, { includeArchived: true });
+    await CarsService.getById(id);
     return CarsRepository.getStats(id);
   },
 
@@ -233,6 +309,64 @@ export const CarsService = {
         value: (c) => formatCsvDate(c.technicalInspectionExpiryDate),
       },
       { header: 'Expiration carte grise', value: (c) => formatCsvDate(c.registrationExpiryDate) },
+    ]);
+  },
+
+  async exportXlsx(query: CarExportQuery): Promise<Buffer> {
+    const cars = await CarsRepository.findAllForExport(query);
+    return toXlsxBuffer<Car>('Voitures', cars, [
+      { header: 'Immatriculation', value: (c) => c.licensePlate, width: 16 },
+      { header: 'VIN', value: (c) => c.vin, width: 20 },
+      { header: 'Marque', value: (c) => c.brand, width: 14 },
+      { header: 'Modèle', value: (c) => c.model, width: 14 },
+      { header: 'Année', value: (c) => c.year, width: 8 },
+      { header: 'Couleur', value: (c) => c.color, width: 12 },
+      { header: 'Catégorie', value: (c) => CATEGORY_LABELS[c.category] ?? c.category, width: 14 },
+      {
+        header: 'Transmission',
+        value: (c) => TRANSMISSION_LABELS[c.transmission] ?? c.transmission,
+        width: 14,
+      },
+      { header: 'Carburant', value: (c) => FUEL_TYPE_LABELS[c.fuelType] ?? c.fuelType, width: 12 },
+      { header: 'Places', value: (c) => c.seats, width: 8 },
+      { header: 'Kilométrage', value: (c) => c.mileage, width: 12, numFmt: '#,##0' },
+      {
+        header: 'Tarif / jour (DT)',
+        value: (c) => Number(c.dailyRate),
+        width: 16,
+        numFmt: '#,##0.000',
+      },
+      { header: 'Statut', value: (c) => STATUS_LABELS[c.status] ?? c.status, width: 14 },
+      {
+        header: "Date d'achat",
+        value: (c) => c.purchaseDate,
+        width: 14,
+        numFmt: 'dd/mm/yyyy',
+      },
+      {
+        header: "Prix d'achat (DT)",
+        value: (c) => (c.purchasePrice ? Number(c.purchasePrice) : null),
+        width: 16,
+        numFmt: '#,##0.000',
+      },
+      {
+        header: 'Expiration assurance',
+        value: (c) => c.insuranceExpiryDate,
+        width: 18,
+        numFmt: 'dd/mm/yyyy',
+      },
+      {
+        header: 'Expiration contrôle technique',
+        value: (c) => c.technicalInspectionExpiryDate,
+        width: 22,
+        numFmt: 'dd/mm/yyyy',
+      },
+      {
+        header: 'Expiration carte grise',
+        value: (c) => c.registrationExpiryDate,
+        width: 18,
+        numFmt: 'dd/mm/yyyy',
+      },
     ]);
   },
 

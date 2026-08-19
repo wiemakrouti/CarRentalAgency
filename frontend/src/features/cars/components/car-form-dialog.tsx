@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import type { Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -6,7 +6,6 @@ import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import {
   CAR_CATEGORIES,
-  CAR_STATUSES,
   FUEL_TYPES,
   TRANSMISSIONS,
   createCarSchema,
@@ -45,7 +44,6 @@ import {
 import { CarPhotoField } from './car-photo-field';
 import {
   CAR_CATEGORY_LABELS,
-  CAR_STATUS_LABELS,
   FUEL_TYPE_LABELS,
   TRANSMISSION_LABELS,
 } from '../lib/car-labels';
@@ -86,7 +84,6 @@ function buildDefaultValues(car?: Car): UpdateCarInput {
     registrationExpiryDate: car.registrationExpiryDate
       ? new Date(car.registrationExpiryDate)
       : null,
-    status: car.status,
   };
 }
 
@@ -105,9 +102,9 @@ export function CarFormDialog({ open, onOpenChange, car }: CarFormDialogProps) {
   // Not a form field — the car has to exist before an image can be
   // associated with it, so this is only ever sent (via the existing Cars
   // image API, isPrimary: true) after the create/update mutation below
-  // resolves. Radix unmounts DialogContent on close, so this naturally
-  // resets to null each time the dialog reopens, same as react-hook-form's
-  // defaultValues below.
+  // resolves. CarFormDialog stays mounted for the lifetime of CarsPage (only
+  // <DialogContent> unmounts on close), so this is reset explicitly in the
+  // effect below each time the dialog opens.
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const existingImageUrl =
     car?.images.find((img) => img.isPrimary)?.url ?? car?.images[0]?.url ?? null;
@@ -116,11 +113,23 @@ export function CarFormDialog({ open, onOpenChange, car }: CarFormDialogProps) {
     register,
     control,
     handleSubmit,
+    reset,
     formState: { errors },
   } = useForm<UpdateCarInput>({
     resolver: zodResolver(isEdit ? updateCarSchema : createCarSchema) as Resolver<UpdateCarInput>,
     defaultValues: buildDefaultValues(car),
   });
+
+  // The dialog itself is never unmounted, so react-hook-form's defaultValues
+  // only run once on the very first mount. Re-sync the form (and the photo
+  // picker) to the current `car` prop every time the dialog is opened —
+  // otherwise a previous submission's values linger on reopen.
+  useEffect(() => {
+    if (open) {
+      reset(buildDefaultValues(car));
+      setPhotoFile(null);
+    }
+  }, [open, car, reset]);
 
   async function onSubmit(values: UpdateCarInput) {
     let savedCar: Car;
@@ -144,7 +153,6 @@ export function CarFormDialog({ open, onOpenChange, car }: CarFormDialogProps) {
           file: photoFile,
           isPrimary: true,
         });
-        toast.success('Photo ajoutée.');
       } catch (err) {
         toast.error(
           errorMessage(
@@ -301,29 +309,6 @@ export function CarFormDialog({ open, onOpenChange, car }: CarFormDialogProps) {
                   <p className="text-sm text-destructive">{errors.fuelType.message}</p>
                 )}
               </div>
-              {isEdit && (
-                <div className="space-y-2">
-                  <Label>Statut</Label>
-                  <Controller
-                    name="status"
-                    control={control}
-                    render={({ field }) => (
-                      <Select value={field.value} onValueChange={field.onChange}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Sélectionner" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {CAR_STATUSES.map((s) => (
-                            <SelectItem key={s} value={s}>
-                              {CAR_STATUS_LABELS[s]}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
-                </div>
-              )}
               <div className="space-y-2">
                 <Label htmlFor="seats">Places</Label>
                 <Input id="seats" type="number" {...register('seats', { setValueAs: Number })} />

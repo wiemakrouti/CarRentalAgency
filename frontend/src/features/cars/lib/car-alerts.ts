@@ -52,16 +52,45 @@ export function getCarExpiryAlerts(car: Car): ExpiryAlert[] {
   return alerts.sort((a, b) => a.daysRemaining - b.daysRemaining);
 }
 
-export function getWorstAlertLevel(alerts: ExpiryAlert[]): ExpiryAlertLevel | null {
-  if (alerts.some((a) => a.level === 'expired')) return 'expired';
-  if (alerts.some((a) => a.level === 'expiring')) return 'expiring';
-  return null;
-}
-
 export function formatAlertMessage(alert: ExpiryAlert): string {
   if (alert.level === 'expired') {
     const overdue = Math.abs(alert.daysRemaining);
     return `${alert.label} expirée depuis ${overdue} jour${overdue > 1 ? 's' : ''}`;
   }
   return `${alert.label} expire dans ${alert.daysRemaining} jour${alert.daysRemaining > 1 ? 's' : ''}`;
+}
+
+export type DocumentLevel = ExpiryAlertLevel | 'not_set';
+
+export type DocumentStatus = {
+  field: ExpiryAlert['field'];
+  label: string;
+  date: string | null;
+  level: DocumentLevel;
+  daysRemaining: number | null;
+};
+
+// Unlike getCarExpiryAlerts (problems only, for the compact table/grid
+// indicator), this returns all three document types regardless of status —
+// the car detail sheet has room to show the full picture, not just what
+// needs attention.
+export function getDocumentStatuses(car: Car): DocumentStatus[] {
+  return EXPIRY_FIELDS.map(({ field, label }) => {
+    const date = car[field];
+    if (!date) {
+      return { field, label, date: null, level: 'not_set', daysRemaining: null };
+    }
+    const daysRemaining = daysUntil(date);
+    return { field, label, date, level: levelFor(daysRemaining), daysRemaining };
+  });
+}
+
+export function formatDocumentStatus(doc: DocumentStatus): string {
+  if (doc.level === 'not_set') return 'Date non renseignée';
+  if (doc.level === 'ok') return 'À jour';
+  if (doc.level === 'expired') {
+    const overdue = Math.abs(doc.daysRemaining!);
+    return `Expirée depuis ${overdue} jour${overdue > 1 ? 's' : ''}`;
+  }
+  return `Expire dans ${doc.daysRemaining} jour${doc.daysRemaining! > 1 ? 's' : ''}`;
 }

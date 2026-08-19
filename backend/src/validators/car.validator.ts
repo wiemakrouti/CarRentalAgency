@@ -3,9 +3,9 @@ import {
   CAR_CATEGORIES,
   CAR_STATUSES,
   FUEL_TYPES,
+  MANUALLY_SETTABLE_CAR_STATUSES,
   TRANSMISSIONS,
   paginationQuerySchema,
-  includeArchivedQuerySchema,
 } from '@car-rental/shared';
 
 export const carIdParamSchema = z.object({ id: z.string().uuid() });
@@ -25,7 +25,7 @@ const CAR_SORT_FIELDS = [
   'createdAt',
 ] as const;
 
-export const carListQuerySchema = paginationQuerySchema.merge(includeArchivedQuerySchema).extend({
+export const carListQuerySchema = paginationQuerySchema.extend({
   search: z.string().trim().min(1).optional(),
   category: z.enum(CAR_CATEGORIES).optional(),
   status: z.enum(CAR_STATUSES).optional(),
@@ -68,7 +68,7 @@ export const bulkCarIdsSchema = z.object({
 export type BulkCarIdsInput = z.infer<typeof bulkCarIdsSchema>;
 
 export const bulkCarStatusSchema = bulkCarIdsSchema.extend({
-  status: z.enum(CAR_STATUSES),
+  status: z.enum(MANUALLY_SETTABLE_CAR_STATUSES),
 });
 
 export type BulkCarStatusInput = z.infer<typeof bulkCarStatusSchema>;

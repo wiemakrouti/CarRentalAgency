@@ -227,7 +227,7 @@ export const RentalsService = {
       const carGuarded = await CarsRepository.updateStatusGuarded(
         rental.carId,
         ['RENTED'],
-        { status: 'AVAILABLE', mileage: input.mileageAtReturn },
+        { status: input.carStatusAfterReturn, mileage: input.mileageAtReturn },
         tx,
       );
       if (!carGuarded) {

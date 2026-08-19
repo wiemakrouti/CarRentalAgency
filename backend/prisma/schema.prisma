@@ -154,8 +154,11 @@ model RefreshToken {
 
 model Car {
   id            String        @id @default(uuid())
-  licensePlate  String
-  vin           String?
+  // No soft-delete on Car (see docs/architecture.md § Soft delete), so these
+  // are plain unique constraints — unlike the partial "unique among
+  // non-archived rows" indexes Client/etc. still need.
+  licensePlate  String        @unique
+  vin           String?       @unique
   brand         String
   model         String
   year          Int
@@ -175,18 +178,15 @@ model Car {
   technicalInspectionExpiryDate DateTime?
   registrationExpiryDate        DateTime?
 
-  deletedAt DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   images             CarImage[]
   rentals            Rental[]
   maintenanceRecords MaintenanceRecord[]
   expenses           Expense[]
 
-  @@index([licensePlate])
   @@index([status])
-  @@index([deletedAt])
   @@map("cars")
 }
 
@@ -401,14 +401,21 @@ model MaintenanceRecord {
 model Setting {
   id                        String   @id @default(uuid())
   agencyName                String
+  // Present in the database (migration 20260809121851) but not yet wired to
+  // any controller/UI — reconstructed here to match, not part of this
+  // change. Flagged for follow-up: either build the feature or drop them.
+  agencyNameAr              String?
   address                   String?
   phone                     String?
+  email                     String?
   logoUrl                   String?
   currencyCode              String   @default("TND")
   contractPrimaryLanguage   String   @default("fr")
   contractSecondaryLanguage String   @default("ar")
   defaultDepositAmount      Decimal  @default(0) @db.Decimal(10, 3)
   taxRatePercent            Decimal  @default(0) @db.Decimal(5, 2)
+  taxId                     String?
+  fiscalStampDutyAmount     Decimal  @default(1) @db.Decimal(10, 3)
   updatedAt                 DateTime @updatedAt
 
   @@map("settings")

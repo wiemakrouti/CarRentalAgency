@@ -30,6 +30,18 @@ export const CarsController = {
     res.send(csv);
   },
 
+  async exportXlsx(req: Request, res: Response) {
+    const query = req.query as unknown as CarExportQuery;
+    const buffer = await CarsService.exportXlsx(query);
+    res.status(200);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', 'attachment; filename="voitures.xlsx"');
+    res.send(buffer);
+  },
+
   async available(req: Request, res: Response) {
     const query = req.query as unknown as AvailableQuery;
     const cars = await CarsService.getAvailable(query);
@@ -58,14 +70,14 @@ export const CarsController = {
     res.status(200).json({ success: true, data: car });
   },
 
-  async archive(req: Request, res: Response) {
-    const car = await CarsService.archive(req.params.id!, req.user!.id, req.ip);
-    res.status(200).json({ success: true, data: car });
+  async checkDeletable(req: Request, res: Response) {
+    const result = await CarsService.checkDeletable(req.params.id!);
+    res.status(200).json({ success: true, data: result });
   },
 
-  async restore(req: Request, res: Response) {
-    const car = await CarsService.restore(req.params.id!, req.user!.id, req.ip);
-    res.status(200).json({ success: true, data: car });
+  async delete(req: Request, res: Response) {
+    await CarsService.delete(req.params.id!, req.user!.id, req.ip);
+    res.status(200).json({ success: true, data: { deleted: true } });
   },
 
   async uploadImage(req: Request, res: Response) {
@@ -98,10 +110,16 @@ export const CarsController = {
     res.status(200).json({ success: true, data: image });
   },
 
-  async bulkArchive(req: Request, res: Response) {
+  async checkBulkDeletable(req: Request, res: Response) {
     const { ids } = req.body as BulkCarIdsInput;
-    const archived = await CarsService.bulkArchive(ids, req.user!.id, req.ip);
-    res.status(200).json({ success: true, data: archived });
+    const result = await CarsService.checkBulkDeletable(ids);
+    res.status(200).json({ success: true, data: result });
+  },
+
+  async bulkDelete(req: Request, res: Response) {
+    const { ids } = req.body as BulkCarIdsInput;
+    await CarsService.bulkDelete(ids, req.user!.id, req.ip);
+    res.status(200).json({ success: true, data: { deleted: true } });
   },
 
   async bulkUpdateStatus(req: Request, res: Response) {
