@@ -106,35 +106,31 @@ export function CarDetailSheet({ carId, open, onOpenChange, onManageImages }: Ca
           </div>
         ) : (
           <>
-            <SheetHeader>
-              <SheetTitle>
-                {car.brand} {car.model}
-              </SheetTitle>
-              <SheetDescription>{car.licensePlate}</SheetDescription>
-            </SheetHeader>
-
-            <div className="relative mt-4 h-48 w-full">
+            <div className="relative -mx-6 -mt-6 h-48 w-[calc(100%+3rem)] overflow-hidden">
               {primaryImage ? (
-                <img
-                  src={primaryImage.url}
-                  alt=""
-                  className="h-full w-full rounded-lg object-cover"
-                />
+                <img src={primaryImage.url} alt="" className="h-full w-full object-cover" />
               ) : (
-                <div className="flex h-full w-full items-center justify-center rounded-lg bg-muted">
-                  <ImageOff className="h-8 w-8 text-muted-foreground" />
+                <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary-100 to-primary-50">
+                  <ImageOff className="h-12 w-12 text-primary-200" strokeWidth={1.3} />
                 </div>
               )}
               <Button
                 size="sm"
                 variant="secondary"
-                className="absolute bottom-2 right-2"
+                className="absolute bottom-3 right-3 shadow-sm"
                 onClick={onManageImages}
               >
                 <Images className="h-4 w-4" />
                 Gérer les images
               </Button>
             </div>
+
+            <SheetHeader className="mt-4">
+              <SheetTitle>
+                {car.brand} {car.model}
+              </SheetTitle>
+              <SheetDescription>{car.licensePlate}</SheetDescription>
+            </SheetHeader>
 
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <Badge variant={CAR_STATUS_BADGE_VARIANT[car.status]}>
@@ -180,24 +176,29 @@ export function CarDetailSheet({ carId, open, onOpenChange, onManageImages }: Ca
               <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Caractéristiques
               </p>
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                <dt className="text-muted-foreground">Catégorie</dt>
-                <dd>{CAR_CATEGORY_LABELS[car.category]}</dd>
-                <dt className="text-muted-foreground">Transmission</dt>
-                <dd>{TRANSMISSION_LABELS[car.transmission]}</dd>
-                <dt className="text-muted-foreground">Carburant</dt>
-                <dd>{FUEL_TYPE_LABELS[car.fuelType]}</dd>
-                <dt className="text-muted-foreground">Année</dt>
-                <dd>{car.year}</dd>
-                <dt className="text-muted-foreground">Places</dt>
-                <dd>{car.seats}</dd>
-                <dt className="text-muted-foreground">Couleur</dt>
-                <dd>{car.color}</dd>
-                <dt className="text-muted-foreground">Kilométrage</dt>
-                <dd>{car.mileage.toLocaleString('fr-TN')} km</dd>
-                <dt className="text-muted-foreground">Tarif / jour</dt>
-                <dd>{formatAmount(car.dailyRate)}</dd>
-              </dl>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  ['Catégorie', CAR_CATEGORY_LABELS[car.category]],
+                  ['Transmission', TRANSMISSION_LABELS[car.transmission]],
+                  ['Carburant', FUEL_TYPE_LABELS[car.fuelType]],
+                  ['Année', String(car.year)],
+                  ['Places', `${car.seats} places`],
+                  ['Couleur', car.color],
+                  ['Kilométrage', `${car.mileage.toLocaleString('fr-TN')} km`, 'col-span-2'],
+                ].map(([label, value, span]) => (
+                  <div key={label} className={`rounded-xl bg-muted p-3 ${span ?? ''}`}>
+                    <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
+                    <p className="text-sm font-semibold text-foreground">{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between rounded-xl bg-gradient-to-br from-primary-600 to-primary-700 px-4 py-3.5 text-primary-foreground">
+                <div>
+                  <p className="text-[11px] font-medium text-primary-100">Tarif journalier</p>
+                  <p className="text-xl font-bold">{formatAmount(car.dailyRate)}</p>
+                </div>
+              </div>
             </div>
 
             <Separator className="my-4" />
@@ -210,7 +211,7 @@ export function CarDetailSheet({ carId, open, onOpenChange, onManageImages }: Ca
                 {documentStatuses.map((doc) => (
                   <li
                     key={doc.field}
-                    className="flex items-center justify-between rounded-md border border-border p-2 text-sm"
+                    className="flex items-center justify-between rounded-xl border border-border p-2.5 text-sm"
                   >
                     <div>
                       <p className="font-medium">{doc.label}</p>
@@ -259,7 +260,7 @@ export function CarDetailSheet({ carId, open, onOpenChange, onManageImages }: Ca
                   {rentals.items.map((rental) => (
                     <li
                       key={rental.id}
-                      className="flex items-center justify-between rounded-md border border-border p-2 text-sm"
+                      className="flex items-center justify-between rounded-xl border border-border p-2.5 text-sm"
                     >
                       <div>
                         <p className="font-medium">{rental.rentalNumber}</p>

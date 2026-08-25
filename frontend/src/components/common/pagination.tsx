@@ -52,6 +52,7 @@ export function Pagination({ page, pageCount, onPageChange, siblingCount = 1, cl
         <Button
           variant="outline"
           size="icon"
+          className="rounded-full"
           disabled={page <= 1}
           onClick={() => onPageChange(page - 1)}
           aria-label="Page précédente"
@@ -72,6 +73,7 @@ export function Pagination({ page, pageCount, onPageChange, siblingCount = 1, cl
               key={token}
               variant={token === page ? 'default' : 'ghost'}
               size="icon"
+              className="rounded-full"
               onClick={() => onPageChange(token)}
               aria-current={token === page ? 'page' : undefined}
             >
@@ -83,6 +85,7 @@ export function Pagination({ page, pageCount, onPageChange, siblingCount = 1, cl
         <Button
           variant="outline"
           size="icon"
+          className="rounded-full"
           disabled={page >= pageCount}
           onClick={() => onPageChange(page + 1)}
           aria-label="Page suivante"

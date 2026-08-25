@@ -14,15 +14,17 @@ export type NavItem = {
   label: string;
   path: string;
   icon: LucideIcon;
+  // Purely a sidebar-rendering grouping — does not affect routing.
+  group: string;
 };
 
 export const navItems: NavItem[] = [
-  { label: 'Tableau de bord', path: '/', icon: LayoutDashboard },
-  { label: 'Gestion des voitures', path: '/cars', icon: CarFront },
-  { label: 'Gestion des clients', path: '/clients', icon: Users },
-  { label: 'Gestion des locations', path: '/rentals', icon: ClipboardList },
-  { label: 'Finances', path: '/finances', icon: Wallet },
-  { label: 'Maintenance', path: '/maintenance', icon: Wrench },
-  { label: 'Rapports', path: '/reports', icon: BarChart3 },
-  { label: 'Paramètres', path: '/settings', icon: Settings },
+  { label: 'Tableau de bord', path: '/', icon: LayoutDashboard, group: "Vue d'ensemble" },
+  { label: 'Gestion des voitures', path: '/cars', icon: CarFront, group: 'Gestion' },
+  { label: 'Gestion des clients', path: '/clients', icon: Users, group: 'Gestion' },
+  { label: 'Gestion des locations', path: '/rentals', icon: ClipboardList, group: 'Gestion' },
+  { label: 'Finances', path: '/finances', icon: Wallet, group: 'Gestion' },
+  { label: 'Maintenance', path: '/maintenance', icon: Wrench, group: 'Système' },
+  { label: 'Rapports', path: '/reports', icon: BarChart3, group: 'Système' },
+  { label: 'Paramètres', path: '/settings', icon: Settings, group: 'Système' },
 ];

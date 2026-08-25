@@ -17,7 +17,7 @@ export function MobileNav() {
       </SheetTrigger>
       <SheetContent side="left" className="w-64 bg-sidebar p-0 text-sidebar-foreground">
         <SheetHeader className="flex h-16 flex-row items-center gap-2 space-y-0 border-b border-sidebar-border px-4">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary-400 to-primary-700 text-primary-foreground shadow-sm">
             <CarFront className="h-4 w-4" />
           </div>
           <SheetTitle className="text-sm font-semibold text-sidebar-foreground">

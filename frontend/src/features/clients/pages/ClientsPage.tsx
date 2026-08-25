@@ -6,6 +6,7 @@ import { Plus, Users } from 'lucide-react';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { PageContainer } from '@/components/common/page-container';
 import { PageHeader } from '@/components/common/page-header';
+import { PageHero } from '@/components/common/page-hero';
 import { EmptyState } from '@/components/common/empty-state';
 import { LoadingState } from '@/components/common/loading-state';
 import { ErrorState } from '@/components/common/error-state';
@@ -33,6 +34,20 @@ function buildColumns(onEdit: (client: Client) => void, onManageDocuments: (clie
     columnHelper.accessor((row) => `${row.firstName} ${row.lastName}`, {
       id: 'fullName',
       header: 'Nom complet',
+      cell: ({ row }) => {
+        const { firstName, lastName } = row.original;
+        const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+        return (
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-50 text-[11px] font-semibold text-primary-700 dark:bg-primary/15 dark:text-primary">
+              {initials}
+            </div>
+            <span className="font-medium">
+              {firstName} {lastName}
+            </span>
+          </div>
+        );
+      },
     }),
     columnHelper.accessor('phone', { header: 'Téléphone' }),
     columnHelper.accessor('email', {
@@ -125,40 +140,42 @@ export function ClientsPage() {
 
   return (
     <PageContainer>
-      <PageHeader
-        title="Gestion des clients"
-        description="Gérez les profils, documents et statut de vos clients."
-        actions={
-          <Button onClick={openCreateForm}>
-            <Plus className="h-4 w-4" />
-            Ajouter un client
-          </Button>
-        }
-      />
-
-      <div className="flex flex-wrap items-center gap-3">
-        <SearchBar
-          value={searchInput}
-          onChange={setSearchInput}
-          placeholder="Rechercher par nom, téléphone, email ou permis..."
-          className="w-80"
+      <PageHero>
+        <PageHeader
+          title="Gestion des clients"
+          description="Gérez les profils, documents et statut de vos clients."
+          actions={
+            <Button onClick={openCreateForm}>
+              <Plus className="h-4 w-4" />
+              Ajouter un client
+            </Button>
+          }
         />
-        <FilterBar activeCount={activeFilterCount} onClearAll={clearAllFilters}>
-          <Select
-            value={blacklisted ?? ALL_VALUE}
-            onValueChange={(value) => updateParam('blacklisted', value === ALL_VALUE ? undefined : value)}
-          >
-            <SelectTrigger className="w-44">
-              <SelectValue placeholder="Statut" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_VALUE}>Tous les statuts</SelectItem>
-              <SelectItem value="false">Actifs</SelectItem>
-              <SelectItem value="true">Liste noire</SelectItem>
-            </SelectContent>
-          </Select>
-        </FilterBar>
-      </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <SearchBar
+            value={searchInput}
+            onChange={setSearchInput}
+            placeholder="Rechercher par nom, téléphone, email ou permis..."
+            className="w-80"
+          />
+          <FilterBar activeCount={activeFilterCount} onClearAll={clearAllFilters}>
+            <Select
+              value={blacklisted ?? ALL_VALUE}
+              onValueChange={(value) => updateParam('blacklisted', value === ALL_VALUE ? undefined : value)}
+            >
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="Statut" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_VALUE}>Tous les statuts</SelectItem>
+                <SelectItem value="false">Actifs</SelectItem>
+                <SelectItem value="true">Liste noire</SelectItem>
+              </SelectContent>
+            </Select>
+          </FilterBar>
+        </div>
+      </PageHero>
 
       {isLoading && <LoadingState message="Chargement des clients..." />}
 
@@ -174,7 +191,7 @@ export function ClientsPage() {
 
       {!isLoading && !isError && data && data.items.length > 0 && (
         <>
-          <div className="overflow-x-auto rounded-lg border border-border">
+          <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-elevation">
             <Table>
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (

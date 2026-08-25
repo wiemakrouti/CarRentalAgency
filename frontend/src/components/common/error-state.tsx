@@ -22,7 +22,7 @@ export function ErrorState({
     <div
       role="alert"
       className={cn(
-        'flex min-h-[280px] flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-destructive/30 bg-destructive/5 px-6 py-16 text-center',
+        'flex min-h-[280px] flex-1 flex-col items-center justify-center rounded-2xl border border-dashed border-destructive/30 bg-destructive/5 px-6 py-16 text-center',
         className,
       )}
     >

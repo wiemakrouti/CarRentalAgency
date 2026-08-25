@@ -19,6 +19,7 @@ import { saveBlobAsFile } from '@/lib/download-file';
 
 import { PageContainer } from '@/components/common/page-container';
 import { PageHeader } from '@/components/common/page-header';
+import { PageHero } from '@/components/common/page-hero';
 import { EmptyState } from '@/components/common/empty-state';
 import { LoadingState } from '@/components/common/loading-state';
 import { ErrorState } from '@/components/common/error-state';
@@ -98,10 +99,10 @@ function buildColumns(
       cell: ({ row }) => {
         const primary = row.original.images.find((img) => img.isPrimary) ?? row.original.images[0];
         return primary ? (
-          <img src={primary.url} alt="" className="h-10 w-14 rounded-md object-cover" />
+          <img src={primary.url} alt="" className="h-11 w-16 rounded-lg object-cover shadow-sm" />
         ) : (
-          <div className="flex h-10 w-14 items-center justify-center rounded-md bg-muted">
-            <ImageOff className="h-4 w-4 text-muted-foreground" />
+          <div className="flex h-11 w-16 items-center justify-center rounded-lg bg-gradient-to-br from-primary-100 to-primary-50">
+            <ImageOff className="h-4 w-4 text-primary-300" />
           </div>
         );
       },
@@ -326,69 +327,71 @@ export function CarsPage() {
 
   return (
     <PageContainer>
-      <PageHeader
-        title="Gestion des voitures"
-        description="Ajoutez, modifiez et suivez la disponibilité de votre flotte de véhicules."
-        actions={
-          <div className="flex items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" disabled={exportMutation.isPending}>
-                  <Download className="h-4 w-4" />
-                  Exporter
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => exportMutation.mutate('csv')}>
-                  <FileText className="h-4 w-4" />
-                  CSV
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => exportMutation.mutate('xlsx')}>
-                  <FileSpreadsheet className="h-4 w-4" />
-                  Excel (.xlsx)
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Button onClick={openCreateForm}>
-              <Plus className="h-4 w-4" />
-              Ajouter une voiture
+      <PageHero>
+        <PageHeader
+          title="Gestion des voitures"
+          description="Ajoutez, modifiez et suivez la disponibilité de votre flotte de véhicules."
+          actions={
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" disabled={exportMutation.isPending}>
+                    <Download className="h-4 w-4" />
+                    Exporter
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => exportMutation.mutate('csv')}>
+                    <FileText className="h-4 w-4" />
+                    CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => exportMutation.mutate('xlsx')}>
+                    <FileSpreadsheet className="h-4 w-4" />
+                    Excel (.xlsx)
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button onClick={openCreateForm}>
+                <Plus className="h-4 w-4" />
+                Ajouter une voiture
+              </Button>
+            </div>
+          }
+        />
+
+        <div className="flex flex-wrap items-center gap-3">
+          <SearchBar
+            value={searchInput}
+            onChange={setSearchInput}
+            placeholder="Rechercher par marque, modèle ou immatriculation..."
+            className="w-80"
+          />
+          <FilterBar activeCount={activeFilterCount} onClearAll={clearAllFilters}>
+            <CarFiltersPopover value={filters} onApply={applyFilters} activeCount={activeFilterCount} />
+          </FilterBar>
+
+          <div className="ml-auto flex items-center gap-1 rounded-xl bg-muted p-1">
+            <Button
+              variant={viewMode === 'table' ? 'default' : 'ghost'}
+              size="icon"
+              className={viewMode === 'table' ? 'h-7 w-7 shadow-sm' : 'h-7 w-7 hover:bg-background/60'}
+              aria-label="Vue tableau"
+              onClick={() => changeViewMode('table')}
+            >
+              <Table2 className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={viewMode === 'grid' ? 'default' : 'ghost'}
+              size="icon"
+              className={viewMode === 'grid' ? 'h-7 w-7 shadow-sm' : 'h-7 w-7 hover:bg-background/60'}
+              aria-label="Vue grille"
+              onClick={() => changeViewMode('grid')}
+            >
+              <LayoutGrid className="h-4 w-4" />
             </Button>
           </div>
-        }
-      />
-
-      <div className="flex flex-wrap items-center gap-3">
-        <SearchBar
-          value={searchInput}
-          onChange={setSearchInput}
-          placeholder="Rechercher par marque, modèle ou immatriculation..."
-          className="w-80"
-        />
-        <FilterBar activeCount={activeFilterCount} onClearAll={clearAllFilters}>
-          <CarFiltersPopover value={filters} onApply={applyFilters} activeCount={activeFilterCount} />
-        </FilterBar>
-
-        <div className="ml-auto flex items-center gap-1 rounded-md border border-border p-1">
-          <Button
-            variant={viewMode === 'table' ? 'secondary' : 'ghost'}
-            size="icon"
-            className="h-7 w-7"
-            aria-label="Vue tableau"
-            onClick={() => changeViewMode('table')}
-          >
-            <Table2 className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
-            size="icon"
-            className="h-7 w-7"
-            aria-label="Vue grille"
-            onClick={() => changeViewMode('grid')}
-          >
-            <LayoutGrid className="h-4 w-4" />
-          </Button>
         </div>
-      </div>
+      </PageHero>
 
       {isLoading && <LoadingState message="Chargement des voitures..." />}
 
@@ -405,13 +408,16 @@ export function CarsPage() {
       {!isLoading && !isError && data && data.items.length > 0 && (
         <>
           {viewMode === 'table' ? (
-            <div className="overflow-x-auto rounded-lg border border-border">
+            <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-elevation">
               <Table>
                 <TableHeader>
                   {table.getHeaderGroups().map((headerGroup) => (
                     <TableRow key={headerGroup.id}>
                       {headerGroup.headers.map((header) => (
-                        <TableHead key={header.id}>
+                        <TableHead
+                          key={header.id}
+                          className={header.column.id === 'dailyRate' ? 'text-right' : undefined}
+                        >
                           {header.isPlaceholder
                             ? null
                             : flexRender(header.column.columnDef.header, header.getContext())}
@@ -430,6 +436,9 @@ export function CarsPage() {
                       {row.getVisibleCells().map((cell) => (
                         <TableCell
                           key={cell.id}
+                          className={
+                            cell.column.id === 'dailyRate' ? 'text-right tabular-nums' : undefined
+                          }
                           onClick={
                             cell.column.id === 'actions' ? (e) => e.stopPropagation() : undefined
                           }

@@ -75,11 +75,11 @@ export function Topbar({ onOpenCommandPalette }: TopbarProps) {
         <Button
           variant="outline"
           onClick={onOpenCommandPalette}
-          className="hidden w-64 justify-start gap-2 text-muted-foreground lg:flex"
+          className="hidden w-64 justify-start gap-2 rounded-full border-transparent bg-muted text-muted-foreground shadow-none hover:bg-muted/80 lg:flex"
         >
           <Search className="h-4 w-4" />
           <span className="flex-1 text-left">Rechercher...</span>
-          <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium">
+          <kbd className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium">
             Ctrl K
           </kbd>
         </Button>
@@ -87,7 +87,7 @@ export function Topbar({ onOpenCommandPalette }: TopbarProps) {
           variant="ghost"
           size="icon"
           onClick={onOpenCommandPalette}
-          className="lg:hidden"
+          className="rounded-full bg-muted lg:hidden"
           aria-label="Rechercher"
         >
           <Search className="h-4 w-4" />
@@ -97,11 +97,13 @@ export function Topbar({ onOpenCommandPalette }: TopbarProps) {
 
         <ThemeToggle />
 
+        <div className="mx-1 hidden h-6 w-px bg-border sm:block" />
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="rounded-full" aria-label="Compte">
               <Avatar className="h-8 w-8">
-                <AvatarFallback>
+                <AvatarFallback className="bg-gradient-to-br from-primary-400 to-primary-700 text-primary-foreground">
                   <User className="h-4 w-4" />
                 </AvatarFallback>
               </Avatar>

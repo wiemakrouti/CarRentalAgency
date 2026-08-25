@@ -40,10 +40,16 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
+    <div
+      className="flex min-h-screen items-center justify-center p-4"
+      style={{
+        background:
+          'radial-gradient(ellipse 800px 500px at 50% -10%, hsl(var(--primary-50)), transparent), hsl(var(--background))',
+      }}
+    >
       <Card className="w-full max-w-sm shadow-elevation">
         <CardHeader className="items-center text-center">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-primary-400 to-primary-700 text-primary-foreground shadow-sm">
             <CarFront className="h-5 w-5" />
           </div>
           <CardTitle className="mt-2 text-xl">Connexion</CardTitle>

@@ -7,6 +7,7 @@ import { ClipboardList, Plus } from 'lucide-react';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { PageContainer } from '@/components/common/page-container';
 import { PageHeader } from '@/components/common/page-header';
+import { PageHero } from '@/components/common/page-hero';
 import { EmptyState } from '@/components/common/empty-state';
 import { LoadingState } from '@/components/common/loading-state';
 import { ErrorState } from '@/components/common/error-state';
@@ -44,6 +45,20 @@ const columns = [
   columnHelper.accessor((row) => `${row.client.firstName} ${row.client.lastName}`, {
     id: 'client',
     header: 'Client',
+    cell: ({ row }) => {
+      const { firstName, lastName } = row.original.client;
+      const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+      return (
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-50 text-[11px] font-semibold text-primary-700 dark:bg-primary/15 dark:text-primary">
+            {initials}
+          </div>
+          <span>
+            {firstName} {lastName}
+          </span>
+        </div>
+      );
+    },
   }),
   columnHelper.accessor('pickupDate', {
     header: 'Départ',
@@ -147,43 +162,45 @@ export function RentalsPage() {
 
   return (
     <PageContainer>
-      <PageHeader
-        title="Gestion des locations"
-        description="Créez et suivez les contrats de location en cours et passés."
-        actions={
-          <Button onClick={() => setFormOpen(true)}>
-            <Plus className="h-4 w-4" />
-            Nouvelle location
-          </Button>
-        }
-      />
-
-      <div className="flex flex-wrap items-center gap-3">
-        <SearchBar
-          value={searchInput}
-          onChange={setSearchInput}
-          placeholder="Rechercher par n° location, voiture ou client..."
-          className="w-80"
+      <PageHero>
+        <PageHeader
+          title="Gestion des locations"
+          description="Créez et suivez les contrats de location en cours et passés."
+          actions={
+            <Button onClick={() => setFormOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Nouvelle location
+            </Button>
+          }
         />
-        <FilterBar activeCount={activeFilterCount} onClearAll={clearAllFilters}>
-          <Select
-            value={status ?? ALL_VALUE}
-            onValueChange={(value) => updateParam('status', value === ALL_VALUE ? undefined : value)}
-          >
-            <SelectTrigger className="w-44">
-              <SelectValue placeholder="Statut" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_VALUE}>Tous les statuts</SelectItem>
-              {RENTAL_STATUSES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {RENTAL_STATUS_LABELS[s]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </FilterBar>
-      </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <SearchBar
+            value={searchInput}
+            onChange={setSearchInput}
+            placeholder="Rechercher par n° location, voiture ou client..."
+            className="w-80"
+          />
+          <FilterBar activeCount={activeFilterCount} onClearAll={clearAllFilters}>
+            <Select
+              value={status ?? ALL_VALUE}
+              onValueChange={(value) => updateParam('status', value === ALL_VALUE ? undefined : value)}
+            >
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="Statut" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_VALUE}>Tous les statuts</SelectItem>
+                {RENTAL_STATUSES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {RENTAL_STATUS_LABELS[s]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterBar>
+        </div>
+      </PageHero>
 
       {isLoading && <LoadingState message="Chargement des locations..." />}
 
@@ -199,13 +216,16 @@ export function RentalsPage() {
 
       {!isLoading && !isError && data && data.items.length > 0 && (
         <>
-          <div className="overflow-x-auto rounded-lg border border-border">
+          <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-elevation">
             <Table>
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (
                   <TableRow key={headerGroup.id}>
                     {headerGroup.headers.map((header) => (
-                      <TableHead key={header.id}>
+                      <TableHead
+                        key={header.id}
+                        className={header.column.id === 'totalAmount' ? 'text-right' : undefined}
+                      >
                         {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                       </TableHead>
                     ))}
@@ -216,7 +236,12 @@ export function RentalsPage() {
                 {table.getRowModel().rows.map((row) => (
                   <TableRow key={row.id}>
                     {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
+                      <TableCell
+                        key={cell.id}
+                        className={cell.column.id === 'totalAmount' ? 'text-right tabular-nums' : undefined}
+                      >
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
                     ))}
                   </TableRow>
                 ))}

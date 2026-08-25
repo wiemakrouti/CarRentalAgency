@@ -91,7 +91,7 @@ export function CarPhotoField({
       />
 
       {displayUrl ? (
-        <div className="group relative h-40 w-full overflow-hidden rounded-lg border border-border">
+        <div className="group relative h-40 w-full overflow-hidden rounded-xl border border-border">
           <img src={displayUrl} alt="Aperçu de la voiture" className="h-full w-full object-cover" />
           <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
             <Button
@@ -131,14 +131,16 @@ export function CarPhotoField({
           onDragLeave={() => setIsDragOver(false)}
           onDrop={handleDrop}
           className={cn(
-            'flex h-40 w-full flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border text-center transition-colors',
-            !disabled && 'cursor-pointer hover:border-primary/50 hover:bg-accent/50',
-            isDragOver && 'border-primary bg-accent/50',
+            'flex h-40 w-full flex-col items-center justify-center gap-2.5 rounded-xl border-2 border-dashed border-border bg-muted/30 text-center transition-colors',
+            !disabled && 'cursor-pointer hover:border-primary/50 hover:bg-primary-50/60',
+            isDragOver && 'border-primary bg-primary-50',
             disabled && 'opacity-50',
           )}
         >
-          <ImagePlus className="h-6 w-6 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Cliquez ou glissez-déposez une image</p>
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary-50 dark:bg-primary/15">
+            <ImagePlus className="h-5 w-5 text-primary" />
+          </div>
+          <p className="text-sm font-medium text-foreground">Cliquez ou glissez-déposez une image</p>
           <p className="text-xs text-muted-foreground">JPEG, PNG ou WEBP — 5 Mo max</p>
         </div>
       )}

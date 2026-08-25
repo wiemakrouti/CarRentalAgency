@@ -21,12 +21,12 @@ export function SortableHeader({ label, field, sortBy, sortOrder, onSort }: Sort
     <Button
       variant="ghost"
       size="sm"
-      className="-ml-3 h-8 gap-1.5 font-medium data-[active=true]:text-foreground"
+      className="-ml-3 h-8 gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground data-[active=true]:text-primary"
       data-active={isActive}
       onClick={() => onSort(field)}
     >
       {label}
-      <Icon className={`h-3.5 w-3.5 ${isActive ? 'opacity-100' : 'opacity-40'}`} />
+      <Icon className={`h-3.5 w-3.5 ${isActive ? 'opacity-100 text-primary' : 'opacity-40'}`} />
     </Button>
   );
 }

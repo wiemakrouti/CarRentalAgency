@@ -11,7 +11,7 @@ export function AppShell() {
   const [commandOpen, setCommandOpen] = useState(false);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen overflow-hidden bg-background lg:gap-3 lg:p-3">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
@@ -21,7 +21,7 @@ export function AppShell() {
 
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden lg:rounded-3xl lg:border lg:border-border lg:shadow-elevation">
         <Topbar onOpenCommandPalette={() => setCommandOpen(true)} />
         <main id="main-content" className="flex flex-1 flex-col overflow-y-auto">
           <Outlet />

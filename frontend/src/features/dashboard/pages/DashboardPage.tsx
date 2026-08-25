@@ -1,10 +1,10 @@
 import {
   Area,
   AreaChart,
-  Bar,
-  BarChart,
   CartesianGrid,
   Cell,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -14,6 +14,7 @@ import { CarFront, ClipboardList, Users, Wallet } from 'lucide-react';
 
 import { PageContainer } from '@/components/common/page-container';
 import { PageHeader } from '@/components/common/page-header';
+import { PageHero } from '@/components/common/page-hero';
 import { KpiCard } from '@/components/common/kpi-card';
 import { ChartCard } from '@/components/common/chart-card';
 
@@ -33,6 +34,8 @@ const categoryData = [
   { category: 'Utilitaire', count: 3 },
 ];
 
+const totalCategoryCount = categoryData.reduce((sum, d) => sum + d.count, 0);
+
 const tooltipStyle = {
   backgroundColor: 'hsl(var(--popover))',
   borderColor: 'hsl(var(--border))',
@@ -44,38 +47,40 @@ const tooltipStyle = {
 export function DashboardPage() {
   return (
     <PageContainer>
-      <PageHeader title="Tableau de bord" description="Vue d'ensemble de l'agence." />
+      <PageHero>
+        <PageHeader title="Tableau de bord" description="Vue d'ensemble de l'agence." />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          label="Voitures disponibles"
-          value="24"
-          icon={CarFront}
-          trend={{ value: '+3', direction: 'up' }}
-          description="vs. mois dernier"
-        />
-        <KpiCard
-          label="Locations actives"
-          value="8"
-          icon={ClipboardList}
-          trend={{ value: '+2', direction: 'up' }}
-          description="vs. mois dernier"
-        />
-        <KpiCard
-          label="Clients actifs"
-          value="128"
-          icon={Users}
-          trend={{ value: '+12', direction: 'up' }}
-          description="vs. mois dernier"
-        />
-        <KpiCard
-          label="Revenu du mois"
-          value="12 450 DT"
-          icon={Wallet}
-          trend={{ value: '+11%', direction: 'up' }}
-          description="vs. mois dernier"
-        />
-      </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <KpiCard
+            label="Voitures disponibles"
+            value="24"
+            icon={CarFront}
+            trend={{ value: '+3', direction: 'up' }}
+            description="vs. mois dernier"
+          />
+          <KpiCard
+            label="Locations actives"
+            value="8"
+            icon={ClipboardList}
+            trend={{ value: '+2', direction: 'up' }}
+            description="vs. mois dernier"
+          />
+          <KpiCard
+            label="Clients actifs"
+            value="128"
+            icon={Users}
+            trend={{ value: '+12', direction: 'up' }}
+            description="vs. mois dernier"
+          />
+          <KpiCard
+            label="Revenu du mois"
+            value="12 450 DT"
+            icon={Wallet}
+            trend={{ value: '+11%', direction: 'up' }}
+            description="vs. mois dernier"
+          />
+        </div>
+      </PageHero>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <ChartCard title="Revenu mensuel" description="Évolution des 6 derniers mois (données d'exemple)">
@@ -121,35 +126,47 @@ export function DashboardPage() {
           title="Locations par catégorie"
           description="Répartition du parc actif (données d'exemple)"
         >
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={categoryData} margin={{ left: -20, right: 8, top: 8, bottom: 0 }}>
-              <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
-              <XAxis
-                dataKey="category"
-                stroke="hsl(var(--muted-foreground))"
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                stroke="hsl(var(--muted-foreground))"
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-                allowDecimals={false}
-              />
-              <Tooltip
-                cursor={{ fill: 'hsl(var(--muted))' }}
-                contentStyle={tooltipStyle}
-                formatter={(value: number) => [value, 'Voitures']}
-              />
-              <Bar dataKey="count" radius={[6, 6, 0, 0]}>
-                {categoryData.map((entry, index) => (
-                  <Cell key={entry.category} fill={`hsl(var(--chart-${(index % 5) + 1}))`} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="flex h-full items-center gap-6">
+            <div className="relative h-40 w-40 shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={categoryData}
+                    dataKey="count"
+                    nameKey="category"
+                    innerRadius={52}
+                    outerRadius={74}
+                    paddingAngle={3}
+                    stroke="none"
+                  >
+                    {categoryData.map((entry, index) => (
+                      <Cell key={entry.category} fill={`hsl(var(--chart-${(index % 5) + 1}))`} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={tooltipStyle}
+                    formatter={(value: number) => [value, 'Voitures']}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-xl font-bold text-foreground">{totalCategoryCount}</span>
+                <span className="text-[10px] text-muted-foreground">voitures</span>
+              </div>
+            </div>
+            <div className="flex flex-1 flex-col gap-2.5">
+              {categoryData.map((entry, index) => (
+                <div key={entry.category} className="flex items-center gap-2 text-sm">
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: `hsl(var(--chart-${(index % 5) + 1}))` }}
+                  />
+                  <span className="flex-1 text-muted-foreground">{entry.category}</span>
+                  <span className="font-semibold text-foreground">{entry.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </ChartCard>
       </div>
     </PageContainer>

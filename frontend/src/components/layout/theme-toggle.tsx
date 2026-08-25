@@ -22,7 +22,7 @@ export function ThemeToggle() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Changer de thème">
+        <Button variant="ghost" size="icon" className="rounded-full bg-muted hover:bg-accent" aria-label="Changer de thème">
           <ActiveIcon className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
