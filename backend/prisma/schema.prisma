@@ -207,39 +207,39 @@ model Client {
   id                   String    @id @default(uuid())
   firstName            String
   lastName             String
-  email                String?
+  // No soft-delete on Client (see docs/architecture.md § Soft delete) — like
+  // Car, this is now a plain unique constraint rather than the partial
+  // "unique among non-archived rows" index it used to be. A nullable @unique
+  // still allows multiple NULL emails, same as Car.vin.
+  email                String?   @unique
   phone                String
+  nationality           String?
   address               String?
   city                  String?
   nationalIdNumber      String?
   drivingLicenseNumber  String
   drivingLicenseExpiry  DateTime?
   dateOfBirth           DateTime?
-  blacklisted           Boolean   @default(false)
   notes                 String?
 
-  deletedAt DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
   documents ClientDocument[]
   rentals   Rental[]
 
-  @@index([email])
   @@index([phone])
-  @@index([deletedAt])
   @@map("clients")
 }
 
 model ClientDocument {
-  id         String             @id @default(uuid())
-  clientId   String
-  client     Client             @relation(fields: [clientId], references: [id])
-  type       ClientDocumentType
-  url        String
-  publicId   String
-  expiryDate DateTime?
-  createdAt  DateTime           @default(now())
+  id        String             @id @default(uuid())
+  clientId  String
+  client    Client             @relation(fields: [clientId], references: [id])
+  type      ClientDocumentType
+  url       String
+  publicId  String
+  createdAt DateTime           @default(now())
 
   @@index([clientId])
   @@map("client_documents")

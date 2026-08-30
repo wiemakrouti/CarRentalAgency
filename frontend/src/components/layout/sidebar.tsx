@@ -22,8 +22,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         collapsed ? 'w-16' : 'w-64',
       )}
     >
-      <div className="pointer-events-none absolute -left-16 -top-20 h-56 w-56 rounded-full bg-primary/20 blur-3xl dark:bg-primary/25" />
-
       <div
         className={cn(
           'relative flex h-16 shrink-0 items-center gap-2 border-b border-sidebar-border px-4',

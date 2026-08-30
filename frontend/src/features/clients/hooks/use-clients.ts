@@ -18,6 +18,38 @@ export function useClientQuery(id: string) {
   });
 }
 
+export function useClientStatsQuery(id: string | undefined) {
+  return useQuery({
+    queryKey: clientKeys.stats(id ?? ''),
+    queryFn: () => clientsApi.getStats(id!),
+    enabled: Boolean(id),
+  });
+}
+
+// Powers the delete confirmation dialog: checked as soon as it opens so the
+// dialog can show a destructive confirm or an explanatory notice up front,
+// instead of only finding out after the admin submits.
+export function useClientDeletableQuery(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: clientKeys.deletable(id),
+    queryFn: () => clientsApi.checkDeletable(id),
+    enabled: Boolean(id) && enabled,
+  });
+}
+
+// Powers the non-blocking duplicate-phone warning in ClientFormDialog — no
+// long cache lifetime since the whole point is to reflect what's in the
+// database right now, not a value worth keeping around after the field
+// changes again.
+export function useCheckPhoneDuplicateQuery(phone: string, excludeId?: string) {
+  return useQuery({
+    queryKey: clientKeys.phoneDuplicate(phone, excludeId),
+    queryFn: () => clientsApi.checkPhoneDuplicate(phone, excludeId),
+    enabled: phone.trim().length > 3,
+    staleTime: 0,
+  });
+}
+
 export function useCreateClientMutation() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -39,24 +71,12 @@ export function useUpdateClientMutation() {
   });
 }
 
-export function useArchiveClientMutation() {
+export function useDeleteClientMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => clientsApi.archive(id),
-    onSuccess: (client) => {
+    mutationFn: (id: string) => clientsApi.delete(id),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: clientKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: clientKeys.detail(client.id) });
-    },
-  });
-}
-
-export function useRestoreClientMutation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => clientsApi.restore(id),
-    onSuccess: (client) => {
-      queryClient.invalidateQueries({ queryKey: clientKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: clientKeys.detail(client.id) });
     },
   });
 }
@@ -73,13 +93,11 @@ export function useUploadClientDocumentMutation() {
       clientId,
       file,
       type,
-      expiryDate,
     }: {
       clientId: string;
       file: File;
       type: ClientDocumentType;
-      expiryDate?: string;
-    }) => clientsApi.uploadDocument(clientId, file, type, expiryDate),
+    }) => clientsApi.uploadDocument(clientId, file, type),
     onSuccess: (_document, variables) => invalidateClientDocuments(queryClient, variables.clientId),
   });
 }

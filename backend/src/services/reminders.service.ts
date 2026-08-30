@@ -57,8 +57,10 @@ export class RemindersService {
         prisma.maintenanceRecord.findMany({
           where: { deletedAt: null, nextDueDate: { not: null, lte: horizon } },
         }),
+        // Client has no soft-delete (see docs/architecture.md § Soft delete),
+        // unlike maintenanceRecord above — no deletedAt filter needed here.
         prisma.client.findMany({
-          where: { deletedAt: null, drivingLicenseExpiry: { not: null, lte: horizon } },
+          where: { drivingLicenseExpiry: { not: null, lte: horizon } },
         }),
         prisma.car.findMany({
           where: {

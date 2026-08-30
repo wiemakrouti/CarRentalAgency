@@ -22,13 +22,7 @@ Money fields use `Decimal(10,3)` — TND (Tunisian Dinar) has 3 decimal places (
 
 ## Soft delete
 
-`deletedAt DateTime?` on Car, Client, Rental, Payment, Expense, MaintenanceRecord. `Car.licensePlate`, `Car.vin`, `Client.email` are only unique **among non-archived rows** — enforced via partial unique indexes added by hand to the initial migration's SQL (Prisma's schema DSL has no partial-unique-index syntax):
-
-```sql
-CREATE UNIQUE INDEX "cars_license_plate_active_key" ON "cars"("licensePlate") WHERE "deletedAt" IS NULL;
-CREATE UNIQUE INDEX "cars_vin_active_key" ON "cars"("vin") WHERE "deletedAt" IS NULL AND "vin" IS NOT NULL;
-CREATE UNIQUE INDEX "clients_email_active_key" ON "clients"("email") WHERE "deletedAt" IS NULL AND "email" IS NOT NULL;
-```
+`deletedAt DateTime?` on Rental, Payment, Expense, MaintenanceRecord — see `docs/architecture.md` § Soft delete. **Car and Client are the exceptions**: neither has a `deletedAt` column; both are guarded hard-deletes instead (`CarsRepository`/`ClientsRepository.countRelations`), so `Car.licensePlate`, `Car.vin`, `Client.email` are plain unique constraints, not the partial "unique among non-archived rows" indexes they used to be before each model's own soft-delete-removal migration (`remove_car_soft_delete`, `remove_client_soft_delete`).
 
 ## Authentication
 
@@ -49,10 +43,10 @@ CREATE UNIQUE INDEX "clients_email_active_key" ON "clients"("email") WHERE "dele
 
 ## Indexes
 
-- Unique: `User.email`, `Rental.rentalNumber`, `ContractDocument.rentalId`.
+- Unique: `User.email`, `Rental.rentalNumber`, `ContractDocument.rentalId`, `Car.licensePlate`, `Car.vin`, `Client.email`.
 - `Rental.status`, `Rental(carId, pickupDate, plannedReturnDate)` — the composite index that makes the availability-overlap check fast.
-- `Car.status`, `Car.licensePlate`, `Client.email`, `Client.phone`, `Payment.type`, `Expense.date`, `MaintenanceRecord.carId`, `AuditLog(entityType, entityId)`, `AuditLog(userId, createdAt)`.
-- `deletedAt` indexed on every soft-deletable model (list queries filter on it constantly).
+- `Car.status`, `Client.phone`, `Payment.type`, `Expense.date`, `MaintenanceRecord.carId`, `AuditLog(entityType, entityId)`, `AuditLog(userId, createdAt)`.
+- `deletedAt` indexed on every soft-deletable model (list queries filter on it constantly) — not on Car/Client, which don't have the column.
 
 ## Migrations
 

@@ -2,7 +2,11 @@ import type { Request, Response } from 'express';
 import { CLIENT_DOCUMENT_TYPES, type CreateClientInput, type UpdateClientInput } from '@car-rental/shared';
 import { AppError } from '../utils/app-error.js';
 import { ClientsService } from '../services/clients.service.js';
-import type { ClientListQuery } from '../validators/client.validator.js';
+import type {
+  ClientCheckPhoneQuery,
+  ClientExportQuery,
+  ClientListQuery,
+} from '../validators/client.validator.js';
 
 export const ClientsController = {
   async list(req: Request, res: Response) {
@@ -15,9 +19,38 @@ export const ClientsController = {
     });
   },
 
+  async exportCsv(req: Request, res: Response) {
+    const query = req.query as unknown as ClientExportQuery;
+    const csv = await ClientsService.exportCsv(query);
+    const date = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="clients-${date}.csv"`);
+    res.status(200).send(csv);
+  },
+
+  async exportXlsx(req: Request, res: Response) {
+    const query = req.query as unknown as ClientExportQuery;
+    const buffer = await ClientsService.exportXlsx(query);
+    const date = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="clients-${date}.xlsx"`);
+    res.status(200).send(buffer);
+  },
+
+  async checkPhoneDuplicate(req: Request, res: Response) {
+    const { phone, excludeId } = req.query as unknown as ClientCheckPhoneQuery;
+    const matches = await ClientsService.checkPhoneDuplicate(phone, excludeId);
+    res.status(200).json({ success: true, data: matches });
+  },
+
   async getById(req: Request, res: Response) {
     const client = await ClientsService.getById(req.params.id!);
     res.status(200).json({ success: true, data: client });
+  },
+
+  async getStats(req: Request, res: Response) {
+    const stats = await ClientsService.getStats(req.params.id!);
+    res.status(200).json({ success: true, data: stats });
   },
 
   async create(req: Request, res: Response) {
@@ -32,14 +65,14 @@ export const ClientsController = {
     res.status(200).json({ success: true, data: client });
   },
 
-  async archive(req: Request, res: Response) {
-    const client = await ClientsService.archive(req.params.id!, req.user!.id, req.ip);
-    res.status(200).json({ success: true, data: client });
+  async checkDeletable(req: Request, res: Response) {
+    const result = await ClientsService.checkDeletable(req.params.id!);
+    res.status(200).json({ success: true, data: result });
   },
 
-  async restore(req: Request, res: Response) {
-    const client = await ClientsService.restore(req.params.id!, req.user!.id, req.ip);
-    res.status(200).json({ success: true, data: client });
+  async delete(req: Request, res: Response) {
+    await ClientsService.delete(req.params.id!, req.user!.id, req.ip);
+    res.status(200).json({ success: true, data: { deleted: true } });
   },
 
   async uploadDocument(req: Request, res: Response) {
@@ -52,13 +85,10 @@ export const ClientsController = {
       throw new AppError(400, 'INVALID_DOCUMENT_TYPE', 'Type de document invalide.');
     }
 
-    const expiryDate = req.body.expiryDate ? new Date(req.body.expiryDate) : null;
-
     const document = await ClientsService.addDocument(
       req.params.id!,
       req.file,
       type,
-      expiryDate,
       req.user!.id,
       req.ip,
     );

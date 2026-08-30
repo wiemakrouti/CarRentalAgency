@@ -32,7 +32,7 @@ Stored on `Rental.depositAmount`; `Rental.depositReturned` tracks whether it's b
 
 ## Soft delete
 
-Cars, Clients, Rentals, Payments, Expenses, and Maintenance Records are archived (`deletedAt`), never hard-deleted, to preserve historical reports.
+Rentals, Payments, Expenses, and Maintenance Records are archived (`deletedAt`), never hard-deleted, to preserve historical reports. Cars and Clients are the exceptions — both are guarded hard-deletes (blocked if the car/client has any rental history) — see `docs/architecture.md` § Soft delete.
 
 ## Single administrator (v1)
 

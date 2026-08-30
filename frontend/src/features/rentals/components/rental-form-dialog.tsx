@@ -9,7 +9,6 @@ import { useClientsQuery } from '@/features/clients/hooks/use-clients';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -171,11 +170,6 @@ export function RentalFormDialog({ open, onOpenChange }: RentalFormDialogProps) 
                     <span className="flex items-center gap-2">
                       {client.firstName} {client.lastName}
                       <span className="text-muted-foreground">— {client.phone}</span>
-                      {client.blacklisted && (
-                        <Badge variant="destructive" className="pointer-events-none">
-                          Liste noire
-                        </Badge>
-                      )}
                     </span>
                   </SelectItem>
                 ))}

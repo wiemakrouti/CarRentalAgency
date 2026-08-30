@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ImageOff, Images } from 'lucide-react';
+import { CalendarDays, ChevronRight, ImageOff, Images } from 'lucide-react';
 import { toast } from 'sonner';
 import { MANUALLY_SETTABLE_CAR_STATUSES } from '@car-rental/shared';
 import {
@@ -23,11 +23,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ApiClientError } from '@/lib/api-client';
 import type { ManualCarStatus } from '../api/cars.api';
 import { useCarQuery, useCarStatsQuery, useUpdateCarStatusMutation } from '../hooks/use-cars';
-import { useRentalsQuery } from '@/features/rentals/hooks/use-rentals';
-import {
-  RENTAL_STATUS_BADGE_VARIANT,
-  RENTAL_STATUS_LABELS,
-} from '@/features/rentals/lib/rental-labels';
 import {
   formatDocumentStatus,
   getDocumentStatuses,
@@ -66,13 +61,13 @@ type CarDetailSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onManageImages: () => void;
+  onOpenCalendar: () => void;
 };
 
-export function CarDetailSheet({ carId, open, onOpenChange, onManageImages }: CarDetailSheetProps) {
+export function CarDetailSheet({ carId, open, onOpenChange, onManageImages, onOpenCalendar }: CarDetailSheetProps) {
   const [rentedNoticeOpen, setRentedNoticeOpen] = useState(false);
   const { data: car, isLoading } = useCarQuery(carId ?? '');
   const { data: stats } = useCarStatsQuery(carId);
-  const { data: rentals } = useRentalsQuery({ carId, pageSize: 5 }, { enabled: Boolean(carId) });
   const updateStatusMutation = useUpdateCarStatusMutation();
 
   const primaryImage = car?.images.find((img) => img.isPrimary) ?? car?.images[0];
@@ -251,38 +246,13 @@ export function CarDetailSheet({ carId, open, onOpenChange, onManageImages }: Ca
 
             <Separator className="my-4" />
 
-            <div className="space-y-3">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Historique récent
-              </p>
-              {rentals && rentals.items.length > 0 ? (
-                <ul className="space-y-2">
-                  {rentals.items.map((rental) => (
-                    <li
-                      key={rental.id}
-                      className="flex items-center justify-between rounded-xl border border-border p-2.5 text-sm"
-                    >
-                      <div>
-                        <p className="font-medium">{rental.rentalNumber}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatDate(rental.pickupDate)} → {formatDate(rental.plannedReturnDate)}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">
-                          {formatAmount(rental.totalAmount)}
-                        </span>
-                        <Badge variant={RENTAL_STATUS_BADGE_VARIANT[rental.status]}>
-                          {RENTAL_STATUS_LABELS[rental.status]}
-                        </Badge>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-muted-foreground">Aucune location pour cette voiture.</p>
-              )}
-            </div>
+            <Button variant="outline" className="w-full justify-between" onClick={onOpenCalendar}>
+              <span className="flex items-center gap-2">
+                <CalendarDays className="h-4 w-4" />
+                Calendrier et historique des locations
+              </span>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </Button>
           </>
         )}
       </SheetContent>

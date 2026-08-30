@@ -100,7 +100,7 @@ export default {
   		boxShadow: {
   			xs: '0 1px 2px 0 rgba(19, 23, 34, 0.05)',
   			elevation: '0 1px 3px 0 rgba(19, 23, 34, 0.06), 0 1px 2px 0 rgba(19, 23, 34, 0.04)',
-  			popover: '0 12px 32px -8px rgba(30, 61, 156, 0.20), 0 4px 8px -4px rgba(19, 23, 34, 0.07)'
+  			popover: '0 12px 32px -8px rgba(19, 23, 34, 0.14), 0 4px 8px -4px rgba(19, 23, 34, 0.07)'
   		},
   		keyframes: {
   			'accordion-down': {

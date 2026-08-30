@@ -7,6 +7,8 @@ import type {
   ReturnRentalInput,
 } from '@car-rental/shared';
 import { carKeys } from '@/features/cars/api/cars.keys';
+import { clientKeys } from '@/features/clients/api/clients.keys';
+import { financeSummaryKeys, paymentKeys } from '@/features/finances/api/finances.keys';
 import { rentalsApi, type RentalListParams } from '../api/rentals.api';
 import { rentalKeys } from '../api/rentals.keys';
 
@@ -79,6 +81,15 @@ export function useReturnRentalMutation() {
       // Return flips Car.status (to AVAILABLE, or whatever carStatusAfterReturn
       // was chosen) and updates its mileage.
       queryClient.invalidateQueries({ queryKey: carKeys.all });
+      // The backend silently creates a LATE_FEE and/or DAMAGE_FEE payment as
+      // part of returning a rental (rentals.service.ts) — the Finances
+      // ledger and summary widget need to pick those up, not just the
+      // rental itself.
+      queryClient.invalidateQueries({ queryKey: paymentKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: financeSummaryKeys.all });
+      // Completing a rental changes the client's stats (completed count,
+      // on-time rate, last rental date) shown on their profile sheet.
+      queryClient.invalidateQueries({ queryKey: clientKeys.stats(rental.clientId) });
     },
   });
 }
@@ -94,6 +105,11 @@ export function useExtendRentalMutation() {
       // Extending changes the car's booked date range — /cars/available
       // results for overlapping dates may no longer be valid.
       queryClient.invalidateQueries({ queryKey: carKeys.all });
+      // The backend also increments Rental.totalAmount and silently creates
+      // an EXTENSION_PAYMENT (rentals.service.ts) — the Finances ledger and
+      // summary widget need to pick that up too, not just the rental itself.
+      queryClient.invalidateQueries({ queryKey: paymentKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: financeSummaryKeys.all });
     },
   });
 }

@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { flexRender, getCoreRowModel, useReactTable, createColumnHelper } from '@tanstack/react-table';
-import { Plus, Users } from 'lucide-react';
+import { useMutation } from '@tanstack/react-query';
+import { Download, FileSpreadsheet, FileText, Plus, Users } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
+import { ApiClientError } from '@/lib/api-client';
+import { saveBlobAsFile } from '@/lib/download-file';
 import { PageContainer } from '@/components/common/page-container';
 import { PageHeader } from '@/components/common/page-header';
 import { PageHero } from '@/components/common/page-hero';
@@ -13,27 +17,50 @@ import { ErrorState } from '@/components/common/error-state';
 import { SearchBar } from '@/components/common/search-bar';
 import { FilterBar } from '@/components/common/filter-bar';
 import { Pagination } from '@/components/common/pagination';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 import { useClientsQuery } from '../hooks/use-clients';
-import type { Client } from '../api/clients.api';
+import { clientsApi, type Client, type ClientLicenseStatus, type ClientSortField, type SortOrder } from '../api/clients.api';
 import { ClientRowActions } from '../components/client-row-actions';
 import { ClientFormDialog } from '../components/client-form-dialog';
 import { ClientDocumentManagerDialog } from '../components/client-document-manager-dialog';
+import { ClientProfileSheet } from '../components/client-profile-sheet';
+import { ClientCalendarDialog } from '../components/client-calendar-dialog';
+import { ClientReliabilityBadge } from '../components/client-reliability-badge';
+import { ClientFiltersPopover, type ClientFilters } from '../components/client-filters-popover';
+import { SortableHeader } from '../components/sortable-header';
 
-const ALL_VALUE = '__all__';
 const PAGE_SIZE = 20;
 
 const columnHelper = createColumnHelper<Client>();
 
-function buildColumns(onEdit: (client: Client) => void, onManageDocuments: (client: Client) => void) {
+type SortState = { sortBy: ClientSortField; sortOrder: SortOrder };
+
+function buildColumns(
+  onEdit: (client: Client) => void,
+  onManageDocuments: (client: Client) => void,
+  onViewProfile: (client: Client) => void,
+  onOpenCalendar: (client: Client) => void,
+  sort: SortState,
+  onSort: (field: ClientSortField) => void,
+) {
+  function sortableHeader(label: string, field: ClientSortField) {
+    return () => (
+      <SortableHeader label={label} field={field} sortBy={sort.sortBy} sortOrder={sort.sortOrder} onSort={onSort} />
+    );
+  }
+
   return [
     columnHelper.accessor((row) => `${row.firstName} ${row.lastName}`, {
       id: 'fullName',
-      header: 'Nom complet',
+      header: sortableHeader('Nom complet', 'lastName'),
       cell: ({ row }) => {
         const { firstName, lastName } = row.original;
         const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
@@ -50,25 +77,31 @@ function buildColumns(onEdit: (client: Client) => void, onManageDocuments: (clie
       },
     }),
     columnHelper.accessor('phone', { header: 'Téléphone' }),
-    columnHelper.accessor('email', {
-      header: 'Email',
+    columnHelper.accessor('address', {
+      header: 'Adresse',
       cell: ({ getValue }) => getValue() ?? <span className="text-muted-foreground">—</span>,
     }),
-    columnHelper.accessor('drivingLicenseNumber', { header: 'Permis' }),
-    columnHelper.accessor('blacklisted', {
-      header: 'Statut',
-      cell: ({ getValue }) =>
-        getValue() ? (
-          <Badge variant="destructive">Liste noire</Badge>
-        ) : (
-          <Badge variant="success">Actif</Badge>
-        ),
+    columnHelper.accessor('nationalIdNumber', {
+      header: 'N° CIN',
+      cell: ({ getValue }) => getValue() ?? <span className="text-muted-foreground">—</span>,
+    }),
+    columnHelper.accessor('drivingLicenseNumber', { header: 'N° Permis' }),
+    columnHelper.display({
+      id: 'reliability',
+      header: 'Comportement',
+      cell: ({ row }) => <ClientReliabilityBadge client={row.original} />,
     }),
     columnHelper.display({
       id: 'actions',
       header: '',
       cell: ({ row }) => (
-        <ClientRowActions client={row.original} onEdit={onEdit} onManageDocuments={onManageDocuments} />
+        <ClientRowActions
+          client={row.original}
+          onEdit={onEdit}
+          onManageDocuments={onManageDocuments}
+          onViewProfile={onViewProfile}
+          onOpenCalendar={onOpenCalendar}
+        />
       ),
     }),
   ];
@@ -79,10 +112,19 @@ export function ClientsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | undefined>(undefined);
   const [documentManagerClientId, setDocumentManagerClientId] = useState<string | undefined>(undefined);
+  const [profileClientId, setProfileClientId] = useState<string | undefined>(undefined);
+  const [calendarState, setCalendarState] = useState<
+    { client: Client; defaultTab: 'calendar' | 'history' } | undefined
+  >(undefined);
 
   const page = Number(searchParams.get('page') ?? '1');
   const search = searchParams.get('search') ?? '';
-  const blacklisted = searchParams.get('blacklisted') ?? undefined;
+  const city = searchParams.get('city') ?? undefined;
+  const licenseStatus = (searchParams.get('licenseStatus') as ClientLicenseStatus | null) ?? undefined;
+  const sortBy = (searchParams.get('sortBy') as ClientSortField | null) ?? 'createdAt';
+  const sortOrder = (searchParams.get('sortOrder') as SortOrder | null) ?? 'desc';
+
+  const filters: ClientFilters = { city, licenseStatus };
 
   const [searchInput, setSearchInput] = useState(search);
   const debouncedSearch = useDebouncedValue(searchInput);
@@ -91,15 +133,36 @@ export function ClientsPage() {
     page,
     pageSize: PAGE_SIZE,
     search: search || undefined,
-    blacklisted: blacklisted === undefined ? undefined : blacklisted === 'true',
+    city,
+    licenseStatus,
+    sortBy,
+    sortOrder,
   });
 
   function updateParam(key: string, value: string | undefined) {
+    updateParams({ [key]: value });
+  }
+
+  function updateParams(values: Record<string, string | undefined>) {
     const next = new URLSearchParams(searchParams);
-    if (value) next.set(key, value);
-    else next.delete(key);
-    if (key !== 'page') next.delete('page');
+    for (const [key, value] of Object.entries(values)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
+    if (!('page' in values)) next.delete('page');
     setSearchParams(next);
+  }
+
+  function handleSort(field: ClientSortField) {
+    if (sortBy !== field) {
+      updateParams({ sortBy: field, sortOrder: 'asc' });
+    } else {
+      updateParams({ sortOrder: sortOrder === 'asc' ? 'desc' : 'asc' });
+    }
+  }
+
+  function applyFilters(next: ClientFilters) {
+    updateParams({ city: next.city, licenseStatus: next.licenseStatus });
   }
 
   useEffect(() => {
@@ -114,7 +177,7 @@ export function ClientsPage() {
     setSearchParams({});
   }
 
-  const activeFilterCount = blacklisted ? 1 : 0;
+  const activeFilterCount = Object.values(filters).filter(Boolean).length;
 
   function openCreateForm() {
     setEditingClient(undefined);
@@ -130,7 +193,50 @@ export function ClientsPage() {
     setDocumentManagerClientId(client.id);
   }
 
-  const columns = useMemo(() => buildColumns(openEditForm, openDocumentManager), []);
+  function openProfile(client: Client) {
+    setProfileClientId(client.id);
+  }
+
+  function openCalendar(client: Client, defaultTab: 'calendar' | 'history' = 'calendar') {
+    setCalendarState({ client, defaultTab });
+  }
+
+  const exportMutation = useMutation({
+    mutationFn: (format: 'csv' | 'xlsx') => {
+      const params = {
+        search: search || undefined,
+        city,
+        licenseStatus,
+        sortBy,
+        sortOrder,
+      };
+      return format === 'xlsx' ? clientsApi.exportXlsx(params) : clientsApi.exportCsv(params);
+    },
+    onSuccess: (blob, format) => {
+      const date = new Date().toISOString().slice(0, 10);
+      saveBlobAsFile(blob, `clients-${date}.${format}`);
+      toast.success(format === 'xlsx' ? 'Export Excel téléchargé.' : 'Export CSV téléchargé.');
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiClientError ? err.message : "Erreur lors de l'export.");
+    },
+  });
+
+  const columns = useMemo(
+    () =>
+      buildColumns(
+        openEditForm,
+        openDocumentManager,
+        openProfile,
+        openCalendar,
+        { sortBy, sortOrder },
+        handleSort,
+      ),
+    // handleSort is recreated every render but only ever reads sortBy/sortOrder
+    // (already tracked here) and the stable setSearchParams — safe to omit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sortBy, sortOrder],
+  );
 
   const table = useReactTable({
     data: data?.items ?? [],
@@ -145,10 +251,30 @@ export function ClientsPage() {
           title="Gestion des clients"
           description="Gérez les profils, documents et statut de vos clients."
           actions={
-            <Button onClick={openCreateForm}>
-              <Plus className="h-4 w-4" />
-              Ajouter un client
-            </Button>
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" disabled={exportMutation.isPending}>
+                    <Download className="h-4 w-4" />
+                    Exporter
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => exportMutation.mutate('csv')}>
+                    <FileText className="h-4 w-4" />
+                    CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => exportMutation.mutate('xlsx')}>
+                    <FileSpreadsheet className="h-4 w-4" />
+                    Excel (.xlsx)
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button onClick={openCreateForm}>
+                <Plus className="h-4 w-4" />
+                Ajouter un client
+              </Button>
+            </div>
           }
         />
 
@@ -160,19 +286,7 @@ export function ClientsPage() {
             className="w-80"
           />
           <FilterBar activeCount={activeFilterCount} onClearAll={clearAllFilters}>
-            <Select
-              value={blacklisted ?? ALL_VALUE}
-              onValueChange={(value) => updateParam('blacklisted', value === ALL_VALUE ? undefined : value)}
-            >
-              <SelectTrigger className="w-44">
-                <SelectValue placeholder="Statut" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_VALUE}>Tous les statuts</SelectItem>
-                <SelectItem value="false">Actifs</SelectItem>
-                <SelectItem value="true">Liste noire</SelectItem>
-              </SelectContent>
-            </Select>
+            <ClientFiltersPopover value={filters} onApply={applyFilters} activeCount={activeFilterCount} />
           </FilterBar>
         </div>
       </PageHero>
@@ -206,9 +320,14 @@ export function ClientsPage() {
               </TableHeader>
               <TableBody>
                 {table.getRowModel().rows.map((row) => (
-                  <TableRow key={row.id}>
+                  <TableRow key={row.id} className="cursor-pointer" onClick={() => openProfile(row.original)}>
                     {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
+                      <TableCell
+                        key={cell.id}
+                        onClick={cell.column.id === 'actions' ? (e) => e.stopPropagation() : undefined}
+                      >
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
                     ))}
                   </TableRow>
                 ))}
@@ -229,6 +348,30 @@ export function ClientsPage() {
         open={Boolean(documentManagerClientId)}
         onOpenChange={(next) => !next && setDocumentManagerClientId(undefined)}
         clientId={documentManagerClientId}
+      />
+      <ClientProfileSheet
+        open={Boolean(profileClientId)}
+        onOpenChange={(next) => !next && setProfileClientId(undefined)}
+        clientId={profileClientId}
+        onEdit={() => {
+          const client = data?.items.find((c) => c.id === profileClientId);
+          if (client) openEditForm(client);
+        }}
+        onManageDocuments={() => setDocumentManagerClientId(profileClientId)}
+        onOpenCalendar={() => {
+          const client = data?.items.find((c) => c.id === profileClientId);
+          if (client) {
+            // Swap the sheet for the dialog rather than stacking both overlays.
+            setProfileClientId(undefined);
+            openCalendar(client, 'history');
+          }
+        }}
+      />
+      <ClientCalendarDialog
+        open={Boolean(calendarState)}
+        onOpenChange={(next) => !next && setCalendarState(undefined)}
+        client={calendarState?.client}
+        defaultTab={calendarState?.defaultTab}
       />
     </PageContainer>
   );

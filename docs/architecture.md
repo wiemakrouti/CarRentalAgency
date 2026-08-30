@@ -31,9 +31,9 @@ Any status transition that must not race (Rental activate/return/extend/cancel, 
 
 ## Soft delete
 
-Client, Rental, Payment, Expense, MaintenanceRecord are never hard-deleted. Repositories filter `deletedAt IS NULL` by default (`notDeleted()` helper); an explicit `includeArchived` flag opts into seeing archived rows (reports, audit views). `DELETE` API endpoints archive; `POST .../restore` un-archives.
+Rental, Payment, Expense, MaintenanceRecord are never hard-deleted. Repositories filter `deletedAt IS NULL` by default (`notDeleted()` helper); an explicit `includeArchived` flag opts into seeing archived rows (reports, audit views). `DELETE` API endpoints archive; `POST .../restore` un-archives.
 
-Car is the one exception: it has no `deletedAt` and no archive/restore — `CarStatus` (e.g. `OUT_OF_SERVICE`) is how an admin takes a car out of rotation without erasing it, and `DELETE /cars/:id` (`CarsService.delete`) hard-deletes for real. That delete is guarded, not soft: `CarsRepository.countRelations` blocks it (`409 CAR_HAS_HISTORY`) if the car has any Rental, Expense, or MaintenanceRecord row, since none of those relations cascade on purpose — losing that history isn't recoverable the way un-archiving is.
+Car and Client are the exceptions: neither has a `deletedAt` column or archive/restore — `DELETE /cars/:id` (`CarsService.delete`) / `DELETE /clients/:id` (`ClientsService.delete`) hard-delete for real. Both deletes are guarded, not soft: `CarsRepository.countRelations` blocks a car's deletion (`409 CAR_HAS_HISTORY`) if it has any Rental, Expense, or MaintenanceRecord row, and `ClientsRepository.countRelations` blocks a client's (`409 CLIENT_HAS_HISTORY`) if it has any Rental row — neither relation cascades on purpose, since losing that history isn't recoverable the way un-archiving is. `CarStatus` (e.g. `OUT_OF_SERVICE`) is how an admin takes a car out of rotation without erasing it; a client with a problem instead gets flagged via `notes` — there's no equivalent status field to retire a client without deleting them.
 
 ## Roles
 

@@ -5,7 +5,6 @@ import { ExternalLink, FileX, Loader2, MoreHorizontal, Upload } from 'lucide-rea
 
 import { ApiClientError } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
@@ -32,9 +31,7 @@ import {
   useUploadClientDocumentMutation,
 } from '../hooks/use-clients';
 import { CLIENT_DOCUMENT_TYPE_LABELS } from '../lib/client-labels';
-
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-const MAX_SIZE_BYTES = 5 * 1024 * 1024;
+import { validateClientDocumentFile } from '../lib/client-document-validation';
 
 type ClientDocumentManagerDialogProps = {
   open: boolean;
@@ -53,24 +50,20 @@ export function ClientDocumentManagerDialog({ open, onOpenChange, clientId }: Cl
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [documentToDelete, setDocumentToDelete] = useState<ClientDocument | null>(null);
   const [pendingType, setPendingType] = useState<ClientDocumentType>('ID_CARD');
-  const [pendingExpiry, setPendingExpiry] = useState('');
 
   function handleFileSelected(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file || !clientId) return;
 
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      toast.error('Seules les images JPEG, PNG ou WEBP sont autorisées.');
-      return;
-    }
-    if (file.size > MAX_SIZE_BYTES) {
-      toast.error('Le fichier dépasse la taille maximale autorisée (5 Mo).');
+    const validationError = validateClientDocumentFile(file);
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
 
     uploadMutation.mutate(
-      { clientId, file, type: pendingType, expiryDate: pendingExpiry || undefined },
+      { clientId, file, type: pendingType },
       {
         onSuccess: () => toast.success('Document ajouté.'),
         onError: (err) => toast.error(errorMessage(err, "Erreur lors de l'envoi du document.")),
@@ -153,15 +146,6 @@ export function ClientDocumentManagerDialog({ open, onOpenChange, clientId }: Cl
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Expiration (optionnel)</Label>
-                  <Input
-                    type="date"
-                    value={pendingExpiry}
-                    onChange={(e) => setPendingExpiry(e.target.value)}
-                    className="w-40"
-                  />
                 </div>
                 <input
                   ref={fileInputRef}

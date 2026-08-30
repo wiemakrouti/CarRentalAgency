@@ -1,11 +1,14 @@
 import { Prisma } from '@prisma/client';
+import type { Client } from '@prisma/client';
 import type { ClientDocumentType, CreateClientInput, UpdateClientInput } from '@car-rental/shared';
 import { prisma } from '../lib/prisma-client.js';
 import { AppError } from '../utils/app-error.js';
+import { toCsv } from '../utils/csv.js';
+import { toXlsxBuffer } from '../utils/xlsx.js';
 import { deleteCloudinaryImage, isCloudinaryConfigured, uploadImageBuffer } from '../lib/cloudinary-client.js';
 import { ClientsRepository } from '../repositories/clients.repository.js';
 import { AuditService } from './audit.service.js';
-import type { ClientListQuery } from '../validators/client.validator.js';
+import type { ClientExportQuery, ClientListQuery } from '../validators/client.validator.js';
 
 const UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
 
@@ -16,14 +19,38 @@ function toDuplicateEmailError(err: unknown): never {
   throw err;
 }
 
+// Client has no soft-delete (see docs/architecture.md § Soft delete) — same
+// guarded-hard-delete shape as CarsService (assertNoHistory/hasHistory
+// above HAS_HISTORY_MESSAGE). A client with any rental (even a cancelled
+// one — that's still real history) is never deletable; there's no
+// equivalent of CarStatus to "retire" a client instead, so an admin who
+// wants a problem client out of the way uses `notes` to flag them.
+const CLIENT_HAS_HISTORY_MESSAGE =
+  'Ce client a un historique de locations et ne peut pas être supprimé définitivement.';
+
+async function hasHistory(clientId: string): Promise<boolean> {
+  const relations = await ClientsRepository.countRelations(clientId);
+  return relations.rentals > 0;
+}
+
+async function assertNoHistory(clientId: string): Promise<void> {
+  if (await hasHistory(clientId)) {
+    throw new AppError(409, 'CLIENT_HAS_HISTORY', CLIENT_HAS_HISTORY_MESSAGE);
+  }
+}
+
+function formatCsvDate(date: Date | null): string {
+  return date ? date.toISOString().slice(0, 10) : '';
+}
+
 export const ClientsService = {
   async list(query: ClientListQuery) {
     const { items, total } = await ClientsRepository.findMany(query);
     return { items, total, page: query.page, pageSize: query.pageSize };
   },
 
-  async getById(id: string, options?: { includeArchived?: boolean }) {
-    const client = await ClientsRepository.findById(id, options);
+  async getById(id: string) {
+    const client = await ClientsRepository.findById(id);
     if (!client) {
       throw new AppError(404, 'CLIENT_NOT_FOUND', 'Client introuvable.');
     }
@@ -70,41 +97,51 @@ export const ClientsService = {
     }
   },
 
-  async archive(id: string, userId: string, ipAddress?: string) {
+  // Non-mutating precheck so the frontend's delete confirmation dialog can
+  // show the right content (destructive confirm vs. explanatory notice)
+  // before the admin ever clicks the button — same pattern as
+  // CarsService.checkDeletable.
+  async checkDeletable(id: string) {
     await ClientsService.getById(id);
-    return prisma.$transaction(async (tx) => {
-      const archived = await ClientsRepository.archiveById(id, tx);
-      await AuditService.record(tx, {
-        userId,
-        action: 'DELETE',
-        entityType: 'Client',
-        entityId: id,
-        ipAddress,
-      });
-      return archived;
-    });
+    const blocked = await hasHistory(id);
+    return { canDelete: !blocked, reason: blocked ? CLIENT_HAS_HISTORY_MESSAGE : null };
   },
 
-  async restore(id: string, userId: string, ipAddress?: string) {
-    await ClientsService.getById(id, { includeArchived: true });
-    return prisma.$transaction(async (tx) => {
-      const restored = await ClientsRepository.restoreById(id, tx);
+  async delete(id: string, userId: string, ipAddress?: string) {
+    const client = await ClientsService.getById(id);
+    await assertNoHistory(id);
+
+    await prisma.$transaction(async (tx) => {
+      await ClientsRepository.deleteAllDocuments(id, tx);
+      await ClientsRepository.deleteById(id, tx);
       await AuditService.record(tx, {
         userId,
-        action: 'RESTORE',
+        action: 'CLIENT_HARD_DELETE',
         entityType: 'Client',
         entityId: id,
+        before: client,
         ipAddress,
       });
-      return restored;
     });
+
+    // Same best-effort-after-commit pattern as CarsService.delete: a
+    // leftover Cloudinary asset is a harmless cost, and the DB rows are
+    // already gone either way by this point.
+    for (const document of client.documents) {
+      try {
+        await deleteCloudinaryImage(document.publicId);
+      } catch (err) {
+        console.error(`Failed to delete Cloudinary asset ${document.publicId}:`, err);
+      }
+    }
+
+    return client;
   },
 
   async addDocument(
     clientId: string,
     file: { buffer: Buffer },
     type: ClientDocumentType,
-    expiryDate: Date | null,
     userId: string,
     ipAddress?: string,
   ) {
@@ -119,7 +156,7 @@ export const ClientsService = {
     return prisma.$transaction(async (tx) => {
       const document = await ClientsRepository.addDocument(
         clientId,
-        { type, url: uploaded.url, publicId: uploaded.publicId, expiryDate },
+        { type, url: uploaded.url, publicId: uploaded.publicId },
         tx,
       );
       await AuditService.record(tx, {
@@ -157,5 +194,54 @@ export const ClientsService = {
     } catch (err) {
       console.error(`Failed to delete Cloudinary asset ${document.publicId}:`, err);
     }
+  },
+
+  async getStats(id: string) {
+    await ClientsService.getById(id);
+    return ClientsRepository.getStats(id);
+  },
+
+  // Non-blocking — the form dialog shows this as a warning, never a hard
+  // stop, since two clients (e.g. family members) can legitimately share a
+  // phone number. See client-form-dialog.tsx.
+  async checkPhoneDuplicate(phone: string, excludeId?: string) {
+    const matches = await ClientsRepository.findByPhone(phone, excludeId);
+    return matches;
+  },
+
+  async exportCsv(query: ClientExportQuery): Promise<string> {
+    const clients = await ClientsRepository.findAllForExport(query);
+    return toCsv<Client>(clients, [
+      { header: 'Nom', value: (c) => c.lastName },
+      { header: 'Prénom', value: (c) => c.firstName },
+      { header: 'Téléphone', value: (c) => c.phone },
+      { header: 'Email', value: (c) => c.email ?? '' },
+      { header: 'Nationalité', value: (c) => c.nationality ?? '' },
+      { header: 'Adresse', value: (c) => c.address ?? '' },
+      { header: 'Ville', value: (c) => c.city ?? '' },
+      { header: 'N° CIN', value: (c) => c.nationalIdNumber ?? '' },
+      { header: 'N° Permis', value: (c) => c.drivingLicenseNumber },
+      { header: 'Expiration permis', value: (c) => formatCsvDate(c.drivingLicenseExpiry) },
+      { header: 'Date de naissance', value: (c) => formatCsvDate(c.dateOfBirth) },
+      { header: 'Notes', value: (c) => c.notes ?? '' },
+    ]);
+  },
+
+  async exportXlsx(query: ClientExportQuery): Promise<Buffer> {
+    const clients = await ClientsRepository.findAllForExport(query);
+    return toXlsxBuffer<Client>('Clients', clients, [
+      { header: 'Nom', value: (c) => c.lastName, width: 16 },
+      { header: 'Prénom', value: (c) => c.firstName, width: 16 },
+      { header: 'Téléphone', value: (c) => c.phone, width: 16 },
+      { header: 'Email', value: (c) => c.email, width: 24 },
+      { header: 'Nationalité', value: (c) => c.nationality, width: 16 },
+      { header: 'Adresse', value: (c) => c.address, width: 24 },
+      { header: 'Ville', value: (c) => c.city, width: 16 },
+      { header: 'N° CIN', value: (c) => c.nationalIdNumber, width: 16 },
+      { header: 'N° Permis', value: (c) => c.drivingLicenseNumber, width: 16 },
+      { header: 'Expiration permis', value: (c) => c.drivingLicenseExpiry, width: 16 },
+      { header: 'Date de naissance', value: (c) => c.dateOfBirth, width: 16 },
+      { header: 'Notes', value: (c) => c.notes, width: 30 },
+    ]);
   },
 };

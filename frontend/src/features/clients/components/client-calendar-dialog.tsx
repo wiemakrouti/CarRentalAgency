@@ -14,7 +14,6 @@ import {
   DISPLAY_RENTAL_STATUS_LABELS,
 } from '@/features/rentals/lib/rental-labels';
 import type { Rental } from '@/features/rentals/api/rentals.api';
-import type { Car } from '../api/cars.api';
 import {
   apiDateToLocalDay,
   buildMonthGrid,
@@ -26,19 +25,27 @@ import {
   splitUpcomingAndHistory,
   type DisplayRentalStatus,
 } from '@/features/rentals/lib/rental-calendar';
+import type { Client } from '../api/clients.api';
 
 const WEEKDAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 const MONTH_FORMATTER = new Intl.DateTimeFormat('fr-TN', { month: 'long', year: 'numeric' });
 const GRID_COLUMNS = 7;
 
-// Every status the grid itself can render — CANCELLED is deliberately
-// absent: cancelled reservations are filtered out before reaching the grid
-// (see gridRentals), so a legend entry for it would promise a color that
-// never appears there — it still shows up, badged, in the Historique tab.
-// EXTENDED marks the days an ongoing rental gained through an extension —
-// once that rental is returned, its whole span (original and extended days
-// alike) reads as a plain COMPLETED cell instead.
-const LEGEND_STATUSES: DisplayRentalStatus[] = ['RESERVED', 'ACTIVE', 'EXTENDED', 'OVERDUE', 'COMPLETED'];
+// Every status the grid itself can render — same vocabulary as the Cars
+// calendar's legend (RESERVED/ACTIVE/EXTENDED/OVERDUE/COMPLETED). CANCELLED
+// is deliberately absent: cancelled reservations are filtered out before
+// reaching the grid (see gridRentals), so a legend entry for it would
+// promise a color that never appears there — it still shows up, badged, in
+// the Historique tab. EXTENDED itself only ever applies to an ACTIVE rental
+// (see getDisplayRentalStatus) — once returned, its whole span reads as a
+// plain COMPLETED cell.
+const LEGEND_STATUSES: DisplayRentalStatus[] = [
+  'RESERVED',
+  'ACTIVE',
+  'EXTENDED',
+  'OVERDUE',
+  'COMPLETED',
+];
 
 function isSameDay(a: Date, b: Date): boolean {
   return (
@@ -48,9 +55,6 @@ function isSameDay(a: Date, b: Date): boolean {
   );
 }
 
-// Same day this module marks on the grid for this rental — not a plain
-// `new Date(iso).toLocaleDateString()`, which can disagree by a day (see
-// apiDateToLocalDay's comment in rental-calendar.ts).
 function formatDate(iso: string): string {
   return apiDateToLocalDay(iso).toLocaleDateString('fr-TN');
 }
@@ -59,33 +63,43 @@ function formatAmount(value: string | number): string {
   return `${Number(value).toLocaleString('fr-TN')} DT`;
 }
 
-type CarCalendarDialogProps = {
-  car: Car | undefined;
+type ClientCalendarDialogProps = {
+  client: Client | undefined;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  // The detail sheet's "Calendrier et historique des locations" CTA opens
-  // this dialog straight on the Historique tab — everywhere else (the row's
+  // The profile sheet's "Voir le calendrier et l'historique" CTA opens this
+  // dialog straight on the Historique tab — everywhere else (the row's
   // calendar icon) still lands on the grid, the default.
   defaultTab?: 'calendar' | 'history';
 };
 
-export function CarCalendarDialog({ car, open, onOpenChange, defaultTab = 'calendar' }: CarCalendarDialogProps) {
+// Deliberately not a plain mirror of CarCalendarDialog: the grid keeps the
+// Cars calendar's day-by-day framing (same colors, same cancelled-rentals-
+// filtered-out rule, same EXTENDED-while-ACTIVE-only distinction), but this
+// module adds one client-centric thing on top — a second "Historique" tab
+// listing the client's full rental history (cancellations included) and
+// upcoming reservations with details.
+export function ClientCalendarDialog({
+  client,
+  open,
+  onOpenChange,
+  defaultTab = 'calendar',
+}: ClientCalendarDialogProps) {
   const [viewMonth, setViewMonth] = useState(() => new Date());
   const [selectedRental, setSelectedRental] = useState<Rental | undefined>(undefined);
 
   const { data, isLoading, isError, refetch } = useRentalsQuery(
-    // 100 is the API's hard max (paginationQuerySchema) — a car realistically
-    // won't exceed that within this app's lifetime; if it ever does, this
-    // becomes a real pagination problem, not a one-line fix.
-    { carId: car?.id, pageSize: 100 },
-    { enabled: Boolean(car) && open },
+    // 100 is the API's hard max (paginationQuerySchema) — a client
+    // realistically won't exceed that within this app's lifetime.
+    { clientId: client?.id, pageSize: 100 },
+    { enabled: Boolean(client) && open },
   );
   const allRentals = data?.items ?? [];
-  // The grid itself only ever shows what actually occupied the car —
-  // cancelled reservations never did, so they're filtered out before
-  // marking cells. The Historique tab below is where a car's cancelled
-  // reservations still show up — that view is about the full record, the
-  // grid is about what actually happened day by day.
+  // The grid itself mirrors the Cars calendar here: cancelled rentals never
+  // occupied a real day, so they're filtered out before marking cells. The
+  // Historique tab below is where a client's cancelled reservations still
+  // show up — that view is about the full record, the grid is about what
+  // actually happened day by day.
   const gridRentals = useMemo(
     () => allRentals.filter((r) => r.status !== 'CANCELLED'),
     [allRentals],
@@ -93,9 +107,6 @@ export function CarCalendarDialog({ car, open, onOpenChange, defaultTab = 'calen
 
   const today = useMemo(() => new Date(), []);
 
-  // Resolved once per cell (not inline in JSX) so neighbors can be compared
-  // by index below — that's what lets consecutive days of the same rental
-  // render as one continuous bar instead of a row of isolated squares.
   const cells = useMemo(() => {
     const grid = buildMonthGrid(viewMonth);
     return grid.map((date) => {
@@ -137,7 +148,7 @@ export function CarCalendarDialog({ car, open, onOpenChange, defaultTab = 'calen
         <DialogHeader>
           <DialogTitle>
             Calendrier des locations —{' '}
-            {car ? `${car.brand} ${car.model} (${car.licensePlate})` : ''}
+            {client ? `${client.firstName} ${client.lastName}` : ''}
           </DialogTitle>
         </DialogHeader>
 
@@ -206,9 +217,6 @@ export function CarCalendarDialog({ car, open, onOpenChange, defaultTab = 'calen
                       const isToday = isSameDay(date, today);
                       const col = i % GRID_COLUMNS;
 
-                      // Only cells in the SAME row (week) can visually join —
-                      // that's the natural calendar-grid seam, same convention
-                      // multi-week bookings use in most calendar UIs.
                       const prev = col > 0 ? cells[i - 1] : undefined;
                       const next = col < GRID_COLUMNS - 1 ? cells[i + 1] : undefined;
                       const joinsPrev = Boolean(rental && prev?.rental?.id === rental.id);
@@ -253,9 +261,7 @@ export function CarCalendarDialog({ car, open, onOpenChange, defaultTab = 'calen
                       key={status}
                       className="flex items-center gap-1.5 text-xs text-muted-foreground"
                     >
-                      <span
-                        className={`h-2.5 w-2.5 rounded-full ${DISPLAY_RENTAL_STATUS_DOT_CLASSES[status]}`}
-                      />
+                      <span className={`h-2.5 w-2.5 rounded-full ${DISPLAY_RENTAL_STATUS_DOT_CLASSES[status]}`} />
                       {DISPLAY_RENTAL_STATUS_LABELS[status]}
                     </div>
                   ))}
@@ -291,9 +297,9 @@ export function CarCalendarDialog({ car, open, onOpenChange, defaultTab = 'calen
                         </div>
                       </div>
                       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                        <dt className="text-muted-foreground">Client</dt>
+                        <dt className="text-muted-foreground">Voiture</dt>
                         <dd>
-                          {selectedRental.client.firstName} {selectedRental.client.lastName}
+                          {selectedRental.car.brand} {selectedRental.car.model}
                         </dd>
                         <dt className="text-muted-foreground">Prise en charge</dt>
                         <dd>{formatDate(selectedRental.pickupDate)}</dd>
@@ -367,7 +373,7 @@ export function CarCalendarDialog({ car, open, onOpenChange, defaultTab = 'calen
                     <CalendarX2 className="h-5 w-5 text-muted-foreground" />
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Aucune location enregistrée pour cette voiture.
+                    Aucune location enregistrée pour ce client.
                   </p>
                 </div>
               </>
@@ -386,7 +392,7 @@ function AgendaItem({ rental, today }: { rental: Rental; today: Date }) {
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate font-medium">
-            {rental.client.firstName} {rental.client.lastName}
+            {rental.car.brand} {rental.car.model}
           </p>
           <p className="text-xs text-muted-foreground">
             {formatDate(rental.pickupDate)} → {formatDate(rental.plannedReturnDate)}

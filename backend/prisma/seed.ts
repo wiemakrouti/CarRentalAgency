@@ -465,7 +465,7 @@ const DEMO_CLIENTS: Prisma.ClientCreateManyInput[] = [
 
 async function seedDemoClients(): Promise<{ id: string; email: string | null }[]> {
   const existing = await prisma.client.findMany({
-    where: { deletedAt: null, email: { in: DEMO_CLIENTS.map((c) => c.email as string) } },
+    where: { email: { in: DEMO_CLIENTS.map((c) => c.email as string) } },
     select: { id: true, email: true },
   });
   const existingEmails = new Set(existing.map((c) => c.email));
@@ -479,7 +479,7 @@ async function seedDemoClients(): Promise<{ id: string; email: string | null }[]
   }
 
   return prisma.client.findMany({
-    where: { deletedAt: null, email: { in: DEMO_CLIENTS.map((c) => c.email as string) } },
+    where: { email: { in: DEMO_CLIENTS.map((c) => c.email as string) } },
     select: { id: true, email: true },
   });
 }

@@ -161,7 +161,9 @@ export function CarsPage() {
   const [editingCar, setEditingCar] = useState<Car | undefined>(undefined);
   const [imageManagerCarId, setImageManagerCarId] = useState<string | undefined>(undefined);
   const [detailCarId, setDetailCarId] = useState<string | undefined>(undefined);
-  const [calendarCar, setCalendarCar] = useState<Car | undefined>(undefined);
+  const [calendarState, setCalendarState] = useState<
+    { car: Car; defaultTab: 'calendar' | 'history' } | undefined
+  >(undefined);
   const [viewMode, setViewMode] = useState<ViewMode>(readStoredViewMode);
 
   const page = Number(searchParams.get('page') ?? '1');
@@ -273,8 +275,8 @@ export function CarsPage() {
     setDetailCarId(car.id);
   }
 
-  function openCalendar(car: Car) {
-    setCalendarCar(car);
+  function openCalendar(car: Car, defaultTab: 'calendar' | 'history' = 'calendar') {
+    setCalendarState({ car, defaultTab });
   }
 
   function changeViewMode(mode: ViewMode) {
@@ -479,11 +481,20 @@ export function CarsPage() {
         onOpenChange={(next) => !next && setDetailCarId(undefined)}
         carId={detailCarId}
         onManageImages={() => detailCarId && openImageManager(detailCarId)}
+        onOpenCalendar={() => {
+          const car = data?.items.find((c) => c.id === detailCarId);
+          if (car) {
+            // Swap the sheet for the dialog rather than stacking both overlays.
+            setDetailCarId(undefined);
+            openCalendar(car, 'history');
+          }
+        }}
       />
       <CarCalendarDialog
-        open={Boolean(calendarCar)}
-        onOpenChange={(next) => !next && setCalendarCar(undefined)}
-        car={calendarCar}
+        open={Boolean(calendarState)}
+        onOpenChange={(next) => !next && setCalendarState(undefined)}
+        car={calendarState?.car}
+        defaultTab={calendarState?.defaultTab}
       />
     </PageContainer>
   );
