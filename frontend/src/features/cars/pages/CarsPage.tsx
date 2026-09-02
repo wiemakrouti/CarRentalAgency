@@ -12,7 +12,7 @@ import {
   Plus,
   Table2,
 } from 'lucide-react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ApiClientError } from '@/lib/api-client';
 import { saveBlobAsFile } from '@/lib/download-file';
@@ -44,6 +44,7 @@ import {
 
 import { useCarsQuery } from '../hooks/use-cars';
 import { carsApi, type Car, type CarSortField, type SortOrder } from '../api/cars.api';
+import { carKeys } from '../api/cars.keys';
 import { CarRowActions } from '../components/car-row-actions';
 import { CarStatusBadge } from '../components/car-status-badge';
 import { CarFormDialog } from '../components/car-form-dialog';
@@ -55,6 +56,7 @@ import { CarExpiryAlerts } from '../components/car-expiry-alerts';
 import { CarFiltersPopover, type CarFilters } from '../components/car-filters-popover';
 import { SortableHeader } from '../components/sortable-header';
 import { CAR_CATEGORY_LABELS } from '../lib/car-labels';
+import type { ExpiryAlert } from '../lib/car-alerts';
 
 const PAGE_SIZE = 20;
 const VIEW_MODE_STORAGE_KEY = 'cars-view-mode';
@@ -159,6 +161,7 @@ export function CarsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [formOpen, setFormOpen] = useState(false);
   const [editingCar, setEditingCar] = useState<Car | undefined>(undefined);
+  const [editingFocusField, setEditingFocusField] = useState<ExpiryAlert['field'] | undefined>(undefined);
   const [imageManagerCarId, setImageManagerCarId] = useState<string | undefined>(undefined);
   const [detailCarId, setDetailCarId] = useState<string | undefined>(undefined);
   const [calendarState, setCalendarState] = useState<
@@ -173,6 +176,11 @@ export function CarsPage() {
   const transmission = searchParams.get('transmission') ?? undefined;
   const sortBy = (searchParams.get('sortBy') as CarSortField | null) ?? 'createdAt';
   const sortOrder = (searchParams.get('sortOrder') as SortOrder | null) ?? 'desc';
+  // One-shot deep link — e.g. from a notification about this car's
+  // insurance/inspection/registration expiring. Opens the detail sheet
+  // directly instead of landing on the list and making the admin find the
+  // row themselves (same pattern as Rentals' returnRentalId).
+  const openId = searchParams.get('openId');
   const filters: CarFilters = {
     category,
     status,
@@ -203,6 +211,16 @@ export function CarsPage() {
     maxYear: filters.maxYear ? Number(filters.maxYear) : undefined,
     minMileage: filters.minMileage ? Number(filters.minMileage) : undefined,
     maxMileage: filters.maxMileage ? Number(filters.maxMileage) : undefined,
+  });
+  // Not useCarQuery: this is a one-shot "does it still exist" check, and a
+  // 404 here isn't transient — retrying it (the shared hook's default) only
+  // delays isError from ever becoming true, leaving the effect below waiting
+  // indefinitely instead of surfacing the "gone" toast.
+  const { data: deepLinkedCar, isError: deepLinkedCarError } = useQuery({
+    queryKey: carKeys.detail(openId ?? ''),
+    queryFn: () => carsApi.getById(openId!),
+    enabled: Boolean(openId),
+    retry: false,
   });
 
   function updateParam(key: string, value: string | undefined) {
@@ -250,6 +268,23 @@ export function CarsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, search]);
 
+  useEffect(() => {
+    if (!openId || (!deepLinkedCar && !deepLinkedCarError)) return;
+    if (deepLinkedCar) {
+      setDetailCarId(deepLinkedCar.id);
+    } else {
+      // A notification pointing at a since-deleted car — surface why
+      // nothing opened instead of a silent dead click.
+      toast.warning("Ce véhicule n'existe plus.");
+    }
+    // One-shot either way: drop openId so closing and reopening the sheet
+    // later (or navigating back here) doesn't retry/reopen it every time.
+    const next = new URLSearchParams(searchParams);
+    next.delete('openId');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkedCar, deepLinkedCarError]);
+
   function clearAllFilters() {
     setSearchInput('');
     setSearchParams({});
@@ -259,11 +294,13 @@ export function CarsPage() {
 
   function openCreateForm() {
     setEditingCar(undefined);
+    setEditingFocusField(undefined);
     setFormOpen(true);
   }
 
-  function openEditForm(car: Car) {
+  function openEditForm(car: Car, focusField?: ExpiryAlert['field']) {
     setEditingCar(car);
+    setEditingFocusField(focusField);
     setFormOpen(true);
   }
 
@@ -470,7 +507,12 @@ export function CarsPage() {
         </>
       )}
 
-      <CarFormDialog open={formOpen} onOpenChange={setFormOpen} car={editingCar} />
+      <CarFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        car={editingCar}
+        focusField={editingFocusField}
+      />
       <CarImageManagerDialog
         open={Boolean(imageManagerCarId)}
         onOpenChange={(next) => !next && setImageManagerCarId(undefined)}
@@ -481,13 +523,11 @@ export function CarsPage() {
         onOpenChange={(next) => !next && setDetailCarId(undefined)}
         carId={detailCarId}
         onManageImages={() => detailCarId && openImageManager(detailCarId)}
-        onOpenCalendar={() => {
-          const car = data?.items.find((c) => c.id === detailCarId);
-          if (car) {
-            // Swap the sheet for the dialog rather than stacking both overlays.
-            setDetailCarId(undefined);
-            openCalendar(car, 'history');
-          }
+        onEdit={(car, focusField) => openEditForm(car, focusField)}
+        onOpenCalendar={(car) => {
+          // Swap the sheet for the dialog rather than stacking both overlays.
+          setDetailCarId(undefined);
+          openCalendar(car, 'history');
         }}
       />
       <CarCalendarDialog

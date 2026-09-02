@@ -45,6 +45,11 @@ type ClientFormDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   client?: Client;
+  // Scrolls to and focuses this field once the dialog opens — lets a
+  // "Renouveler" action (e.g. from the profile sheet's expired-license
+  // badge) land the admin directly on the field to fix, instead of a form
+  // they have to hunt through themselves.
+  focusField?: 'drivingLicenseExpiry';
 };
 
 // A document can only be uploaded once the client exists (the endpoint is
@@ -97,7 +102,7 @@ function errorMessage(err: unknown, fallback: string): string {
   return err instanceof ApiClientError ? err.message : fallback;
 }
 
-export function ClientFormDialog({ open, onOpenChange, client }: ClientFormDialogProps) {
+export function ClientFormDialog({ open, onOpenChange, client, focusField }: ClientFormDialogProps) {
   const isEdit = Boolean(client);
   const createMutation = useCreateClientMutation();
   const updateMutation = useUpdateClientMutation();
@@ -135,6 +140,17 @@ export function ClientFormDialog({ open, onOpenChange, client }: ClientFormDialo
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, client]);
+
+  // Waits a tick for the dialog's open animation/render to settle before
+  // scrolling — focusing immediately on mount can land mid-transition, with
+  // the field not actually in view yet.
+  useEffect(() => {
+    if (!open || !focusField) return;
+    const timer = setTimeout(() => {
+      document.getElementById(focusField)?.focus();
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [open, focusField]);
 
   // Non-blocking duplicate warning — a phone number can legitimately be
   // shared (e.g. family members), so this never prevents saving, unlike the

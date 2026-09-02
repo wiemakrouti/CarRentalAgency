@@ -101,6 +101,13 @@ export function RentalsPage() {
   // see CarRentedNoticeDialog. Landing here re-opens Return directly on
   // this rental instead of making the admin find it in the list first.
   const returnRentalId = searchParams.get('returnRentalId');
+  // One-shot deep link from a notification (return due soon / overdue).
+  // Rentals has no single-record detail view to open, so this filters the
+  // table down to the one rental instead — same "land on the record, not
+  // just the module" intent as Cars'/Clients' openId, just without a sheet
+  // to open. Separate from returnRentalId above: a due-soon reminder
+  // shouldn't force the Return workflow open the way the Cars flow does.
+  const openId = searchParams.get('openId');
 
   const [searchInput, setSearchInput] = useState(search);
   const debouncedSearch = useDebouncedValue(searchInput);
@@ -112,6 +119,7 @@ export function RentalsPage() {
     status,
   });
   const { data: deepLinkedRental } = useRentalQuery(returnRentalId ?? '');
+  const { data: highlightedRental } = useRentalQuery(openId ?? '');
 
   function updateParam(key: string, value: string | undefined) {
     const next = new URLSearchParams(searchParams);
@@ -146,6 +154,19 @@ export function RentalsPage() {
     setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deepLinkedRental]);
+
+  useEffect(() => {
+    if (!openId || !highlightedRental) return;
+    setSearchInput(highlightedRental.rentalNumber);
+    // One-shot: drop openId so it doesn't keep re-filtering the search box
+    // on every render, and filter the list down to this rental.
+    const next = new URLSearchParams(searchParams);
+    next.delete('openId');
+    next.set('search', highlightedRental.rentalNumber);
+    next.delete('page');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightedRental]);
 
   function clearAllFilters() {
     setSearchInput('');

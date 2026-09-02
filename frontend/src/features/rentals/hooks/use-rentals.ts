@@ -9,6 +9,7 @@ import type {
 import { carKeys } from '@/features/cars/api/cars.keys';
 import { clientKeys } from '@/features/clients/api/clients.keys';
 import { financeSummaryKeys, paymentKeys } from '@/features/finances/api/finances.keys';
+import { notificationKeys } from '@/features/notifications/api/notifications.keys';
 import { rentalsApi, type RentalListParams } from '../api/rentals.api';
 import { rentalKeys } from '../api/rentals.keys';
 
@@ -53,6 +54,10 @@ export function useActivateRentalMutation() {
       // Activation flips Car.status to RENTED — invalidate broadly so
       // the Cars list and any /cars/available lookups reflect it.
       queryClient.invalidateQueries({ queryKey: carKeys.all });
+      // Activating clears any RENTAL_PICKUP_OVERDUE reminder for this
+      // rental (it's no longer RESERVED) and can surface a new return-due-
+      // soon/overdue one now that it's ACTIVE.
+      queryClient.invalidateQueries({ queryKey: notificationKeys.all });
     },
   });
 }
@@ -65,7 +70,10 @@ export function useCancelRentalMutation() {
     onSuccess: (rental) => {
       queryClient.invalidateQueries({ queryKey: rentalKeys.lists() });
       queryClient.setQueryData(rentalKeys.detail(rental.id), rental);
-      // A RESERVED rental never touched Car.status, so no car cache to invalidate.
+      // A RESERVED rental never touched Car.status, so no car cache to
+      // invalidate — but it can carry a RENTAL_PICKUP_OVERDUE reminder
+      // (missed pickup), which needs to disappear once cancelled.
+      queryClient.invalidateQueries({ queryKey: notificationKeys.all });
     },
   });
 }
@@ -90,6 +98,9 @@ export function useReturnRentalMutation() {
       // Completing a rental changes the client's stats (completed count,
       // on-time rate, last rental date) shown on their profile sheet.
       queryClient.invalidateQueries({ queryKey: clientKeys.stats(rental.clientId) });
+      // A returned rental is no longer ACTIVE — its return-due-soon/
+      // overdue reminder (if any) needs to disappear from the bell.
+      queryClient.invalidateQueries({ queryKey: notificationKeys.all });
     },
   });
 }
@@ -110,6 +121,9 @@ export function useExtendRentalMutation() {
       // summary widget need to pick that up too, not just the rental itself.
       queryClient.invalidateQueries({ queryKey: paymentKeys.lists() });
       queryClient.invalidateQueries({ queryKey: financeSummaryKeys.all });
+      // Extending pushes back plannedReturnDate — the reminder's date/label
+      // (and whether it's overdue at all) needs to reflect the new one.
+      queryClient.invalidateQueries({ queryKey: notificationKeys.all });
     },
   });
 }

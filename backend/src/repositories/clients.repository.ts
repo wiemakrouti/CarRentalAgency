@@ -33,10 +33,15 @@ function buildWhere(query: ClientFilterQuery): Prisma.ClientWhereInput {
   }
 
   if (query.licenseStatus) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // UTC midnight, not server-local — drivingLicenseExpiry is stored as UTC
+    // midnight (see client-form-dialog.tsx's dateToInputValue) and
+    // RemindersService/client-alerts.ts's badge both key off UTC-midnight-
+    // of-today; a server-local cutoff would silently disagree with both
+    // depending on the deployment's timezone.
+    const now = new Date();
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     const warningCutoff = new Date(today);
-    warningCutoff.setDate(warningCutoff.getDate() + LICENSE_EXPIRY_WARNING_DAYS);
+    warningCutoff.setUTCDate(warningCutoff.getUTCDate() + LICENSE_EXPIRY_WARNING_DAYS);
 
     switch (query.licenseStatus) {
       case 'not_set':

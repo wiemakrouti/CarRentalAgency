@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CalendarDays, ChevronRight, ImageOff, Images } from 'lucide-react';
+import { CalendarDays, ChevronRight, ImageOff, Images, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { MANUALLY_SETTABLE_CAR_STATUSES } from '@car-rental/shared';
 import {
@@ -21,12 +21,13 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiClientError } from '@/lib/api-client';
-import type { ManualCarStatus } from '../api/cars.api';
+import type { Car, ManualCarStatus } from '../api/cars.api';
 import { useCarQuery, useCarStatsQuery, useUpdateCarStatusMutation } from '../hooks/use-cars';
 import {
   formatDocumentStatus,
   getDocumentStatuses,
   type DocumentLevel,
+  type ExpiryAlert,
 } from '../lib/car-alerts';
 import { CarRentedNoticeDialog } from './car-rented-notice-dialog';
 import {
@@ -61,10 +62,22 @@ type CarDetailSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onManageImages: () => void;
-  onOpenCalendar: () => void;
+  // Both take the sheet's own freshly-loaded `car` rather than the caller
+  // re-deriving it from a paginated/filtered list — a car opened via a
+  // notification deep link (CarsPage's openId) may not be on the currently
+  // loaded page at all, so looking it up there would silently no-op.
+  onEdit: (car: Car, focusField?: ExpiryAlert['field']) => void;
+  onOpenCalendar: (car: Car) => void;
 };
 
-export function CarDetailSheet({ carId, open, onOpenChange, onManageImages, onOpenCalendar }: CarDetailSheetProps) {
+export function CarDetailSheet({
+  carId,
+  open,
+  onOpenChange,
+  onManageImages,
+  onEdit,
+  onOpenCalendar,
+}: CarDetailSheetProps) {
   const [rentedNoticeOpen, setRentedNoticeOpen] = useState(false);
   const { data: car, isLoading } = useCarQuery(carId ?? '');
   const { data: stats } = useCarStatsQuery(carId);
@@ -120,11 +133,16 @@ export function CarDetailSheet({ carId, open, onOpenChange, onManageImages, onOp
               </Button>
             </div>
 
-            <SheetHeader className="mt-4">
-              <SheetTitle>
-                {car.brand} {car.model}
-              </SheetTitle>
-              <SheetDescription>{car.licensePlate}</SheetDescription>
+            <SheetHeader className="mt-4 flex-row items-start justify-between gap-4 space-y-0">
+              <div>
+                <SheetTitle>
+                  {car.brand} {car.model}
+                </SheetTitle>
+                <SheetDescription>{car.licensePlate}</SheetDescription>
+              </div>
+              <Button size="sm" variant="secondary" onClick={() => onEdit(car)}>
+                Modifier
+              </Button>
             </SheetHeader>
 
             <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -206,17 +224,30 @@ export function CarDetailSheet({ carId, open, onOpenChange, onManageImages, onOp
                 {documentStatuses.map((doc) => (
                   <li
                     key={doc.field}
-                    className="flex items-center justify-between rounded-xl border border-border p-2.5 text-sm"
+                    className="flex items-center justify-between gap-3 rounded-xl border border-border p-2.5 text-sm"
                   >
-                    <div>
+                    <div className="min-w-0">
                       <p className="font-medium">{doc.label}</p>
                       <p className="text-xs text-muted-foreground">
                         {doc.date ? `Expire le ${formatDate(doc.date)}` : 'Date non renseignée'}
                       </p>
                     </div>
-                    <Badge variant={DOCUMENT_BADGE_VARIANT[doc.level]}>
-                      {formatDocumentStatus(doc)}
-                    </Badge>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Badge variant={DOCUMENT_BADGE_VARIANT[doc.level]}>
+                        {formatDocumentStatus(doc)}
+                      </Badge>
+                      {doc.level !== 'ok' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1 text-xs"
+                          onClick={() => onEdit(car, doc.field)}
+                        >
+                          <RefreshCw className="h-3 w-3" />
+                          {doc.level === 'not_set' ? 'Renseigner' : 'Renouveler'}
+                        </Button>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -246,7 +277,7 @@ export function CarDetailSheet({ carId, open, onOpenChange, onManageImages, onOp
 
             <Separator className="my-4" />
 
-            <Button variant="outline" className="w-full justify-between" onClick={onOpenCalendar}>
+            <Button variant="outline" className="w-full justify-between" onClick={() => onOpenCalendar(car)}>
               <span className="flex items-center gap-2">
                 <CalendarDays className="h-4 w-4" />
                 Calendrier et historique des locations

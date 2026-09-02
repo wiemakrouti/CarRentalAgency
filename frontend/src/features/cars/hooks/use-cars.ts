@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CreateCarInput, UpdateCarInput } from '@car-rental/shared';
+import { notificationKeys } from '@/features/notifications/api/notifications.keys';
 import { carsApi, type CarListParams, type ManualCarStatus } from '../api/cars.api';
 import { carKeys } from '../api/cars.keys';
 
@@ -51,6 +52,9 @@ export function useCreateCarMutation() {
     mutationFn: (input: CreateCarInput) => carsApi.create(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: carKeys.lists() });
+      // A newly added car can already carry an expired/expiring document
+      // date (e.g. a used car bought with its insurance about to lapse).
+      queryClient.invalidateQueries({ queryKey: notificationKeys.all });
     },
   });
 }
@@ -62,6 +66,11 @@ export function useUpdateCarMutation() {
     onSuccess: (car) => {
       queryClient.invalidateQueries({ queryKey: carKeys.lists() });
       queryClient.invalidateQueries({ queryKey: carKeys.detail(car.id) });
+      // Renewing an insurance/inspection/registration date (or setting one
+      // for the first time) directly changes what the bell shows — without
+      // this it only catches up on useRemindersQuery's 5-minute interval,
+      // reading as "I just fixed this, why is the notification still there".
+      queryClient.invalidateQueries({ queryKey: notificationKeys.all });
     },
   });
 }
@@ -72,6 +81,8 @@ export function useDeleteCarMutation() {
     mutationFn: (id: string) => carsApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: carKeys.lists() });
+      // Deleting a car drops any reminder tied to its documents.
+      queryClient.invalidateQueries({ queryKey: notificationKeys.all });
     },
   });
 }

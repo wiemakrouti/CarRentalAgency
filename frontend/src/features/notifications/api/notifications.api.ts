@@ -3,6 +3,7 @@ import { apiClient } from '@/lib/api-client';
 export type ReminderType =
   | 'RENTAL_RETURN_UPCOMING'
   | 'RENTAL_OVERDUE'
+  | 'RENTAL_PICKUP_OVERDUE'
   | 'MAINTENANCE_DUE'
   | 'DRIVING_LICENSE_EXPIRING'
   | 'CAR_INSURANCE_EXPIRING'

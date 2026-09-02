@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { flexRender, getCoreRowModel, useReactTable, createColumnHelper } from '@tanstack/react-table';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Download, FileSpreadsheet, FileText, Plus, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -28,6 +28,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 
 import { useClientsQuery } from '../hooks/use-clients';
 import { clientsApi, type Client, type ClientLicenseStatus, type ClientSortField, type SortOrder } from '../api/clients.api';
+import { clientKeys } from '../api/clients.keys';
 import { ClientRowActions } from '../components/client-row-actions';
 import { ClientFormDialog } from '../components/client-form-dialog';
 import { ClientDocumentManagerDialog } from '../components/client-document-manager-dialog';
@@ -111,6 +112,7 @@ export function ClientsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [formOpen, setFormOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | undefined>(undefined);
+  const [editingFocusField, setEditingFocusField] = useState<'drivingLicenseExpiry' | undefined>(undefined);
   const [documentManagerClientId, setDocumentManagerClientId] = useState<string | undefined>(undefined);
   const [profileClientId, setProfileClientId] = useState<string | undefined>(undefined);
   const [calendarState, setCalendarState] = useState<
@@ -123,6 +125,11 @@ export function ClientsPage() {
   const licenseStatus = (searchParams.get('licenseStatus') as ClientLicenseStatus | null) ?? undefined;
   const sortBy = (searchParams.get('sortBy') as ClientSortField | null) ?? 'createdAt';
   const sortOrder = (searchParams.get('sortOrder') as SortOrder | null) ?? 'desc';
+  // One-shot deep link — e.g. from a notification about this client's
+  // driving license expiring. Opens the profile sheet directly instead of
+  // landing on the list and making the admin find the row themselves (same
+  // pattern as Rentals' returnRentalId / Cars' openId).
+  const openId = searchParams.get('openId');
 
   const filters: ClientFilters = { city, licenseStatus };
 
@@ -137,6 +144,16 @@ export function ClientsPage() {
     licenseStatus,
     sortBy,
     sortOrder,
+  });
+  // Not useClientQuery: this is a one-shot "does it still exist" check, and
+  // a 404 here isn't transient — retrying it (the shared hook's default)
+  // only delays isError from ever becoming true, leaving the effect below
+  // waiting indefinitely instead of surfacing the "gone" toast.
+  const { data: deepLinkedClient, isError: deepLinkedClientError } = useQuery({
+    queryKey: clientKeys.detail(openId ?? ''),
+    queryFn: () => clientsApi.getById(openId!),
+    enabled: Boolean(openId),
+    retry: false,
   });
 
   function updateParam(key: string, value: string | undefined) {
@@ -172,6 +189,23 @@ export function ClientsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, search]);
 
+  useEffect(() => {
+    if (!openId || (!deepLinkedClient && !deepLinkedClientError)) return;
+    if (deepLinkedClient) {
+      setProfileClientId(deepLinkedClient.id);
+    } else {
+      // A notification pointing at a since-deleted client — surface why
+      // nothing opened instead of a silent dead click.
+      toast.warning("Ce client n'existe plus.");
+    }
+    // One-shot either way: drop openId so closing and reopening the sheet
+    // later (or navigating back here) doesn't retry/reopen it every time.
+    const next = new URLSearchParams(searchParams);
+    next.delete('openId');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkedClient, deepLinkedClientError]);
+
   function clearAllFilters() {
     setSearchInput('');
     setSearchParams({});
@@ -181,11 +215,13 @@ export function ClientsPage() {
 
   function openCreateForm() {
     setEditingClient(undefined);
+    setEditingFocusField(undefined);
     setFormOpen(true);
   }
 
-  function openEditForm(client: Client) {
+  function openEditForm(client: Client, focusField?: 'drivingLicenseExpiry') {
     setEditingClient(client);
+    setEditingFocusField(focusField);
     setFormOpen(true);
   }
 
@@ -343,7 +379,12 @@ export function ClientsPage() {
         </>
       )}
 
-      <ClientFormDialog open={formOpen} onOpenChange={setFormOpen} client={editingClient} />
+      <ClientFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        client={editingClient}
+        focusField={editingFocusField}
+      />
       <ClientDocumentManagerDialog
         open={Boolean(documentManagerClientId)}
         onOpenChange={(next) => !next && setDocumentManagerClientId(undefined)}
@@ -353,18 +394,12 @@ export function ClientsPage() {
         open={Boolean(profileClientId)}
         onOpenChange={(next) => !next && setProfileClientId(undefined)}
         clientId={profileClientId}
-        onEdit={() => {
-          const client = data?.items.find((c) => c.id === profileClientId);
-          if (client) openEditForm(client);
-        }}
+        onEdit={(client, focusField) => openEditForm(client, focusField)}
         onManageDocuments={() => setDocumentManagerClientId(profileClientId)}
-        onOpenCalendar={() => {
-          const client = data?.items.find((c) => c.id === profileClientId);
-          if (client) {
-            // Swap the sheet for the dialog rather than stacking both overlays.
-            setProfileClientId(undefined);
-            openCalendar(client, 'history');
-          }
+        onOpenCalendar={(client) => {
+          // Swap the sheet for the dialog rather than stacking both overlays.
+          setProfileClientId(undefined);
+          openCalendar(client, 'history');
         }}
       />
       <ClientCalendarDialog

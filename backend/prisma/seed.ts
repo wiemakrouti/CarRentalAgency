@@ -21,11 +21,18 @@ const prisma = new PrismaClient();
 // Cars are seeded findFirst-then-create rather than upsert, same pattern
 // already used below for Setting — kept as-is even though licensePlate is
 // now a plain @unique field Prisma's typed upsert could target directly.
+// UTC midnight, not local midnight — matches the app-wide convention for
+// date-only fields (see car-form-dialog.tsx's/client-form-dialog.tsx's
+// dateToInputValue): a value entered in the UI as e.g. "2026-07-29"
+// round-trips as UTC midnight for that day, so local-midnight seed data
+// read back off-by-one against it whenever the seeding machine's local
+// timezone sits ahead of UTC. Local getters still pick the calendar day
+// ("12 days from today" in human/local terms) — only the final midnight is
+// pinned to UTC.
 function daysFromNow(days: number): Date {
   const date = new Date();
   date.setDate(date.getDate() + days);
-  date.setHours(0, 0, 0, 0);
-  return date;
+  return new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
 }
 
 const DEMO_CARS: Prisma.CarCreateManyInput[] = [

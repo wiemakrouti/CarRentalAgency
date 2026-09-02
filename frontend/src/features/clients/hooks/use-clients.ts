@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ClientDocumentType, CreateClientInput, UpdateClientInput } from '@car-rental/shared';
+import { notificationKeys } from '@/features/notifications/api/notifications.keys';
 import { clientsApi, type ClientListParams } from '../api/clients.api';
 import { clientKeys } from '../api/clients.keys';
 
@@ -56,6 +57,9 @@ export function useCreateClientMutation() {
     mutationFn: (input: CreateClientInput) => clientsApi.create(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: clientKeys.lists() });
+      // A newly added client can already carry an expired/expiring driving
+      // license date.
+      queryClient.invalidateQueries({ queryKey: notificationKeys.all });
     },
   });
 }
@@ -67,6 +71,11 @@ export function useUpdateClientMutation() {
     onSuccess: (client) => {
       queryClient.invalidateQueries({ queryKey: clientKeys.lists() });
       queryClient.invalidateQueries({ queryKey: clientKeys.detail(client.id) });
+      // Renewing a driving license date directly changes what the bell
+      // shows — without this it only catches up on useRemindersQuery's
+      // 5-minute interval, reading as "I just fixed this, why is the
+      // notification still there".
+      queryClient.invalidateQueries({ queryKey: notificationKeys.all });
     },
   });
 }
@@ -77,6 +86,8 @@ export function useDeleteClientMutation() {
     mutationFn: (id: string) => clientsApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: clientKeys.lists() });
+      // Deleting a client drops any reminder tied to their driving license.
+      queryClient.invalidateQueries({ queryKey: notificationKeys.all });
     },
   });
 }

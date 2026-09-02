@@ -20,13 +20,19 @@ const EXPIRY_FIELDS: { field: ExpiryAlert['field']; label: string }[] = [
   { field: 'registrationExpiryDate', label: 'Carte grise' },
 ];
 
+// UTC calendar day, not local — these fields are stored as UTC midnight
+// (see car-form-dialog.tsx's dateToInputValue), and RemindersService compares
+// the same fields against UTC-midnight-of-today. Using the viewer's local
+// midnight instead would make this table's badge disagree with the
+// notification bell for anything expiring "today", for however much of the
+// day the local zone sits ahead of UTC.
 function daysUntil(dateIso: string): number {
   const msPerDay = 1000 * 60 * 60 * 24;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const now = new Date();
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   const target = new Date(dateIso);
-  target.setHours(0, 0, 0, 0);
-  return Math.round((target.getTime() - today.getTime()) / msPerDay);
+  const targetDay = Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), target.getUTCDate());
+  return Math.round((targetDay - today) / msPerDay);
 }
 
 function levelFor(daysRemaining: number): ExpiryAlertLevel {

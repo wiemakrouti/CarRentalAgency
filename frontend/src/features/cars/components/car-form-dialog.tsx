@@ -47,15 +47,30 @@ import {
   FUEL_TYPE_LABELS,
   TRANSMISSION_LABELS,
 } from '../lib/car-labels';
+import type { ExpiryAlert } from '../lib/car-alerts';
 
 type CarFormDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   car?: Car;
+  // Scrolls to and focuses this field once the dialog opens — lets a
+  // "Renouveler" action on a specific expired document land the admin
+  // directly on the field to fix, instead of a blank form they have to
+  // hunt through themselves.
+  focusField?: ExpiryAlert['field'];
 };
 
-function toDateInputValue(iso: string | null): string {
-  return iso ? iso.slice(0, 10) : '';
+// UTC getters, not local ones — `new Date('YYYY-MM-DD')` parses as UTC
+// midnight, so formatting back with local getters could shift the day by
+// one in timezones behind UTC. Using UTC both ways keeps the round-trip
+// exact regardless of the browser's timezone (mirrors the Clients form's
+// own dateToInputValue, client-form-dialog.tsx).
+function dateToInputValue(date: Date | null | undefined): string {
+  if (!date) return '';
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 function buildDefaultValues(car?: Car): UpdateCarInput {
@@ -91,7 +106,7 @@ function errorMessage(err: unknown, fallback: string): string {
   return err instanceof ApiClientError ? err.message : fallback;
 }
 
-export function CarFormDialog({ open, onOpenChange, car }: CarFormDialogProps) {
+export function CarFormDialog({ open, onOpenChange, car, focusField }: CarFormDialogProps) {
   const isEdit = Boolean(car);
   const createMutation = useCreateCarMutation();
   const updateMutation = useUpdateCarMutation();
@@ -130,6 +145,17 @@ export function CarFormDialog({ open, onOpenChange, car }: CarFormDialogProps) {
       setPhotoFile(null);
     }
   }, [open, car, reset]);
+
+  // Waits a tick for the dialog's open animation/render to settle before
+  // scrolling — focusing immediately on mount can land mid-transition, with
+  // the field not actually in view yet.
+  useEffect(() => {
+    if (!open || !focusField) return;
+    const timer = setTimeout(() => {
+      document.getElementById(focusField)?.focus();
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [open, focusField]);
 
   async function onSubmit(values: UpdateCarInput) {
     let savedCar: Car;
@@ -349,13 +375,17 @@ export function CarFormDialog({ open, onOpenChange, car }: CarFormDialogProps) {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="purchaseDate">Date d'achat</Label>
-                <Input
-                  id="purchaseDate"
-                  type="date"
-                  defaultValue={car?.purchaseDate ? toDateInputValue(car.purchaseDate) : undefined}
-                  {...register('purchaseDate', {
-                    setValueAs: (v) => (v === '' ? null : new Date(v)),
-                  })}
+                <Controller
+                  name="purchaseDate"
+                  control={control}
+                  render={({ field }) => (
+                    <Input
+                      id="purchaseDate"
+                      type="date"
+                      value={dateToInputValue(field.value)}
+                      onChange={(e) => field.onChange(e.target.value === '' ? null : new Date(e.target.value))}
+                    />
+                  )}
                 />
               </div>
               <div className="space-y-2">
@@ -374,45 +404,47 @@ export function CarFormDialog({ open, onOpenChange, car }: CarFormDialogProps) {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="insuranceExpiryDate">Expiration assurance</Label>
-                <Input
-                  id="insuranceExpiryDate"
-                  type="date"
-                  defaultValue={
-                    car?.insuranceExpiryDate ? toDateInputValue(car.insuranceExpiryDate) : undefined
-                  }
-                  {...register('insuranceExpiryDate', {
-                    setValueAs: (v) => (v === '' ? null : new Date(v)),
-                  })}
+                <Controller
+                  name="insuranceExpiryDate"
+                  control={control}
+                  render={({ field }) => (
+                    <Input
+                      id="insuranceExpiryDate"
+                      type="date"
+                      value={dateToInputValue(field.value)}
+                      onChange={(e) => field.onChange(e.target.value === '' ? null : new Date(e.target.value))}
+                    />
+                  )}
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="technicalInspectionExpiryDate">Expiration contrôle technique</Label>
-                <Input
-                  id="technicalInspectionExpiryDate"
-                  type="date"
-                  defaultValue={
-                    car?.technicalInspectionExpiryDate
-                      ? toDateInputValue(car.technicalInspectionExpiryDate)
-                      : undefined
-                  }
-                  {...register('technicalInspectionExpiryDate', {
-                    setValueAs: (v) => (v === '' ? null : new Date(v)),
-                  })}
+                <Controller
+                  name="technicalInspectionExpiryDate"
+                  control={control}
+                  render={({ field }) => (
+                    <Input
+                      id="technicalInspectionExpiryDate"
+                      type="date"
+                      value={dateToInputValue(field.value)}
+                      onChange={(e) => field.onChange(e.target.value === '' ? null : new Date(e.target.value))}
+                    />
+                  )}
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="registrationExpiryDate">Expiration carte grise</Label>
-                <Input
-                  id="registrationExpiryDate"
-                  type="date"
-                  defaultValue={
-                    car?.registrationExpiryDate
-                      ? toDateInputValue(car.registrationExpiryDate)
-                      : undefined
-                  }
-                  {...register('registrationExpiryDate', {
-                    setValueAs: (v) => (v === '' ? null : new Date(v)),
-                  })}
+                <Controller
+                  name="registrationExpiryDate"
+                  control={control}
+                  render={({ field }) => (
+                    <Input
+                      id="registrationExpiryDate"
+                      type="date"
+                      value={dateToInputValue(field.value)}
+                      onChange={(e) => field.onChange(e.target.value === '' ? null : new Date(e.target.value))}
+                    />
+                  )}
                 />
               </div>
             </div>

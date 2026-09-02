@@ -7,6 +7,7 @@ import {
   ChevronRight,
   ExternalLink,
   FilesIcon,
+  RefreshCw,
   ShieldCheck,
   Wallet,
 } from 'lucide-react';
@@ -24,6 +25,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
+import type { Client } from '../api/clients.api';
 import { useClientQuery, useClientStatsQuery } from '../hooks/use-clients';
 import { CLIENT_DOCUMENT_TYPE_LABELS } from '../lib/client-labels';
 import {
@@ -79,9 +81,15 @@ type ClientProfileSheetProps = {
   clientId: string | undefined;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onEdit: () => void;
+  // Both take the sheet's own freshly-loaded `client` rather than the
+  // caller re-deriving it from a paginated/filtered list — a client opened
+  // via a notification deep link (ClientsPage's openId) may not be on the
+  // currently loaded page at all, so looking it up there would silently
+  // no-op. focusField lets the license badge's "Renouveler" action land
+  // directly on that field instead of a form to hunt through.
+  onEdit: (client: Client, focusField?: 'drivingLicenseExpiry') => void;
   onManageDocuments: () => void;
-  onOpenCalendar: () => void;
+  onOpenCalendar: (client: Client) => void;
 };
 
 // Deliberately not a flat field list like the Cars module's detail sheet —
@@ -137,7 +145,7 @@ export function ClientProfileSheet({
                     </SheetDescription>
                   </SheetHeader>
                 </div>
-                <Button size="sm" variant="secondary" onClick={onEdit}>
+                <Button size="sm" variant="secondary" onClick={() => onEdit(client)}>
                   Modifier
                 </Button>
               </div>
@@ -155,6 +163,15 @@ export function ClientProfileSheet({
                       {formatLicenseAlertMessage(licenseAlert.daysRemaining, licenseAlert.level)}
                     </TooltipContent>
                   </Tooltip>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 gap-1 px-2 text-xs text-primary-foreground hover:bg-white/15 hover:text-primary-foreground"
+                    onClick={() => onEdit(client, 'drivingLicenseExpiry')}
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    {licenseAlert.level === 'not_set' ? 'Renseigner' : 'Renouveler'}
+                  </Button>
                 </div>
               )}
             </div>
@@ -311,7 +328,7 @@ export function ClientProfileSheet({
 
             <Separator className="my-4" />
 
-            <Button variant="outline" className="w-full justify-between" onClick={onOpenCalendar}>
+            <Button variant="outline" className="w-full justify-between" onClick={() => onOpenCalendar(client)}>
               <span className="flex items-center gap-2">
                 <CalendarDays className="h-4 w-4" />
                 Calendrier et historique des locations

@@ -8,13 +8,19 @@ const EXPIRY_WARNING_DAYS = 30;
 
 export type LicenseAlertLevel = 'expired' | 'expiring' | 'ok' | 'not_set';
 
+// UTC calendar day, not local — drivingLicenseExpiry is stored as UTC
+// midnight (see client-form-dialog.tsx's dateToInputValue), and
+// RemindersService compares the same field against UTC-midnight-of-today.
+// Using the viewer's local midnight instead would make this badge disagree
+// with the notification bell for a license expiring "today", for however
+// much of the day the local zone sits ahead of UTC.
 function daysUntil(dateIso: string): number {
   const msPerDay = 1000 * 60 * 60 * 24;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const now = new Date();
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   const target = new Date(dateIso);
-  target.setHours(0, 0, 0, 0);
-  return Math.round((target.getTime() - today.getTime()) / msPerDay);
+  const targetDay = Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), target.getUTCDate());
+  return Math.round((targetDay - today) / msPerDay);
 }
 
 export function getLicenseAlertLevel(client: Pick<Client, 'drivingLicenseExpiry'>): {
