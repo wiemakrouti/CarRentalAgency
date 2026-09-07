@@ -2,7 +2,7 @@ import type { ExpenseCategory, PaymentMethod, PaymentStatus, PaymentType } from 
 
 export const PAYMENT_TYPE_LABELS: Record<PaymentType, string> = {
   RENTAL_PAYMENT: 'Paiement location',
-  DEPOSIT: 'Dépôt (caution)',
+  DEPOSIT: 'Caution',
   DEPOSIT_REFUND: 'Remboursement caution',
   EXTENSION_PAYMENT: 'Prolongation',
   LATE_FEE: 'Frais de retard',

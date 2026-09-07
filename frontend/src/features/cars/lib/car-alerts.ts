@@ -41,31 +41,6 @@ function levelFor(daysRemaining: number): ExpiryAlertLevel {
   return 'ok';
 }
 
-// Only returns entries for dates that are set and not comfortably in the
-// future — a car with no expiry alerts returns an empty array, not one
-// "ok" entry per field, so callers can render nothing rather than clutter.
-export function getCarExpiryAlerts(car: Car): ExpiryAlert[] {
-  const alerts: ExpiryAlert[] = [];
-  for (const { field, label } of EXPIRY_FIELDS) {
-    const date = car[field];
-    if (!date) continue;
-    const daysRemaining = daysUntil(date);
-    const level = levelFor(daysRemaining);
-    if (level === 'ok') continue;
-    alerts.push({ field, label, date, daysRemaining, level });
-  }
-  // Worst (most overdue / soonest) first.
-  return alerts.sort((a, b) => a.daysRemaining - b.daysRemaining);
-}
-
-export function formatAlertMessage(alert: ExpiryAlert): string {
-  if (alert.level === 'expired') {
-    const overdue = Math.abs(alert.daysRemaining);
-    return `${alert.label} expirée depuis ${overdue} jour${overdue > 1 ? 's' : ''}`;
-  }
-  return `${alert.label} expire dans ${alert.daysRemaining} jour${alert.daysRemaining > 1 ? 's' : ''}`;
-}
-
 export type DocumentLevel = ExpiryAlertLevel | 'not_set';
 
 export type DocumentStatus = {
@@ -76,10 +51,10 @@ export type DocumentStatus = {
   daysRemaining: number | null;
 };
 
-// Unlike getCarExpiryAlerts (problems only, for the compact table/grid
-// indicator), this returns all three document types regardless of status —
-// the car detail sheet has room to show the full picture, not just what
-// needs attention.
+// Returns all three document types regardless of status — used both by the
+// detail sheet's full list and the table/grid's compact CarExpiryAlerts
+// indicator (which filters out not_set, since an unset date isn't this
+// component's job to prompt for).
 export function getDocumentStatuses(car: Car): DocumentStatus[] {
   return EXPIRY_FIELDS.map(({ field, label }) => {
     const date = car[field];

@@ -11,10 +11,23 @@ import { AuditService } from './audit.service.js';
 import type { ClientExportQuery, ClientListQuery } from '../validators/client.validator.js';
 
 const UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
+const FOREIGN_KEY_CONSTRAINT_VIOLATION = 'P2003';
 
 function toDuplicateEmailError(err: unknown): never {
   if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === UNIQUE_CONSTRAINT_VIOLATION) {
     throw new AppError(409, 'DUPLICATE_EMAIL', 'Un client avec cette adresse email existe déjà.');
+  }
+  throw err;
+}
+
+// assertNoHistory below is a plain read before the delete transaction — a
+// rental created for this exact client in between (a genuine race, however
+// narrow) would slip past it. The real backstop is this: Rental.clientId has
+// no onDelete cascade, so Postgres itself refuses the delete with a foreign
+// key violation if that happens — same fix as CarsService.toHasHistoryError.
+function toHasHistoryError(err: unknown): never {
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === FOREIGN_KEY_CONSTRAINT_VIOLATION) {
+    throw new AppError(409, 'CLIENT_HAS_HISTORY', CLIENT_HAS_HISTORY_MESSAGE);
   }
   throw err;
 }
@@ -111,18 +124,22 @@ export const ClientsService = {
     const client = await ClientsService.getById(id);
     await assertNoHistory(id);
 
-    await prisma.$transaction(async (tx) => {
-      await ClientsRepository.deleteAllDocuments(id, tx);
-      await ClientsRepository.deleteById(id, tx);
-      await AuditService.record(tx, {
-        userId,
-        action: 'CLIENT_HARD_DELETE',
-        entityType: 'Client',
-        entityId: id,
-        before: client,
-        ipAddress,
+    try {
+      await prisma.$transaction(async (tx) => {
+        await ClientsRepository.deleteAllDocuments(id, tx);
+        await ClientsRepository.deleteById(id, tx);
+        await AuditService.record(tx, {
+          userId,
+          action: 'CLIENT_HARD_DELETE',
+          entityType: 'Client',
+          entityId: id,
+          before: client,
+          ipAddress,
+        });
       });
-    });
+    } catch (err) {
+      toHasHistoryError(err);
+    }
 
     // Same best-effort-after-commit pattern as CarsService.delete: a
     // leftover Cloudinary asset is a harmless cost, and the DB rows are

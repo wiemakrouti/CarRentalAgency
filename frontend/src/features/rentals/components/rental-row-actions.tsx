@@ -40,7 +40,7 @@ export function RentalRowActions({ rental }: RentalRowActionsProps) {
         <DropdownMenuContent align="end">
           {rental.status === 'RESERVED' && (
             <>
-              <DropdownMenuItem onClick={() => setActivateOpen(true)}>Activer (remise des clés)</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setActivateOpen(true)}>Activer</DropdownMenuItem>
               <DropdownMenuItem className="text-destructive" onClick={() => setCancelOpen(true)}>
                 Annuler
               </DropdownMenuItem>
@@ -48,7 +48,7 @@ export function RentalRowActions({ rental }: RentalRowActionsProps) {
           )}
           {rental.status === 'ACTIVE' && (
             <>
-              <DropdownMenuItem onClick={() => setReturnOpen(true)}>Clôturer (retour véhicule)</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setReturnOpen(true)}>Clôturer</DropdownMenuItem>
               <DropdownMenuItem onClick={() => setExtendOpen(true)}>Prolonger</DropdownMenuItem>
             </>
           )}

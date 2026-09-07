@@ -1,7 +1,7 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
+import { AlertTriangle, CalendarPlus, CarFront, Loader2 } from 'lucide-react';
 import { extendRentalSchema, type ExtendRentalInput } from '@car-rental/shared';
 
 import { ApiClientError } from '@/lib/api-client';
@@ -57,11 +57,14 @@ export function ExtendRentalDialog({ open, onOpenChange, rental }: ExtendRentalD
   const currentPlannedReturn = new Date(rental.plannedReturnDate);
   const newReturnDate = newReturnDateValue ? new Date(newReturnDateValue) : null;
 
+  const dailyRate = Number(rental.dailyRate);
+  const currentTotal = Number(rental.totalAmount);
+  const currentNights = calculateNights(pickupDate, currentPlannedReturn);
+
   const isValidExtension = Boolean(newReturnDate && newReturnDate > currentPlannedReturn);
-  const additionalNights = isValidExtension
-    ? calculateNights(pickupDate, newReturnDate!) - calculateNights(pickupDate, currentPlannedReturn)
-    : 0;
-  const estimatedAdditionalAmount = additionalNights * Number(rental.dailyRate);
+  const additionalNights = isValidExtension ? calculateNights(pickupDate, newReturnDate!) - currentNights : 0;
+  const estimatedAdditionalAmount = additionalNights * dailyRate;
+  const newTotal = currentTotal + estimatedAdditionalAmount;
 
   async function onSubmit(values: ExtendRentalInput) {
     try {
@@ -95,24 +98,58 @@ export function ExtendRentalDialog({ open, onOpenChange, rental }: ExtendRentalD
             {errors.newReturnDate && <p className="text-sm text-destructive">{errors.newReturnDate.message}</p>}
           </div>
 
-          <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
-            {newReturnDateValue && !isValidExtension ? (
-              <p className="text-destructive">
-                La nouvelle date doit être postérieure au {currentPlannedReturn.toLocaleDateString('fr-TN')}.
-              </p>
-            ) : additionalNights > 0 ? (
-              <>
-                <p>
-                  {additionalNights} nuit{additionalNights > 1 ? 's' : ''} supplémentaire
-                  {additionalNights > 1 ? 's' : ''} × {Number(rental.dailyRate).toLocaleString('fr-TN')} DT ={' '}
-                  <span className="font-semibold">{estimatedAdditionalAmount.toLocaleString('fr-TN')} DT</span>
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Estimation à titre indicatif — le montant final est calculé par le serveur à la confirmation.
-                </p>
-              </>
-            ) : (
-              <p className="text-muted-foreground">Choisissez une nouvelle date de retour.</p>
+          {/* Same receipt-style breakdown language as Return/Activate — the
+              current contract amount, then what the extension adds on top,
+              then the resulting new total. */}
+          <div className="overflow-hidden rounded-xl border border-border">
+            <div className="divide-y divide-border">
+              <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+                <div className="flex items-center gap-2 text-sm text-foreground">
+                  <CarFront className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  Location actuelle
+                </div>
+                <div className="text-right">
+                  <p className="font-mono text-sm font-semibold tabular-nums text-foreground">
+                    {currentTotal.toLocaleString('fr-TN')} DT
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {currentNights} j × {dailyRate.toLocaleString('fr-TN')} DT
+                  </p>
+                </div>
+              </div>
+
+              {newReturnDateValue && !isValidExtension ? (
+                <div className="flex items-center gap-2 px-4 py-2.5 text-sm text-destructive">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  La nouvelle date doit être postérieure au {currentPlannedReturn.toLocaleDateString('fr-TN')}.
+                </div>
+              ) : isValidExtension ? (
+                <div className="flex items-center justify-between gap-3 bg-primary/5 px-4 py-2.5">
+                  <div className="flex items-center gap-2 text-sm font-medium text-primary">
+                    <CalendarPlus className="h-3.5 w-3.5 shrink-0" />
+                    Prolongation
+                  </div>
+                  <div className="text-right">
+                    <p className="font-mono text-sm font-semibold tabular-nums text-primary">
+                      +{estimatedAdditionalAmount.toLocaleString('fr-TN')} DT
+                    </p>
+                    <p className="text-[11px] text-primary/75">
+                      {additionalNights} j × {dailyRate.toLocaleString('fr-TN')} DT
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="px-4 py-2.5 text-sm text-muted-foreground">Choisissez une nouvelle date de retour.</div>
+              )}
+            </div>
+
+            {isValidExtension && (
+              <div className="flex items-center justify-between gap-3 border-t border-border bg-primary/10 px-4 py-3">
+                <span className="text-sm font-bold text-foreground">Nouveau total</span>
+                <span className="font-mono text-lg font-extrabold tabular-nums text-primary">
+                  {newTotal.toLocaleString('fr-TN')} DT
+                </span>
+              </div>
             )}
           </div>
 

@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import type { Car } from '@prisma/client';
-import type { CreateCarInput, UpdateCarInput } from '@car-rental/shared';
+import { MANUALLY_SETTABLE_CAR_STATUSES, type CreateCarInput, type UpdateCarInput } from '@car-rental/shared';
 import { prisma } from '../lib/prisma-client.js';
 import { AppError } from '../utils/app-error.js';
 import { toCsv } from '../utils/csv.js';
@@ -60,6 +60,21 @@ async function assertNoHistory(carId: string): Promise<void> {
 }
 
 const UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
+const FOREIGN_KEY_CONSTRAINT_VIOLATION = 'P2003';
+
+// assertNoHistory above is a plain read before the delete transaction — a
+// rental created for this exact car in between (a genuine race, however
+// narrow) would slip past it. The real backstop is this: Rental.carId has
+// no onDelete cascade, so Postgres itself refuses the delete with a foreign
+// key violation if that happens. This just turns that raw DB error into the
+// same friendly CAR_HAS_HISTORY message assertNoHistory already gives the
+// non-racing case, instead of a confusing 500.
+function toHasHistoryError(err: unknown): never {
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === FOREIGN_KEY_CONSTRAINT_VIOLATION) {
+    throw new AppError(409, 'CAR_HAS_HISTORY', HAS_HISTORY_MESSAGE);
+  }
+  throw err;
+}
 
 function toDuplicateLicensePlateError(err: unknown): never {
   if (
@@ -110,9 +125,10 @@ export const CarsService = {
 
   async update(id: string, input: UpdateCarInput, userId: string, ipAddress?: string) {
     const existing = await CarsService.getById(id);
-    // The only way to take a car out of RENTED is returning its rental
-    // (RentalsService.returnRental, via CarsRepository.updateStatusGuarded) —
-    // never trust the client to have checked this itself.
+    // Fast-fail outside the transaction, purely for a snappy error on the
+    // common (non-racing) path. Not what actually prevents a status change
+    // from landing on a car that just became RENTED — see the guarded
+    // update below for that.
     if (input.status && existing.status === 'RENTED') {
       throw new AppError(
         409,
@@ -122,7 +138,40 @@ export const CarsService = {
     }
     try {
       return await prisma.$transaction(async (tx) => {
-        const updated = await CarsRepository.update(id, input, tx);
+        let updated: Car;
+        if (input.status) {
+          // The real guard, only engaged when a status change is actually
+          // requested: atomic (UPDATE ... WHERE status IN (...)), so a
+          // RentalsService.activate()/returnRental() flipping this same car
+          // to/from RENTED right in between the read above and this write
+          // can't be silently overwritten — closes the same class of race
+          // the Rentals overlap check had. Non-status edits (e.g. tarif)
+          // never needed this guard and still skip it below.
+          const guarded = await CarsRepository.updateStatusGuarded(
+            id,
+            MANUALLY_SETTABLE_CAR_STATUSES,
+            input,
+            tx,
+          );
+          if (!guarded) {
+            throw new AppError(
+              409,
+              'CAR_CURRENTLY_RENTED',
+              'Cette voiture est en cours de location. Retournez la location pour changer son statut.',
+            );
+          }
+          const refetched = await CarsRepository.findById(id, tx);
+          if (!refetched) {
+            // Can't actually happen — updateStatusGuarded just reported a
+            // successful update on this same id, inside this same
+            // transaction — but findById's return type is nullable, so TS
+            // needs this narrowed before use.
+            throw new AppError(404, 'CAR_NOT_FOUND', 'Voiture introuvable.');
+          }
+          updated = refetched;
+        } else {
+          updated = await CarsRepository.update(id, input, tx);
+        }
         await AuditService.record(tx, {
           userId,
           action: 'UPDATE',
@@ -173,18 +222,22 @@ export const CarsService = {
     const car = await CarsService.getById(id);
     await assertNoHistory(id);
 
-    await prisma.$transaction(async (tx) => {
-      await CarsRepository.deleteAllImages(id, tx);
-      await CarsRepository.deleteById(id, tx);
-      await AuditService.record(tx, {
-        userId,
-        action: 'CAR_HARD_DELETE',
-        entityType: 'Car',
-        entityId: id,
-        before: car,
-        ipAddress,
+    try {
+      await prisma.$transaction(async (tx) => {
+        await CarsRepository.deleteAllImages(id, tx);
+        await CarsRepository.deleteById(id, tx);
+        await AuditService.record(tx, {
+          userId,
+          action: 'CAR_HARD_DELETE',
+          entityType: 'Car',
+          entityId: id,
+          before: car,
+          ipAddress,
+        });
       });
-    });
+    } catch (err) {
+      toHasHistoryError(err);
+    }
 
     // Same best-effort-after-commit pattern as removeImage: a leftover
     // Cloudinary asset is a harmless cost, and the DB row is already gone
@@ -204,22 +257,26 @@ export const CarsService = {
     const cars = await Promise.all(ids.map((id) => CarsService.getById(id)));
     await Promise.all(ids.map((id) => assertNoHistory(id)));
 
-    await prisma.$transaction(async (tx) => {
-      for (const id of ids) {
-        await CarsRepository.deleteAllImages(id, tx);
-        await CarsRepository.deleteById(id, tx);
-      }
-      for (const car of cars) {
-        await AuditService.record(tx, {
-          userId,
-          action: 'CAR_HARD_DELETE',
-          entityType: 'Car',
-          entityId: car.id,
-          before: car,
-          ipAddress,
-        });
-      }
-    });
+    try {
+      await prisma.$transaction(async (tx) => {
+        for (const id of ids) {
+          await CarsRepository.deleteAllImages(id, tx);
+          await CarsRepository.deleteById(id, tx);
+        }
+        for (const car of cars) {
+          await AuditService.record(tx, {
+            userId,
+            action: 'CAR_HARD_DELETE',
+            entityType: 'Car',
+            entityId: car.id,
+            before: car,
+            ipAddress,
+          });
+        }
+      });
+    } catch (err) {
+      toHasHistoryError(err);
+    }
 
     for (const car of cars) {
       for (const image of car.images) {

@@ -5,6 +5,7 @@ import type {
   PaymentMethod,
   PaymentStatus,
   PaymentType,
+  RevenuePaymentType,
   UpdateExpenseInput,
   UpdatePaymentInput,
 } from '@car-rental/shared';
@@ -55,7 +56,10 @@ export type Expense = {
 
 export type FinanceSummary = {
   period: { from: string; to: string };
-  revenue: { total: number; byType: Record<PaymentType, number> };
+  // DEPOSIT/DEPOSIT_REFUND excluded — a caution is a refundable hold, not
+  // agency income (see deposits below, tracked separately).
+  revenue: { total: number; byType: Record<RevenuePaymentType, number> };
+  deposits: { collected: number; refunded: number };
   expenses: { total: number; byCategory: Record<ExpenseCategory, number> };
   pendingTotal: number;
   net: number;

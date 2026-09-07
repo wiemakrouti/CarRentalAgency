@@ -1,22 +1,32 @@
 import type { RentalStatus } from '@car-rental/shared';
 import type { Rental } from '@/features/rentals/api/rentals.api';
 
+// Strips any time-of-day from a Date without touching its Y/M/D — for grid
+// cells and "today", which are already local calendar days by construction
+// (see buildMonthGrid). Exported so other rental views needing the same
+// "is this date's day actually over yet" comparison (the detail sheet's
+// frise, the activate/return dialogs' late-day previews) share this exact
+// truncation instead of each rolling their own.
+export function toLocalDayOnly(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
 // Mirrors the backend's read-side rule (docs/api.md "Cars"): OVERDUE is never
 // a stored status, just ACTIVE + plannedReturnDate in the past. The calendar
 // needs to show it distinctly, so it computes the same condition here rather
 // than trusting `rental.status` alone.
+//
+// Compared by calendar day, not the exact instant `now` — a return due today
+// hasn't actually been missed until today is over. Comparing the raw instant
+// instead flagged it OVERDUE the moment any hour past midnight of the due day
+// ticked by, which is what produced a rental "en retard" on its own return
+// day (backend/src/lib/date-utils.ts's startOfToday mirrors this same
+// boundary server-side, for the KPI counts/notifications/table filters).
 export function getEffectiveRentalStatus(rental: Rental, now: Date = new Date()): RentalStatus {
-  if (rental.status === 'ACTIVE' && new Date(rental.plannedReturnDate) < now) {
+  if (rental.status === 'ACTIVE' && apiDateToLocalDay(rental.plannedReturnDate) < toLocalDayOnly(now)) {
     return 'OVERDUE';
   }
   return rental.status;
-}
-
-// Strips any time-of-day from a Date without touching its Y/M/D — for grid
-// cells and "today", which are already local calendar days by construction
-// (see buildMonthGrid).
-function toLocalDayOnly(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
 // Extracts the calendar day from an API date string using LOCAL getters —
@@ -112,7 +122,15 @@ export const RENTAL_STATUS_DOT_CLASSES: Record<RentalStatus, string> = {
 // also doesn't split by day: a rental that's gone past its (possibly already
 // extended) return date is uniformly "a problem needing attention", not
 // "partly extended".
-export type DisplayRentalStatus = RentalStatus | 'EXTENDED';
+//
+// PICKUP_OVERDUE is the RESERVED-side counterpart of OVERDUE: a RESERVED
+// rental whose pickupDate has passed without ever being activated (the
+// client never showed up), same condition as the RENTAL_PICKUP_OVERDUE
+// reminder and the Rentals KPI header's "Départs en retard" tile — without
+// it, that rental reads as a plain, on-schedule "Réservée" everywhere this
+// type is used (the Rentals table, the detail sheet's stamp, calendar day
+// cells), same gap OVERDUE closes for a late return.
+export type DisplayRentalStatus = RentalStatus | 'EXTENDED' | 'PICKUP_OVERDUE';
 
 export function hadExtension(rental: Rental): boolean {
   return rental.extensions.length > 0;
@@ -140,6 +158,11 @@ export function getDisplayRentalStatus(
   now: Date = new Date(),
 ): DisplayRentalStatus {
   const status = getEffectiveRentalStatus(rental, now);
+  // Doesn't depend on `date` — a missed pickup isn't a per-day distinction
+  // the way EXTENDED is, it's true for the whole rental for as long as it
+  // stays RESERVED. Same calendar-day comparison as getEffectiveRentalStatus
+  // above — a pickup scheduled for today isn't missed until today is over.
+  if (status === 'RESERVED' && apiDateToLocalDay(rental.pickupDate) < toLocalDayOnly(now)) return 'PICKUP_OVERDUE';
   if (status !== 'ACTIVE' || rental.extensions.length === 0) return status;
   const boundary = originalPlannedReturnDay(rental);
   return toLocalDayOnly(date).getTime() > boundary.getTime() ? 'EXTENDED' : status;
@@ -161,11 +184,16 @@ export function getDisplayRentalStatusSummary(rental: Rental, now: Date = new Da
 export const DISPLAY_RENTAL_STATUS_CALENDAR_CLASSES: Record<DisplayRentalStatus, string> = {
   ...RENTAL_STATUS_CALENDAR_CLASSES,
   EXTENDED: 'bg-success/10 text-success border-success/30 border-dashed',
+  // Same warning family as OVERDUE (a late return) rather than CANCELLED's
+  // destructive red — still a live reservation needing a decision, not a
+  // dead one.
+  PICKUP_OVERDUE: 'bg-warning/15 text-warning border-warning/40 border-dashed',
 };
 
 export const DISPLAY_RENTAL_STATUS_DOT_CLASSES: Record<DisplayRentalStatus, string> = {
   ...RENTAL_STATUS_DOT_CLASSES,
   EXTENDED: 'bg-success/70',
+  PICKUP_OVERDUE: 'bg-warning',
 };
 
 // A day cell almost never belongs to more than one rental (RESERVED/ACTIVE

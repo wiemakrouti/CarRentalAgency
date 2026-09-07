@@ -6,4 +6,5 @@ export const rentalKeys = {
   list: (params: RentalListParams) => [...rentalKeys.lists(), params] as const,
   details: () => [...rentalKeys.all, 'detail'] as const,
   detail: (id: string) => [...rentalKeys.details(), id] as const,
+  summary: () => [...rentalKeys.all, 'summary'] as const,
 };

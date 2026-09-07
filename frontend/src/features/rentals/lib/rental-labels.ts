@@ -6,7 +6,7 @@ export const RENTAL_STATUS_LABELS: Record<RentalStatus, string> = {
   ACTIVE: 'En cours',
   COMPLETED: 'Terminée',
   CANCELLED: 'Annulée',
-  OVERDUE: 'En retard',
+  OVERDUE: 'Retour en retard',
 };
 
 export const RENTAL_STATUS_BADGE_VARIANT: Record<
@@ -21,12 +21,15 @@ export const RENTAL_STATUS_BADGE_VARIANT: Record<
 };
 
 // DisplayRentalStatus (rental-calendar.ts) extends RentalStatus with
-// EXTENDED — the days an ACTIVE rental gained through an extension. Both
-// calendar dialogs (Cars and Clients) need a label/badge for it, so it's
-// defined once here rather than duplicated per module.
+// EXTENDED (days an ACTIVE rental gained through an extension) and
+// PICKUP_OVERDUE (a RESERVED rental whose pickup never happened). Both
+// calendar dialogs (Cars and Clients), the Rentals table, and the detail
+// sheet's stamp need a label/badge for these, so they're defined once here
+// rather than duplicated per module.
 export const DISPLAY_RENTAL_STATUS_LABELS: Record<DisplayRentalStatus, string> = {
   ...RENTAL_STATUS_LABELS,
   EXTENDED: 'Prolongée',
+  PICKUP_OVERDUE: 'Départ en retard',
 };
 
 export const DISPLAY_RENTAL_STATUS_BADGE_VARIANT: Record<
@@ -37,4 +40,8 @@ export const DISPLAY_RENTAL_STATUS_BADGE_VARIANT: Record<
   // Same variant as ACTIVE — EXTENDED is a variant of "currently ongoing",
   // not a distinct status of its own.
   EXTENDED: 'success',
+  // Same variant as OVERDUE (a late return) — both are "still a live
+  // reservation/rental, but something's late" rather than CANCELLED's
+  // destructive dead-end.
+  PICKUP_OVERDUE: 'warning',
 };

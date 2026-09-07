@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { PAYMENT_TYPES, EXPENSE_CATEGORIES } from '@car-rental/shared';
-import { Clock, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
+import { REVENUE_PAYMENT_TYPES, EXPENSE_CATEGORIES } from '@car-rental/shared';
+import { Clock, ShieldCheck, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 
 import { KpiCard } from '@/components/common/kpi-card';
 import { LoadingState } from '@/components/common/loading-state';
@@ -81,7 +81,7 @@ export function FinanceSummaryTab() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {PAYMENT_TYPES.map((type) => (
+                    {REVENUE_PAYMENT_TYPES.map((type) => (
                       <TableRow key={type}>
                         <TableCell>{PAYMENT_TYPE_LABELS[type]}</TableCell>
                         <TableCell className="text-right">{formatMoney(data.revenue.byType[type])}</TableCell>
@@ -118,6 +118,28 @@ export function FinanceSummaryTab() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Cautions are a refundable hold, not agency income — tracked
+              here, separately from "Revenus"/"Revenus par type" above, so
+              collecting then fully refunding one stays visible without ever
+              inflating the revenue total (see REVENUE_PAYMENT_TYPES's own
+              comment). */}
+          <Card className="shadow-xs">
+            <CardContent className="flex flex-wrap items-center gap-x-8 gap-y-3 py-4">
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <ShieldCheck className="h-4 w-4" />
+                Cautions (hors revenus)
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-sm text-muted-foreground">Encaissées</span>
+                <span className="font-semibold text-foreground">{formatMoney(data.deposits.collected)}</span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-sm text-muted-foreground">Remboursées</span>
+                <span className="font-semibold text-foreground">{formatMoney(data.deposits.refunded)}</span>
+              </div>
+            </CardContent>
+          </Card>
         </>
       )}
     </div>

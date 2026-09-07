@@ -71,11 +71,7 @@ const DialogFooter = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      // sticky: on a long form the dialog itself scrolls (see DialogContent's
-      // overflow-y-auto usages) — pinning the footer keeps Annuler/Enregistrer
-      // reachable without scrolling all the way down. No effect on short,
-      // non-scrolling dialogs.
-      "sticky bottom-0 -mx-6 -mb-6 flex flex-col-reverse gap-2 border-t border-border bg-background px-6 py-4 sm:flex-row sm:justify-end sm:gap-2 sm:space-x-0",
+      "-mx-6 -mb-6 flex flex-col-reverse gap-2 border-t border-border bg-background px-6 py-4 sm:flex-row sm:justify-end sm:gap-2 sm:space-x-0",
       className
     )}
     {...props}

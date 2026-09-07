@@ -1,9 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
-import { PAYMENT_METHODS, PAYMENT_TYPES, createPaymentSchema, type CreatePaymentInput } from '@car-rental/shared';
+import {
+  PAYMENT_METHODS,
+  PAYMENT_TYPES,
+  createPaymentSchema,
+  type CreatePaymentInput,
+  type PaymentType,
+} from '@car-rental/shared';
 
 import { ApiClientError } from '@/lib/api-client';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
@@ -11,7 +17,6 @@ import { useRentalsQuery } from '@/features/rentals/hooks/use-rentals';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
@@ -30,13 +35,24 @@ type PaymentFormDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   rentalId?: string;
+  // Preseeds the form for a specific quick action (e.g. the Caution KPI
+  // tile's "Encaisser"/"Rembourser" buttons) — still fully editable, just a
+  // starting point instead of the plain RENTAL_PAYMENT/CASH default.
+  defaultType?: PaymentType;
+  defaultAmount?: number;
 };
 
 function errorMessage(err: unknown, fallback: string): string {
   return err instanceof ApiClientError ? err.message : fallback;
 }
 
-export function PaymentFormDialog({ open, onOpenChange, rentalId }: PaymentFormDialogProps) {
+export function PaymentFormDialog({
+  open,
+  onOpenChange,
+  rentalId,
+  defaultType,
+  defaultAmount,
+}: PaymentFormDialogProps) {
   const [rentalSearch, setRentalSearch] = useState('');
   const debouncedRentalSearch = useDebouncedValue(rentalSearch);
   const { data: rentalsData, isLoading: isLoadingRentals } = useRentalsQuery({
@@ -53,8 +69,18 @@ export function PaymentFormDialog({ open, onOpenChange, rentalId }: PaymentFormD
     formState: { errors },
   } = useForm<CreatePaymentInput>({
     resolver: zodResolver(createPaymentSchema),
-    defaultValues: { rentalId, method: 'CASH', type: 'RENTAL_PAYMENT' },
+    defaultValues: { rentalId, method: 'CASH', type: defaultType ?? 'RENTAL_PAYMENT', amount: defaultAmount },
   });
+
+  // This dialog stays mounted for the page/sheet's lifetime — a quick
+  // action (different defaultType/defaultAmount) needs the form reseeded on
+  // every fresh open, not just whatever useForm captured at first mount.
+  useEffect(() => {
+    if (open) {
+      reset({ rentalId, method: 'CASH', type: defaultType ?? 'RENTAL_PAYMENT', amount: defaultAmount });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   async function onSubmit(values: CreatePaymentInput) {
     try {
@@ -75,7 +101,7 @@ export function PaymentFormDialog({ open, onOpenChange, rentalId }: PaymentFormD
         onOpenChange(next);
       }}
     >
-      <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
+      <DialogContent className="flex max-h-[85vh] max-w-lg flex-col">
         <DialogHeader>
           <DialogTitle>Nouveau paiement</DialogTitle>
           <DialogDescription>
@@ -83,10 +109,15 @@ export function PaymentFormDialog({ open, onOpenChange, rentalId }: PaymentFormD
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        {/* The footer sits outside this scrolling div — a sticky footer
+            sharing the same scroll container as tall content gets visually
+            pulled up over whatever hasn't scrolled past it yet, overlapping
+            it instead of floating cleanly above it (see rental-form-dialog). */}
+        <form onSubmit={handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col" noValidate>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
           {!rentalId && (
             <div className="space-y-2">
-              <Label>Location</Label>
+              <Label required>Location</Label>
               <Input
                 value={rentalSearch}
                 onChange={(e) => setRentalSearch(e.target.value)}
@@ -119,7 +150,9 @@ export function PaymentFormDialog({ open, onOpenChange, rentalId }: PaymentFormD
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="amount">Montant (DT)</Label>
+              <Label htmlFor="amount" required>
+                Montant (DT)
+              </Label>
               <Input id="amount" type="number" step="0.001" {...register('amount', { setValueAs: Number })} />
               {errors.amount && <p className="text-sm text-destructive">{errors.amount.message}</p>}
             </div>
@@ -135,7 +168,7 @@ export function PaymentFormDialog({ open, onOpenChange, rentalId }: PaymentFormD
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Type</Label>
+              <Label required>Type</Label>
               <Controller
                 name="type"
                 control={control}
@@ -157,7 +190,7 @@ export function PaymentFormDialog({ open, onOpenChange, rentalId }: PaymentFormD
               {errors.type && <p className="text-sm text-destructive">{errors.type.message}</p>}
             </div>
             <div className="space-y-2">
-              <Label>Méthode</Label>
+              <Label required>Méthode</Label>
               <Controller
                 name="method"
                 control={control}
@@ -180,9 +213,6 @@ export function PaymentFormDialog({ open, onOpenChange, rentalId }: PaymentFormD
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="notes">Notes (optionnel)</Label>
-            <Textarea id="notes" rows={2} {...register('notes', { setValueAs: (v) => (v === '' ? null : v) })} />
           </div>
 
           <DialogFooter>

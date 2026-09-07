@@ -1,5 +1,5 @@
 import type { CarStatus, Prisma, PrismaClient } from '@prisma/client';
-import type { CreateCarInput, UpdateCarInput } from '@car-rental/shared';
+import { REVENUE_PAYMENT_TYPES, type CreateCarInput, type UpdateCarInput } from '@car-rental/shared';
 import { prisma } from '../lib/prisma-client.js';
 import { overlappingRentalsFilter } from '../lib/rental-availability.js';
 import type { CarExportQuery, CarListQuery } from '../validators/car.validator.js';
@@ -177,8 +177,17 @@ export const CarsRepository = {
         where: { carId, deletedAt: null },
         _count: { _all: true },
       }),
+      // type filter excludes DEPOSIT/DEPOSIT_REFUND — a caution is a
+      // refundable hold, not revenue (same REVENUE_PAYMENT_TYPES
+      // FinanceSummaryService uses); left in, collecting then fully
+      // refunding one would inflate this car's "revenue" by 2x its amount.
       db.payment.aggregate({
-        where: { status: 'COMPLETED', deletedAt: null, rental: { carId } },
+        where: {
+          status: 'COMPLETED',
+          deletedAt: null,
+          rental: { carId },
+          type: { in: [...REVENUE_PAYMENT_TYPES] },
+        },
         _sum: { amount: true },
       }),
       db.rental.findFirst({

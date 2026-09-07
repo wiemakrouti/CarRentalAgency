@@ -1,4 +1,6 @@
 import { prisma } from '../lib/prisma-client.js';
+import { startOfToday } from '../lib/date-utils.js';
+import { RentalsService } from './rentals.service.js';
 
 export type ReminderType =
   | 'RENTAL_RETURN_UPCOMING'
@@ -41,6 +43,16 @@ function formatDate(date: Date): string {
 // for why this stays a plain query rather than a cron/email job in v1.
 export class RemindersService {
   static async getUpcoming(withinDays = 7): Promise<Reminder[]> {
+    // The notification bell has its own overduePickups query below — without
+    // this, a RESERVED rental past its own plannedReturnDate (the exact
+    // condition RentalsService.sweepExpiredReservations auto-cancels) would
+    // keep surfacing here as "non récupérée depuis le X" with an
+    // ever-growing day count forever, even after the Rentals page itself
+    // has already stopped showing it. Same sweep, called here too so this
+    // module doesn't drift out of sync with the table/KPI header just
+    // because an admin checks the bell without ever opening /rentals.
+    await RentalsService.sweepExpiredReservations();
+
     const now = new Date();
     const horizon = new Date(now.getTime() + withinDays * 24 * 60 * 60 * 1000);
     // UTC midnight of today — not `now` itself. MaintenanceRecord.nextDueDate,
@@ -53,12 +65,15 @@ export class RemindersService {
     // expiry day ticks by, while the badge elsewhere in the app still reads
     // "expiring soon" for the rest of that day — two views of the same app
     // visibly disagreeing about whether something has expired *today*.
-    // Rentals are deliberately excluded from this: plannedReturnDate is a
-    // real moment (not a calendar-only date) and its own OVERDUE status
-    // (rental-calendar.ts's getEffectiveRentalStatus) is already computed
-    // against the exact instant everywhere else in the app — kept consistent
-    // with that, not with the calendar-day fields above.
     const todayUtcMidnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    // Local start-of-today for the rental queries below — pickupDate/
+    // plannedReturnDate get the exact same "not overdue until the day is
+    // over" treatment as the calendar-day fields above (rental-calendar.ts's
+    // getEffectiveRentalStatus mirrors this same boundary on the frontend),
+    // rather than the exact instant `now`, which used to mark a rental
+    // "en retard"/"non récupérée" the moment any hour past midnight of its
+    // due day ticked by.
+    const today = startOfToday();
 
     const [dueSoonRentals, overdueRentals, overduePickups, maintenanceDue, licensesExpiring, carsWithDocuments] =
       await Promise.all([
@@ -68,10 +83,10 @@ export class RemindersService {
         // at an archived rental would be a dead click: GET /rentals/:id
         // 404s on an archived row, so the deep link could never resolve.
         prisma.rental.findMany({
-          where: { status: 'ACTIVE', deletedAt: null, plannedReturnDate: { gte: now, lte: horizon } },
+          where: { status: 'ACTIVE', deletedAt: null, plannedReturnDate: { gte: today, lte: horizon } },
         }),
         prisma.rental.findMany({
-          where: { status: 'ACTIVE', deletedAt: null, plannedReturnDate: { lt: now } },
+          where: { status: 'ACTIVE', deletedAt: null, plannedReturnDate: { lt: today } },
         }),
         // A RESERVED rental whose pickupDate has passed without ever being
         // activated — the client never showed up, or the admin forgot to
@@ -80,7 +95,7 @@ export class RemindersService {
         // a reservation that's merely coming up in the next few days needs
         // no proactive alert — only a MISSED one does.
         prisma.rental.findMany({
-          where: { status: 'RESERVED', deletedAt: null, pickupDate: { lt: now } },
+          where: { status: 'RESERVED', deletedAt: null, pickupDate: { lt: today } },
         }),
         // No lower bound: a maintenance due date already in the past is
         // still due (overdue), not filtered out — same fix as the car

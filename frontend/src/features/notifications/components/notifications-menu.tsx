@@ -40,11 +40,12 @@ const ENTITY_ICON: Record<Reminder['entityType'], LucideIcon> = {
 // Overdue is already flagged server-side (reminder.overdue). Today/upcoming
 // is a further split of everything else, by UTC calendar day — matches
 // car-alerts.ts/client-alerts.ts's own daysUntil so this never contradicts
-// reminder.overdue for something due earlier the same UTC day. A rental
-// reminder in practice never lands in "today": RENTAL_RETURN_UPCOMING/
-// RENTAL_PICKUP_OVERDUE compare the exact instant, not the calendar day, so
-// a rental due today has already flipped to overdue by the time any hour of
-// today has passed — this bucket is mainly Car/Client/Maintenance dates.
+// reminder.overdue for something due earlier the same UTC day. Rentals land
+// here too now: RemindersService's own RENTAL_OVERDUE/RENTAL_PICKUP_OVERDUE
+// queries (backend/src/services/reminders.service.ts) compare against the
+// start of today, not the exact instant, so a rental due today falls
+// through to this "today" bucket exactly like a Car/Client/Maintenance date
+// due today does, instead of reading as already overdue before today is over.
 type ReminderCategory = 'overdue' | 'today' | 'upcoming';
 
 function getDaysUntil(dueDate: string): number {

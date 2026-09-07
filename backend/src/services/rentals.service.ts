@@ -15,12 +15,16 @@ import { RentalExtensionsRepository } from '../repositories/rental-extensions.re
 import { CarsService } from './cars.service.js';
 import { ClientsService } from './clients.service.js';
 import { AuditService } from './audit.service.js';
+import { startOfDay, startOfToday } from '../lib/date-utils.js';
 import type { RentalListQuery } from '../validators/rental.validator.js';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
+const WRITE_CONFLICT = 'P2034';
 const MAX_RENTAL_NUMBER_ATTEMPTS = 5;
 const LIFECYCLE_ISOLATION = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable };
+
+const AUTO_CANCEL_REASON = 'Annulée automatiquement — jamais récupérée avant la fin de la période réservée.';
 
 // Auto-generated charges (late fee, extension) have no payment-collection UI
 // yet (Phase 5) — CASH is a placeholder method and PENDING reflects that the
@@ -42,9 +46,53 @@ function calculateNights(pickupDate: Date, plannedReturnDate: Date): number {
 }
 
 export const RentalsService = {
+  // A RESERVED rental whose plannedReturnDate has already passed means the
+  // client never showed up at all — the whole originally-booked window is
+  // in the past, not just the pickup. Left alone, "jours de retard sur la
+  // remise des clés" would grow without bound on a reservation nobody will
+  // ever activate. No cron/job runner in this app (see docs/architecture.md
+  // §1) — instead this runs opportunistically from the two read paths an
+  // admin actually watches (the table and the KPI header), so a stale
+  // reservation gets swept within moments of anyone looking at the page,
+  // same "compute cheaply on read" spirit as OVERDUE/PICKUP_OVERDUE
+  // themselves. Safe to call redundantly: cancelExpiredReservations
+  // re-checks status: 'RESERVED' itself, so calling this from both list()
+  // and getSummary() on the same page load just no-ops the second time.
+  async sweepExpiredReservations() {
+    // Start of today, not `new Date()` — a reservation whose plannedReturnDate
+    // is today hasn't actually expired until today is over.
+    const expired = await RentalsRepository.findExpiredReservations(startOfToday());
+    if (expired.length === 0) return 0;
+
+    await prisma.$transaction(async (tx) => {
+      await RentalsRepository.cancelExpiredReservations(
+        expired.map((r) => r.id),
+        AUTO_CANCEL_REASON,
+        tx,
+      );
+      for (const rental of expired) {
+        await AuditService.record(tx, {
+          userId: null,
+          action: 'RENTAL_AUTO_CANCEL',
+          entityType: 'Rental',
+          entityId: rental.id,
+          before: rental,
+          after: { ...rental, status: 'CANCELLED', cancelledReason: AUTO_CANCEL_REASON },
+        });
+      }
+    });
+    return expired.length;
+  },
+
   async list(query: RentalListQuery) {
+    await RentalsService.sweepExpiredReservations();
     const { items, total } = await RentalsRepository.findMany(query);
     return { items, total, page: query.page, pageSize: query.pageSize };
+  },
+
+  async getSummary() {
+    await RentalsService.sweepExpiredReservations();
+    return RentalsRepository.getSummaryCounts();
   },
 
   async getById(id: string, options?: { includeArchived?: boolean }) {
@@ -67,6 +115,13 @@ export const RentalsService = {
       );
     }
 
+    // Fast-fail outside any transaction — a plain read, purely for a snappy
+    // error on the common (non-racing) path. Not what actually prevents a
+    // double-booking: two submissions for the same car/dates arriving close
+    // together could both pass this exact check before either has inserted
+    // anything. The authoritative guard is the re-check inside the
+    // Serializable transaction below, same pattern extend() already uses
+    // for its own overlap check.
     const overlapping = await RentalsRepository.hasOverlap(input.carId, {
       pickupDate: input.pickupDate,
       returnDate: input.plannedReturnDate,
@@ -84,6 +139,19 @@ export const RentalsService = {
       const rentalNumber = generateRentalNumber();
       try {
         return await prisma.$transaction(async (tx) => {
+          // The real guard: re-checked here, inside the same serializable
+          // transaction as the insert, so two concurrent create() calls for
+          // an overlapping car/date range can't both slip past the earlier
+          // plain-read check and both succeed.
+          const stillOverlapping = await RentalsRepository.hasOverlap(
+            input.carId,
+            { pickupDate: input.pickupDate, returnDate: input.plannedReturnDate },
+            tx,
+          );
+          if (stillOverlapping) {
+            throw new AppError(409, 'CAR_NOT_AVAILABLE', 'Cette voiture est déjà réservée pour ces dates.');
+          }
+
           const rental = await RentalsRepository.create(
             {
               rentalNumber,
@@ -99,6 +167,66 @@ export const RentalsService = {
             },
             tx,
           );
+
+          // A payment already collected at booking (the "Location immédiate"
+          // tab's own Paiement section) — created here, in the same
+          // transaction as the rental, so the two can never drift: either
+          // both commit, or neither does.
+          if (input.initialPayment) {
+            await PaymentsRepository.create(
+              {
+                rentalId: rental.id,
+                amount: input.initialPayment.amount,
+                method: input.initialPayment.method,
+                type: input.initialPayment.type,
+                status: 'COMPLETED',
+                paidAt: new Date(),
+              },
+              tx,
+            );
+          }
+
+          // A walk-in client picking up the car right now (the "Location
+          // immédiate" tab) skips the RESERVED state entirely — same
+          // transaction as the creation, so the rental is never left
+          // referencing keys that were never actually handed over (or vice
+          // versa). No late-pickup recalculation here unlike activate():
+          // totalAmount above was already computed from this same
+          // pickupDate, so there's nothing to adjust.
+          if (input.activation) {
+            const activated = await RentalsRepository.updateGuarded(
+              rental.id,
+              ['RESERVED'],
+              {
+                status: 'ACTIVE',
+                mileageAtPickup: input.activation.mileageAtPickup,
+                fuelLevelAtPickup: input.activation.fuelLevelAtPickup,
+              },
+              tx,
+            );
+            if (!activated) {
+              throw new AppError(
+                500,
+                'RENTAL_ACTIVATION_FAILED',
+                "Erreur lors de l'activation automatique de la location.",
+              );
+            }
+
+            const carActivated = await CarsRepository.updateStatusGuarded(
+              input.carId,
+              ['AVAILABLE'],
+              { status: 'RENTED' },
+              tx,
+            );
+            if (!carActivated) {
+              throw new AppError(
+                409,
+                'CAR_NOT_AVAILABLE',
+                "Cette voiture n'est plus disponible pour la prise en charge immédiate.",
+              );
+            }
+          }
+
           await AuditService.record(tx, {
             userId,
             action: 'CREATE',
@@ -107,11 +235,18 @@ export const RentalsService = {
             after: rental,
             ipAddress,
           });
-          return rental;
-        });
+          return RentalsRepository.findById(rental.id, undefined, tx);
+        }, LIFECYCLE_ISOLATION);
       } catch (err) {
         if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === UNIQUE_CONSTRAINT_VIOLATION) {
           continue;
+        }
+        // Postgres SERIALIZABLE aborts the losing side of a genuine race
+        // instead of letting both transactions commit — without this, that
+        // surfaces as a raw 500 instead of the same friendly conflict
+        // message the non-racing path already throws above.
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === WRITE_CONFLICT) {
+          throw new AppError(409, 'CAR_NOT_AVAILABLE', 'Cette voiture vient d’être réservée, veuillez réessayer.');
         }
         throw err;
       }
@@ -131,12 +266,42 @@ export const RentalsService = {
       );
     }
 
+    // Activation always records the moment the keys actually change hands,
+    // not whatever pickupDate was originally booked — recalculated
+    // unconditionally, not just for a late pickup. An early activation (the
+    // client showing up well before their scheduled date) is allowed, not
+    // blocked outright: it's only actually a problem if the car is already
+    // committed elsewhere for that widened window (checked just below). An
+    // on-time activation lands on the same night count either way
+    // (calculateNights rounds up), so this never double-charges or
+    // undercharges the common case.
+    const now = new Date();
+    const totalAmount = calculateNights(now, rental.plannedReturnDate) * Number(rental.dailyRate);
+
     return prisma.$transaction(async (tx) => {
+      // An early activation widens the car's occupied window backward to
+      // now, which the original booking's own overlap check never accounted
+      // for — re-run it here, the same guard create()/extend() already run
+      // for their own date-range changes. A late activation only narrows the
+      // window, so it can never introduce a new conflict.
+      if (now < rental.pickupDate) {
+        const overlapping = await RentalsRepository.hasOverlap(
+          rental.carId,
+          { pickupDate: now, returnDate: rental.plannedReturnDate, excludeRentalId: id },
+          tx,
+        );
+        if (overlapping) {
+          throw new AppError(409, 'CAR_NOT_AVAILABLE', 'Cette voiture est déjà en location sur cette période.');
+        }
+      }
+
       const rentalGuarded = await RentalsRepository.updateGuarded(
         id,
         ['RESERVED'],
         {
           status: 'ACTIVE',
+          pickupDate: now,
+          totalAmount,
           mileageAtPickup: input.mileageAtPickup,
           fuelLevelAtPickup: input.fuelLevelAtPickup,
         },
@@ -198,10 +363,19 @@ export const RentalsService = {
     }
 
     const actualReturnDate = new Date();
-    const lateDays =
-      actualReturnDate > rental.plannedReturnDate
-        ? Math.ceil((actualReturnDate.getTime() - rental.plannedReturnDate.getTime()) / MS_PER_DAY)
-        : 0;
+    // Full calendar days late — returning any time on the planned return day
+    // itself is 0 days late, not 1: comparing the exact instant (the old
+    // `actualReturnDate > plannedReturnDate` + Math.ceil) rounded any moment
+    // past midnight of that day up to a full day late, charging a fee for a
+    // return that was actually on time. Both sides go through startOfDay, not
+    // just actualReturnDate — plannedReturnDate is stored as UTC midnight,
+    // which for a positive UTC offset (Tunisia is UTC+1) sits an hour or more
+    // *after* local midnight; leaving it untruncated silently rounded every
+    // clean N-day gap down to N-1 (a genuinely 2-day-late return billed as 1).
+    const lateDays = Math.max(
+      0,
+      Math.floor((startOfDay(actualReturnDate).getTime() - startOfDay(rental.plannedReturnDate).getTime()) / MS_PER_DAY),
+    );
     const lateFeeAmount = lateDays * Number(rental.dailyRate);
 
     return prisma.$transaction(async (tx) => {

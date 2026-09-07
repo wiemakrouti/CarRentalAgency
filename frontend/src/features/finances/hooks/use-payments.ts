@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CreatePaymentInput, UpdatePaymentInput } from '@car-rental/shared';
+import { carKeys } from '@/features/cars/api/cars.keys';
+import { clientKeys } from '@/features/clients/api/clients.keys';
 import { rentalKeys } from '@/features/rentals/api/rentals.keys';
 import { financesApi, type PaymentListParams } from '../api/finances.api';
 import { financeSummaryKeys, paymentKeys } from '../api/finances.keys';
@@ -7,11 +9,22 @@ import { financeSummaryKeys, paymentKeys } from '../api/finances.keys';
 // A payment always belongs to a rental (and a DEPOSIT_REFUND flips
 // Rental.depositReturned) — invalidate broadly enough that the Rentals
 // module and the summary widget never show stale money.
+//
+// carKeys/clientKeys are invalidated broadly (not scoped to the one car/
+// client this payment's rental belongs to) because the Payment rows these
+// mutations act on never carry carId/clientId directly, only rentalId
+// (PaymentsRepository's own PAYMENT_INCLUDE has no nested rental) — CarsRepository.getStats
+// and ClientsRepository.getStats both sum COMPLETED payments into
+// "totalRevenue", so adding/correcting/archiving a payment from Finances
+// (not just from the rental's own detail sheet) can change either stat
+// without ever going through a rental-lifecycle mutation to invalidate them.
 function invalidatePaymentEffects(queryClient: ReturnType<typeof useQueryClient>, rentalId?: string) {
   queryClient.invalidateQueries({ queryKey: paymentKeys.lists() });
   queryClient.invalidateQueries({ queryKey: financeSummaryKeys.all });
   if (rentalId) queryClient.invalidateQueries({ queryKey: rentalKeys.detail(rentalId) });
   queryClient.invalidateQueries({ queryKey: rentalKeys.lists() });
+  queryClient.invalidateQueries({ queryKey: carKeys.all });
+  queryClient.invalidateQueries({ queryKey: clientKeys.all });
 }
 
 export function usePaymentsQuery(params: PaymentListParams) {

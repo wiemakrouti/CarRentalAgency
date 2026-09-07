@@ -8,7 +8,6 @@ import { ApiClientError } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Dialog,
@@ -52,7 +51,6 @@ export function PaymentSettleDialog({ open, onOpenChange, payment }: PaymentSett
       method: payment.method,
       status: payment.status,
       paidAt: payment.paidAt ? new Date(payment.paidAt) : null,
-      notes: payment.notes,
     },
   });
 
@@ -68,7 +66,7 @@ export function PaymentSettleDialog({ open, onOpenChange, payment }: PaymentSett
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] max-w-md overflow-y-auto">
+      <DialogContent className="flex max-h-[85vh] max-w-md flex-col">
         <DialogHeader>
           <DialogTitle>Régler / corriger le paiement</DialogTitle>
           <DialogDescription>
@@ -76,7 +74,12 @@ export function PaymentSettleDialog({ open, onOpenChange, payment }: PaymentSett
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        {/* The footer sits outside this scrolling div — a sticky footer
+            sharing the same scroll container as tall content gets visually
+            pulled up over whatever hasn't scrolled past it yet, overlapping
+            it instead of floating cleanly above it (see rental-form-dialog). */}
+        <form onSubmit={handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col" noValidate>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="amount">Montant (DT)</Label>
@@ -139,9 +142,6 @@ export function PaymentSettleDialog({ open, onOpenChange, payment }: PaymentSett
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="notes">Notes (optionnel)</Label>
-            <Textarea id="notes" rows={2} {...register('notes', { setValueAs: (v) => (v === '' ? null : v) })} />
           </div>
 
           <DialogFooter>

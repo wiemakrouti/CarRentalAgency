@@ -57,6 +57,18 @@ export const PAYMENT_TYPES = [
 ] as const;
 export type PaymentType = (typeof PAYMENT_TYPES)[number];
 
+// Payment types that count as actual agency income — every PAYMENT_TYPES
+// value except DEPOSIT/DEPOSIT_REFUND, which settle a refundable hold, not
+// revenue (mirrors rental-balance.ts's own identical exclusion on the
+// per-rental balance). Shared by FinanceSummaryService (backend) and the
+// Finances Résumé tab (frontend) so "Revenus" can never silently start
+// counting a caution again in one without the other — collecting then fully
+// refunding one would otherwise inflate revenue by 2x its amount.
+export const REVENUE_PAYMENT_TYPES = PAYMENT_TYPES.filter(
+  (type): type is Exclude<PaymentType, 'DEPOSIT' | 'DEPOSIT_REFUND'> => type !== 'DEPOSIT' && type !== 'DEPOSIT_REFUND',
+);
+export type RevenuePaymentType = (typeof REVENUE_PAYMENT_TYPES)[number];
+
 export const PAYMENT_STATUSES = ['PENDING', 'COMPLETED', 'REFUNDED'] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
@@ -97,6 +109,7 @@ export const AUDIT_ACTIONS = [
   'RENTAL_RETURN',
   'RENTAL_EXTEND',
   'RENTAL_CANCEL',
+  'RENTAL_AUTO_CANCEL',
   'CAR_IMAGE_ADD',
   'CAR_IMAGE_REMOVE',
   'CAR_IMAGE_SET_PRIMARY',

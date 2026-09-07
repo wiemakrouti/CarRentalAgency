@@ -20,6 +20,11 @@ export const RentalsController = {
     });
   },
 
+  async getSummary(_req: Request, res: Response) {
+    const summary = await RentalsService.getSummary();
+    res.status(200).json({ success: true, data: summary });
+  },
+
   async getById(req: Request, res: Response) {
     const rental = await RentalsService.getById(req.params.id!);
     res.status(200).json({ success: true, data: rental });

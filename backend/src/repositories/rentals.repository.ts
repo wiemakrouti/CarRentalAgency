@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient, RentalStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma-client.js';
 import { notDeleted } from './soft-delete.js';
 import { overlappingRentalsFilter } from '../lib/rental-availability.js';
+import { startOfToday } from '../lib/date-utils.js';
 import type { RentalListQuery } from '../validators/rental.validator.js';
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -9,22 +10,57 @@ type Db = PrismaClient | Prisma.TransactionClient;
 // payments.attachments (Phase 5): damage-fee photos are most useful right
 // where the damage was recorded — a rental's own detail view — not just in
 // the standalone Finances payments list.
+//
+// payments.where excludes archived rows (same notDeleted default every
+// other Payment reader uses — Finances' own list/stats never surface them
+// either) — without it, an archived payment kept showing up embedded on
+// the rental (and getting counted in its balance) even after "Archiver".
 const RENTAL_INCLUDE = {
   car: true,
   client: true,
   extensions: true,
-  payments: { include: { attachments: true } },
+  payments: { where: notDeleted({}), include: { attachments: true } },
 } as const;
 
 function buildWhere(query: RentalListQuery): Prisma.RentalWhereInput {
   const where = notDeleted<Prisma.RentalWhereInput>(
     {
-      status: query.status,
       carId: query.carId,
       clientId: query.clientId,
     },
     { includeArchived: query.includeArchived },
   );
+
+  // pickupOverdue takes priority over `status`: it narrows RESERVED further
+  // than any RentalStatus value can ("pickup overdue" isn't its own status,
+  // see the validator's own comment) — the KPI header's "Départs en
+  // retard"/"Réservations à venir" tiles link here without also needing to
+  // agree on a matching `status` value.
+  //
+  // Compared against the start of today, not the exact instant `new Date()`
+  // — a pickup/return scheduled for today hasn't actually been missed until
+  // today is over, so comparing against `now` instead flagged it "en retard"
+  // the moment any hour past midnight ticked by (rental-calendar.ts's
+  // getEffectiveRentalStatus mirrors this same boundary on the frontend).
+  const today = startOfToday();
+  if (query.pickupOverdue !== undefined) {
+    where.status = 'RESERVED';
+    where.pickupDate = query.pickupOverdue ? { lt: today } : { gte: today };
+  } else if (query.status === 'OVERDUE') {
+    // OVERDUE is never actually written to Rental.status (see the enum's own
+    // comment in schema.prisma) — it's ACTIVE + plannedReturnDate in the
+    // past, computed read-side everywhere else in the app
+    // (rental-calendar.ts's getEffectiveRentalStatus). A plain `status:
+    // 'OVERDUE'` equality filter would always match zero rows; split ACTIVE
+    // by date instead so both filter options actually work.
+    where.status = 'ACTIVE';
+    where.plannedReturnDate = { lt: today };
+  } else if (query.status === 'ACTIVE') {
+    where.status = 'ACTIVE';
+    where.plannedReturnDate = { gte: today };
+  } else if (query.status) {
+    where.status = query.status;
+  }
 
   if (query.search) {
     where.OR = [
@@ -63,6 +99,31 @@ export const RentalsRepository = {
     });
   },
 
+  // A RESERVED rental whose plannedReturnDate has already passed — not just
+  // the pickupDate — means the *entire* originally-booked window is in the
+  // past: the client never showed up at all, not "running a bit late". Feeds
+  // RentalsService.sweepExpiredReservations, which auto-cancels these rather
+  // than let "jours de retard" grow without bound on a reservation nobody
+  // will ever activate.
+  findExpiredReservations(now: Date, db: Db = prisma) {
+    return db.rental.findMany({
+      where: { status: 'RESERVED', deletedAt: null, plannedReturnDate: { lt: now } },
+      include: RENTAL_INCLUDE,
+    });
+  },
+
+  cancelExpiredReservations(ids: string[], reason: string, db: Db = prisma) {
+    if (ids.length === 0) return Promise.resolve({ count: 0 });
+    // status: 'RESERVED' re-checked here too (not just by the caller's
+    // findExpiredReservations query) so a concurrent activate()/cancel() on
+    // one of these ids between the find and this update can't get silently
+    // overwritten back to CANCELLED.
+    return db.rental.updateMany({
+      where: { id: { in: ids }, status: 'RESERVED' },
+      data: { status: 'CANCELLED', cancelledReason: reason },
+    });
+  },
+
   hasOverlap(
     carId: string,
     params: { pickupDate: Date; returnDate: Date; excludeRentalId?: string },
@@ -92,6 +153,24 @@ export const RentalsRepository = {
       data,
     });
     return result.count === 1;
+  },
+
+  // Four independent counts for the Rentals page's KPI header — each
+  // mirrors a distinction RemindersService already draws (ACTIVE vs.
+  // overdue-return, RESERVED vs. overdue-pickup), just as a count instead
+  // of the full row set. Plain `count()` queries, not a shared "list
+  // overdue rentals" helper: the header only ever needs the number.
+  async getSummaryCounts(db: Db = prisma) {
+    // Start of today, not `now` — see buildWhere's own comment above: a
+    // pickup/return due today isn't overdue until today is actually over.
+    const today = startOfToday();
+    const [active, overdueReturn, overduePickup, upcomingReservations] = await Promise.all([
+      db.rental.count({ where: { status: 'ACTIVE', deletedAt: null, plannedReturnDate: { gte: today } } }),
+      db.rental.count({ where: { status: 'ACTIVE', deletedAt: null, plannedReturnDate: { lt: today } } }),
+      db.rental.count({ where: { status: 'RESERVED', deletedAt: null, pickupDate: { lt: today } } }),
+      db.rental.count({ where: { status: 'RESERVED', deletedAt: null, pickupDate: { gte: today } } }),
+    ]);
+    return { active, overdueReturn, overduePickup, upcomingReservations };
   },
 
   // Not status-guarded like the lifecycle transitions above: a deposit can

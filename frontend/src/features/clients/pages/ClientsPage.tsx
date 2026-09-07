@@ -27,7 +27,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 import { useClientsQuery } from '../hooks/use-clients';
-import { clientsApi, type Client, type ClientLicenseStatus, type ClientSortField, type SortOrder } from '../api/clients.api';
+import { clientsApi, type Client, type ClientLicenseStatus } from '../api/clients.api';
 import { clientKeys } from '../api/clients.keys';
 import { ClientRowActions } from '../components/client-row-actions';
 import { ClientFormDialog } from '../components/client-form-dialog';
@@ -36,32 +36,24 @@ import { ClientProfileSheet } from '../components/client-profile-sheet';
 import { ClientCalendarDialog } from '../components/client-calendar-dialog';
 import { ClientReliabilityBadge } from '../components/client-reliability-badge';
 import { ClientFiltersPopover, type ClientFilters } from '../components/client-filters-popover';
-import { SortableHeader } from '../components/sortable-header';
 
 const PAGE_SIZE = 20;
+// Sorting UI was removed from the table — the list always reads newest
+// first, the same default it always had, just no longer user-adjustable.
+const DEFAULT_SORT_BY = 'createdAt' as const;
+const DEFAULT_SORT_ORDER = 'desc' as const;
 
 const columnHelper = createColumnHelper<Client>();
 
-type SortState = { sortBy: ClientSortField; sortOrder: SortOrder };
-
 function buildColumns(
   onEdit: (client: Client) => void,
-  onManageDocuments: (client: Client) => void,
   onViewProfile: (client: Client) => void,
   onOpenCalendar: (client: Client) => void,
-  sort: SortState,
-  onSort: (field: ClientSortField) => void,
 ) {
-  function sortableHeader(label: string, field: ClientSortField) {
-    return () => (
-      <SortableHeader label={label} field={field} sortBy={sort.sortBy} sortOrder={sort.sortOrder} onSort={onSort} />
-    );
-  }
-
   return [
     columnHelper.accessor((row) => `${row.firstName} ${row.lastName}`, {
       id: 'fullName',
-      header: sortableHeader('Nom complet', 'lastName'),
+      header: 'Nom complet',
       cell: ({ row }) => {
         const { firstName, lastName } = row.original;
         const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
@@ -99,7 +91,6 @@ function buildColumns(
         <ClientRowActions
           client={row.original}
           onEdit={onEdit}
-          onManageDocuments={onManageDocuments}
           onViewProfile={onViewProfile}
           onOpenCalendar={onOpenCalendar}
         />
@@ -123,8 +114,6 @@ export function ClientsPage() {
   const search = searchParams.get('search') ?? '';
   const city = searchParams.get('city') ?? undefined;
   const licenseStatus = (searchParams.get('licenseStatus') as ClientLicenseStatus | null) ?? undefined;
-  const sortBy = (searchParams.get('sortBy') as ClientSortField | null) ?? 'createdAt';
-  const sortOrder = (searchParams.get('sortOrder') as SortOrder | null) ?? 'desc';
   // One-shot deep link — e.g. from a notification about this client's
   // driving license expiring. Opens the profile sheet directly instead of
   // landing on the list and making the admin find the row themselves (same
@@ -142,8 +131,8 @@ export function ClientsPage() {
     search: search || undefined,
     city,
     licenseStatus,
-    sortBy,
-    sortOrder,
+    sortBy: DEFAULT_SORT_BY,
+    sortOrder: DEFAULT_SORT_ORDER,
   });
   // Not useClientQuery: this is a one-shot "does it still exist" check, and
   // a 404 here isn't transient — retrying it (the shared hook's default)
@@ -168,14 +157,6 @@ export function ClientsPage() {
     }
     if (!('page' in values)) next.delete('page');
     setSearchParams(next);
-  }
-
-  function handleSort(field: ClientSortField) {
-    if (sortBy !== field) {
-      updateParams({ sortBy: field, sortOrder: 'asc' });
-    } else {
-      updateParams({ sortOrder: sortOrder === 'asc' ? 'desc' : 'asc' });
-    }
   }
 
   function applyFilters(next: ClientFilters) {
@@ -225,10 +206,6 @@ export function ClientsPage() {
     setFormOpen(true);
   }
 
-  function openDocumentManager(client: Client) {
-    setDocumentManagerClientId(client.id);
-  }
-
   function openProfile(client: Client) {
     setProfileClientId(client.id);
   }
@@ -243,8 +220,8 @@ export function ClientsPage() {
         search: search || undefined,
         city,
         licenseStatus,
-        sortBy,
-        sortOrder,
+        sortBy: DEFAULT_SORT_BY,
+        sortOrder: DEFAULT_SORT_ORDER,
       };
       return format === 'xlsx' ? clientsApi.exportXlsx(params) : clientsApi.exportCsv(params);
     },
@@ -259,19 +236,9 @@ export function ClientsPage() {
   });
 
   const columns = useMemo(
-    () =>
-      buildColumns(
-        openEditForm,
-        openDocumentManager,
-        openProfile,
-        openCalendar,
-        { sortBy, sortOrder },
-        handleSort,
-      ),
-    // handleSort is recreated every render but only ever reads sortBy/sortOrder
-    // (already tracked here) and the stable setSearchParams — safe to omit.
+    () => buildColumns(openEditForm, openProfile, openCalendar),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sortBy, sortOrder],
+    [],
   );
 
   const table = useReactTable({

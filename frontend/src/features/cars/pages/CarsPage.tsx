@@ -43,7 +43,7 @@ import {
 } from '@/components/ui/table';
 
 import { useCarsQuery } from '../hooks/use-cars';
-import { carsApi, type Car, type CarSortField, type SortOrder } from '../api/cars.api';
+import { carsApi, type Car } from '../api/cars.api';
 import { carKeys } from '../api/cars.keys';
 import { CarRowActions } from '../components/car-row-actions';
 import { CarStatusBadge } from '../components/car-status-badge';
@@ -54,12 +54,15 @@ import { CarCalendarDialog } from '../components/car-calendar-dialog';
 import { CarGrid } from '../components/car-grid';
 import { CarExpiryAlerts } from '../components/car-expiry-alerts';
 import { CarFiltersPopover, type CarFilters } from '../components/car-filters-popover';
-import { SortableHeader } from '../components/sortable-header';
 import { CAR_CATEGORY_LABELS } from '../lib/car-labels';
 import type { ExpiryAlert } from '../lib/car-alerts';
 
 const PAGE_SIZE = 20;
 const VIEW_MODE_STORAGE_KEY = 'cars-view-mode';
+// Sorting UI was removed from the table — the list always reads newest
+// first, the same default it always had, just no longer user-adjustable.
+const DEFAULT_SORT_BY = 'createdAt' as const;
+const DEFAULT_SORT_ORDER = 'desc' as const;
 
 type ViewMode = 'table' | 'grid';
 
@@ -73,31 +76,11 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('fr-TN');
 }
 
-type SortState = { sortBy: CarSortField; sortOrder: SortOrder };
-
-function buildColumns(
-  onEdit: (car: Car) => void,
-  onViewDetails: (car: Car) => void,
-  onOpenCalendar: (car: Car) => void,
-  sort: SortState,
-  onSort: (field: CarSortField) => void,
-) {
-  function sortableHeader(label: string, field: CarSortField) {
-    return () => (
-      <SortableHeader
-        label={label}
-        field={field}
-        sortBy={sort.sortBy}
-        sortOrder={sort.sortOrder}
-        onSort={onSort}
-      />
-    );
-  }
-
+function buildColumns(onEdit: (car: Car) => void, onViewDetails: (car: Car) => void, onOpenCalendar: (car: Car) => void) {
   return [
     columnHelper.display({
       id: 'thumbnail',
-      header: '',
+      header: 'Photo',
       cell: ({ row }) => {
         const primary = row.original.images.find((img) => img.isPrimary) ?? row.original.images[0];
         return primary ? (
@@ -111,17 +94,17 @@ function buildColumns(
     }),
     columnHelper.accessor((row) => `${row.brand} ${row.model}`, {
       id: 'brandModel',
-      header: sortableHeader('Marque / Modèle', 'brand'),
+      header: 'Marque / Modèle',
     }),
     columnHelper.accessor('licensePlate', {
-      header: sortableHeader('Immatriculation', 'licensePlate'),
+      header: 'Immatriculation',
     }),
     columnHelper.accessor('category', {
-      header: sortableHeader('Catégorie', 'category'),
+      header: 'Catégorie',
       cell: ({ getValue }) => CAR_CATEGORY_LABELS[getValue()],
     }),
     columnHelper.accessor('status', {
-      header: sortableHeader('Statut', 'status'),
+      header: 'Statut',
       cell: ({ row }) => (
         <div className="space-y-0.5">
           <CarStatusBadge car={row.original} />
@@ -134,7 +117,7 @@ function buildColumns(
       ),
     }),
     columnHelper.accessor('dailyRate', {
-      header: sortableHeader('Tarif / jour', 'dailyRate'),
+      header: 'Tarif / jour',
       cell: ({ getValue }) => `${Number(getValue()).toLocaleString('fr-TN')} DT`,
     }),
     columnHelper.display({
@@ -174,8 +157,6 @@ export function CarsPage() {
   const category = searchParams.get('category') ?? undefined;
   const status = searchParams.get('status') ?? undefined;
   const transmission = searchParams.get('transmission') ?? undefined;
-  const sortBy = (searchParams.get('sortBy') as CarSortField | null) ?? 'createdAt';
-  const sortOrder = (searchParams.get('sortOrder') as SortOrder | null) ?? 'desc';
   // One-shot deep link — e.g. from a notification about this car's
   // insurance/inspection/registration expiring. Opens the detail sheet
   // directly instead of landing on the list and making the admin find the
@@ -203,8 +184,8 @@ export function CarsPage() {
     category,
     status,
     transmission,
-    sortBy,
-    sortOrder,
+    sortBy: DEFAULT_SORT_BY,
+    sortOrder: DEFAULT_SORT_ORDER,
     minDailyRate: filters.minDailyRate ? Number(filters.minDailyRate) : undefined,
     maxDailyRate: filters.maxDailyRate ? Number(filters.maxDailyRate) : undefined,
     minYear: filters.minYear ? Number(filters.minYear) : undefined,
@@ -235,14 +216,6 @@ export function CarsPage() {
     }
     if (!('page' in values)) next.delete('page');
     setSearchParams(next);
-  }
-
-  function handleSort(field: CarSortField) {
-    if (sortBy !== field) {
-      updateParams({ sortBy: field, sortOrder: 'asc' });
-    } else {
-      updateParams({ sortOrder: sortOrder === 'asc' ? 'desc' : 'asc' });
-    }
   }
 
   function applyFilters(next: CarFilters) {
@@ -328,8 +301,8 @@ export function CarsPage() {
         category,
         status,
         transmission,
-        sortBy,
-        sortOrder,
+        sortBy: DEFAULT_SORT_BY,
+        sortOrder: DEFAULT_SORT_ORDER,
         minDailyRate: filters.minDailyRate ? Number(filters.minDailyRate) : undefined,
         maxDailyRate: filters.maxDailyRate ? Number(filters.maxDailyRate) : undefined,
         minYear: filters.minYear ? Number(filters.minYear) : undefined,
@@ -350,12 +323,9 @@ export function CarsPage() {
   });
 
   const columns = useMemo(
-    () =>
-      buildColumns(openEditForm, openDetail, openCalendar, { sortBy, sortOrder }, handleSort),
-    // handleSort is recreated every render but only ever reads sortBy/sortOrder
-    // (already tracked here) and the stable setSearchParams — safe to omit.
+    () => buildColumns(openEditForm, openDetail, openCalendar),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sortBy, sortOrder],
+    [],
   );
 
   const table = useReactTable({

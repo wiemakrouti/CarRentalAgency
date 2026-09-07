@@ -19,6 +19,9 @@ rentalsRouter.use('/rentals', authenticate, authorize('ADMIN'));
 
 rentalsRouter.get('/rentals', validate({ query: rentalListQuerySchema }), asyncHandler(RentalsController.list));
 rentalsRouter.post('/rentals', validate({ body: createRentalSchema }), asyncHandler(RentalsController.create));
+// Must come before /rentals/:id — otherwise "summary" is captured as :id
+// and fails UUID validation instead of reaching this handler.
+rentalsRouter.get('/rentals/summary', asyncHandler(RentalsController.getSummary));
 rentalsRouter.get(
   '/rentals/:id',
   validate({ params: rentalIdParamSchema }),

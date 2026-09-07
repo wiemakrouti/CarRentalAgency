@@ -95,7 +95,7 @@ export function ExpenseFormDialog({ open, onOpenChange, expense }: ExpenseFormDi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
+      <DialogContent className="flex max-h-[85vh] max-w-lg flex-col">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Modifier la dépense' : 'Nouvelle dépense'}</DialogTitle>
           <DialogDescription>
@@ -103,10 +103,15 @@ export function ExpenseFormDialog({ open, onOpenChange, expense }: ExpenseFormDi
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        {/* The footer sits outside this scrolling div — a sticky footer
+            sharing the same scroll container as tall content gets visually
+            pulled up over whatever hasn't scrolled past it yet, overlapping
+            it instead of floating cleanly above it (see rental-form-dialog). */}
+        <form onSubmit={handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col" noValidate>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Catégorie</Label>
+              <Label required>Catégorie</Label>
               <Controller
                 name="category"
                 control={control}
@@ -128,14 +133,16 @@ export function ExpenseFormDialog({ open, onOpenChange, expense }: ExpenseFormDi
               {errors.category && <p className="text-sm text-destructive">{errors.category.message}</p>}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="amount">Montant (DT)</Label>
+              <Label htmlFor="amount" required>
+                Montant (DT)
+              </Label>
               <Input id="amount" type="number" step="0.001" {...register('amount', { setValueAs: Number })} />
               {errors.amount && <p className="text-sm text-destructive">{errors.amount.message}</p>}
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label>Voiture concernée (optionnel)</Label>
+            <Label>Voiture concernée</Label>
             <Controller
               name="carId"
               control={control}
@@ -162,7 +169,9 @@ export function ExpenseFormDialog({ open, onOpenChange, expense }: ExpenseFormDi
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="date">Date</Label>
+              <Label htmlFor="date" required>
+                Date
+              </Label>
               <Input
                 id="date"
                 type="date"
@@ -172,7 +181,7 @@ export function ExpenseFormDialog({ open, onOpenChange, expense }: ExpenseFormDi
               {errors.date && <p className="text-sm text-destructive">{errors.date.message}</p>}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="receiptUrl">Justificatif — URL (optionnel)</Label>
+              <Label htmlFor="receiptUrl">Justificatif — URL</Label>
               <Input
                 id="receiptUrl"
                 placeholder="https://..."
@@ -183,9 +192,12 @@ export function ExpenseFormDialog({ open, onOpenChange, expense }: ExpenseFormDi
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor="description" required>
+              Description
+            </Label>
             <Textarea id="description" rows={2} {...register('description')} />
             {errors.description && <p className="text-sm text-destructive">{errors.description.message}</p>}
+          </div>
           </div>
 
           <DialogFooter>

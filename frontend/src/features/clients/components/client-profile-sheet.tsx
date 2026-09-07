@@ -130,7 +130,11 @@ export function ClientProfileSheet({
           <>
             {/* Hero */}
             <div className="relative -mx-6 -mt-6 w-[calc(100%+3rem)] overflow-hidden bg-gradient-to-br from-primary-600 via-primary-700 to-primary-800 px-6 pb-6 pt-7 text-primary-foreground">
-              <div className="flex items-start justify-between gap-4">
+              {/* pr-10: the sheet's own close button is absolutely positioned
+                  (right-4 top-4, see SheetContent) and overlaps the last
+                  ~24px of this row — without this gap, "Modifier" sits
+                  underneath it and clicks land on Close instead. */}
+              <div className="flex items-start justify-between gap-4 pr-10">
                 <div className="flex items-center gap-4">
                   <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-xl font-bold ring-1 ring-white/25">
                     {initials}

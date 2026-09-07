@@ -230,7 +230,7 @@ export function ClientFormDialog({ open, onOpenChange, client, focusField }: Cli
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+      <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Modifier le client' : 'Ajouter un client'}</DialogTitle>
           <DialogDescription>
@@ -238,29 +238,40 @@ export function ClientFormDialog({ open, onOpenChange, client, focusField }: Cli
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
+        {/* The footer sits outside this scrolling div — a sticky footer
+            sharing the same scroll container as tall content gets visually
+            pulled up over whatever hasn't scrolled past it yet, overlapping
+            it instead of floating cleanly above it (see rental-form-dialog). */}
+        <form onSubmit={handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col" noValidate>
+          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto">
           <div className="space-y-4">
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Informations personnelles
             </p>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="firstName">Prénom</Label>
+                <Label htmlFor="firstName" required>
+                  Prénom
+                </Label>
                 <Input id="firstName" {...register('firstName')} />
                 {errors.firstName && <p className="text-sm text-destructive">{errors.firstName.message}</p>}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="lastName">Nom</Label>
+                <Label htmlFor="lastName" required>
+                  Nom
+                </Label>
                 <Input id="lastName" {...register('lastName')} />
                 {errors.lastName && <p className="text-sm text-destructive">{errors.lastName.message}</p>}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="phone">Téléphone</Label>
+                <Label htmlFor="phone" required>
+                  Téléphone
+                </Label>
                 <Input id="phone" {...register('phone')} />
                 {errors.phone && <p className="text-sm text-destructive">{errors.phone.message}</p>}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email (optionnel)</Label>
+                <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
                   type="email"
@@ -280,7 +291,9 @@ export function ClientFormDialog({ open, onOpenChange, client, focusField }: Cli
                 </div>
               )}
               <div className="space-y-2">
-                <Label htmlFor="dateOfBirth">Date de naissance</Label>
+                <Label htmlFor="dateOfBirth" required>
+                  Date de naissance
+                </Label>
                 <Controller
                   name="dateOfBirth"
                   control={control}
@@ -329,7 +342,9 @@ export function ClientFormDialog({ open, onOpenChange, client, focusField }: Cli
             </p>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="address">Adresse</Label>
+                <Label htmlFor="address" required>
+                  Adresse
+                </Label>
                 <Input
                   id="address"
                   {...register('address', { setValueAs: (v) => (v === '' ? null : v) })}
@@ -337,7 +352,9 @@ export function ClientFormDialog({ open, onOpenChange, client, focusField }: Cli
                 {errors.address && <p className="text-sm text-destructive">{errors.address.message}</p>}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="nationalIdNumber">N° CIN</Label>
+                <Label htmlFor="nationalIdNumber" required>
+                  N° CIN
+                </Label>
                 <Input
                   id="nationalIdNumber"
                   {...register('nationalIdNumber', { setValueAs: (v) => (v === '' ? null : v) })}
@@ -357,14 +374,16 @@ export function ClientFormDialog({ open, onOpenChange, client, focusField }: Cli
             </p>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="drivingLicenseNumber">Numéro de permis</Label>
+                <Label htmlFor="drivingLicenseNumber" required>
+                  Numéro de permis
+                </Label>
                 <Input id="drivingLicenseNumber" {...register('drivingLicenseNumber')} />
                 {errors.drivingLicenseNumber && (
                   <p className="text-sm text-destructive">{errors.drivingLicenseNumber.message}</p>
                 )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="drivingLicenseExpiry">Date d'expiration (optionnel)</Label>
+                <Label htmlFor="drivingLicenseExpiry">Date d'expiration</Label>
                 <Controller
                   name="drivingLicenseExpiry"
                   control={control}
@@ -392,7 +411,7 @@ export function ClientFormDialog({ open, onOpenChange, client, focusField }: Cli
               <Separator />
               <div className="space-y-4">
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Documents (optionnel)
+                  Documents
                 </p>
 
                 {pendingDocuments.length > 0 && (
@@ -449,6 +468,7 @@ export function ClientFormDialog({ open, onOpenChange, client, focusField }: Cli
               </div>
             </>
           )}
+          </div>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

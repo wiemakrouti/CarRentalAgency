@@ -194,7 +194,7 @@ export function CarFormDialog({ open, onOpenChange, car, focusField }: CarFormDi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+      <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Modifier la voiture' : 'Ajouter une voiture'}</DialogTitle>
           <DialogDescription>
@@ -204,7 +204,12 @@ export function CarFormDialog({ open, onOpenChange, car, focusField }: CarFormDi
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
+        {/* The footer sits outside this scrolling div — a sticky footer
+            sharing the same scroll container as tall content gets visually
+            pulled up over whatever hasn't scrolled past it yet, overlapping
+            it instead of floating cleanly above it (see rental-form-dialog). */}
+        <form onSubmit={handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col" noValidate>
+          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto">
           <CarPhotoField
             existingImageUrl={existingImageUrl}
             file={photoFile}
@@ -220,36 +225,46 @@ export function CarFormDialog({ open, onOpenChange, car, focusField }: CarFormDi
             </p>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="licensePlate">Immatriculation</Label>
+                <Label htmlFor="licensePlate" required>
+                  Immatriculation
+                </Label>
                 <Input id="licensePlate" {...register('licensePlate')} />
                 {errors.licensePlate && (
                   <p className="text-sm text-destructive">{errors.licensePlate.message}</p>
                 )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="vin">VIN (optionnel)</Label>
+                <Label htmlFor="vin">VIN</Label>
                 <Input
                   id="vin"
                   {...register('vin', { setValueAs: (v) => (v === '' ? null : v) })}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="brand">Marque</Label>
+                <Label htmlFor="brand" required>
+                  Marque
+                </Label>
                 <Input id="brand" {...register('brand')} />
                 {errors.brand && <p className="text-sm text-destructive">{errors.brand.message}</p>}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="model">Modèle</Label>
+                <Label htmlFor="model" required>
+                  Modèle
+                </Label>
                 <Input id="model" {...register('model')} />
                 {errors.model && <p className="text-sm text-destructive">{errors.model.message}</p>}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="year">Année</Label>
+                <Label htmlFor="year" required>
+                  Année
+                </Label>
                 <Input id="year" type="number" {...register('year', { setValueAs: Number })} />
                 {errors.year && <p className="text-sm text-destructive">{errors.year.message}</p>}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="color">Couleur</Label>
+                <Label htmlFor="color" required>
+                  Couleur
+                </Label>
                 <Input id="color" {...register('color')} />
                 {errors.color && <p className="text-sm text-destructive">{errors.color.message}</p>}
               </div>
@@ -264,7 +279,7 @@ export function CarFormDialog({ open, onOpenChange, car, focusField }: CarFormDi
             </p>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Catégorie</Label>
+                <Label required>Catégorie</Label>
                 <Controller
                   name="category"
                   control={control}
@@ -288,7 +303,7 @@ export function CarFormDialog({ open, onOpenChange, car, focusField }: CarFormDi
                 )}
               </div>
               <div className="space-y-2">
-                <Label>Transmission</Label>
+                <Label required>Transmission</Label>
                 <Controller
                   name="transmission"
                   control={control}
@@ -312,7 +327,7 @@ export function CarFormDialog({ open, onOpenChange, car, focusField }: CarFormDi
                 )}
               </div>
               <div className="space-y-2">
-                <Label>Carburant</Label>
+                <Label required>Carburant</Label>
                 <Controller
                   name="fuelType"
                   control={control}
@@ -336,12 +351,16 @@ export function CarFormDialog({ open, onOpenChange, car, focusField }: CarFormDi
                 )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="seats">Places</Label>
+                <Label htmlFor="seats" required>
+                  Places
+                </Label>
                 <Input id="seats" type="number" {...register('seats', { setValueAs: Number })} />
                 {errors.seats && <p className="text-sm text-destructive">{errors.seats.message}</p>}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="mileage">Kilométrage</Label>
+                <Label htmlFor="mileage" required>
+                  Kilométrage
+                </Label>
                 <Input
                   id="mileage"
                   type="number"
@@ -352,7 +371,9 @@ export function CarFormDialog({ open, onOpenChange, car, focusField }: CarFormDi
                 )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="dailyRate">Tarif / jour (DT)</Label>
+                <Label htmlFor="dailyRate" required>
+                  Tarif / jour (DT)
+                </Label>
                 <Input
                   id="dailyRate"
                   type="number"
@@ -370,7 +391,7 @@ export function CarFormDialog({ open, onOpenChange, car, focusField }: CarFormDi
 
           <div className="space-y-4">
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Dates & documents (optionnel)
+              Dates & documents
             </p>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -448,6 +469,7 @@ export function CarFormDialog({ open, onOpenChange, car, focusField }: CarFormDi
                 />
               </div>
             </div>
+          </div>
           </div>
 
           <DialogFooter>

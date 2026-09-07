@@ -50,6 +50,16 @@ export type Rental = {
   payments: Payment[];
 };
 
+// Backing the Rentals page's KPI header — four independent counts, each
+// mirroring a distinction the notification bell already draws (ACTIVE vs.
+// overdue-return, RESERVED vs. overdue-pickup).
+export type RentalSummary = {
+  active: number;
+  overdueReturn: number;
+  overduePickup: number;
+  upcomingReservations: number;
+};
+
 export type RentalListParams = {
   page?: number;
   pageSize?: number;
@@ -58,10 +68,15 @@ export type RentalListParams = {
   carId?: string;
   clientId?: string;
   includeArchived?: boolean;
+  // Narrows RESERVED further than `status` alone can — see the backend
+  // validator's own comment. Set by the Rentals KPI header's "Départs en
+  // retard" (true) / "Réservations à venir" (false) cards.
+  pickupOverdue?: boolean;
 };
 
 export const rentalsApi = {
   list: (params: RentalListParams) => apiClient.getPaginated<Rental>(`/rentals${buildQueryString(params)}`),
+  getSummary: () => apiClient.get<RentalSummary>('/rentals/summary'),
   getById: (id: string) => apiClient.get<Rental>(`/rentals/${id}`),
   create: (input: CreateRentalInput) => apiClient.post<Rental>('/rentals', input),
   activate: (id: string, input: ActivateRentalInput) => apiClient.post<Rental>(`/rentals/${id}/activate`, input),

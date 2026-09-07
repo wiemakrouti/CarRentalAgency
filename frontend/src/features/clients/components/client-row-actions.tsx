@@ -22,7 +22,6 @@ function errorMessage(err: unknown, fallback: string): string {
 type ClientRowActionsProps = {
   client: Client;
   onEdit: (client: Client) => void;
-  onManageDocuments: (client: Client) => void;
   onViewProfile: (client: Client) => void;
   onOpenCalendar: (client: Client) => void;
 };
@@ -31,13 +30,10 @@ type ClientRowActionsProps = {
 // guarded hard-delete pattern as CarRowActions: a precheck query drives
 // whether the confirm dialog shows a destructive confirm or an explanatory
 // notice, instead of only finding out after submitting.
-export function ClientRowActions({
-  client,
-  onEdit,
-  onManageDocuments,
-  onViewProfile,
-  onOpenCalendar,
-}: ClientRowActionsProps) {
+// Document management isn't in this menu — it's reached via "Voir la
+// fiche" → the profile sheet's own "Gérer" button (client-profile-sheet.tsx),
+// not duplicated as a second entry point here.
+export function ClientRowActions({ client, onEdit, onViewProfile, onOpenCalendar }: ClientRowActionsProps) {
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const deleteMutation = useDeleteClientMutation();
   const deletableQuery = useClientDeletableQuery(client.id, confirmDeleteOpen);
@@ -69,7 +65,6 @@ export function ClientRowActions({
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => onViewProfile(client)}>Voir la fiche</DropdownMenuItem>
             <DropdownMenuItem onClick={() => onEdit(client)}>Modifier</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onManageDocuments(client)}>Gérer les documents</DropdownMenuItem>
             <DropdownMenuItem className="text-destructive" onClick={() => setConfirmDeleteOpen(true)}>
               Supprimer
             </DropdownMenuItem>

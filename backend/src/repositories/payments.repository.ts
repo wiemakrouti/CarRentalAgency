@@ -103,12 +103,4 @@ export const PaymentsRepository = {
       _sum: { amount: true },
     });
   },
-
-  async sumForStatus(status: PaymentStatus, range: { from: Date; to: Date }, db: Db = prisma) {
-    const result = await db.payment.aggregate({
-      where: notDeleted({ status, createdAt: { gte: range.from, lte: range.to } }),
-      _sum: { amount: true },
-    });
-    return result._sum.amount ?? 0;
-  },
 };

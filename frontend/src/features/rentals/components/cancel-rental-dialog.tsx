@@ -1,11 +1,8 @@
-import { useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Wallet } from 'lucide-react';
 
 import { ApiClientError } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -29,17 +26,22 @@ function errorMessage(err: unknown, fallback: string): string {
 }
 
 export function CancelRentalDialog({ open, onOpenChange, rental }: CancelRentalDialogProps) {
-  const [reason, setReason] = useState('');
   const cancelMutation = useCancelRentalMutation();
+
+  // A RESERVED rental can already carry a completed payment (a deposit
+  // collected in advance, say) even though it's never been activated —
+  // RentalsService.cancel() doesn't touch payments at all, so nothing gets
+  // refunded automatically. Worth surfacing here, the same "show the real
+  // financial state" instinct as Clôturer/Activer/Prolonger, even though
+  // there's no total to break down for a cancellation itself.
+  const paidAmount = rental.payments
+    .filter((p) => p.status === 'COMPLETED')
+    .reduce((sum, p) => sum + Number(p.amount), 0);
 
   async function handleConfirm() {
     try {
-      await cancelMutation.mutateAsync({
-        id: rental.id,
-        input: { cancelledReason: reason.trim() === '' ? undefined : reason.trim() },
-      });
+      await cancelMutation.mutateAsync({ id: rental.id, input: {} });
       toast.success('Location annulée.');
-      setReason('');
       onOpenChange(false);
     } catch (err) {
       toast.error(errorMessage(err, "Erreur lors de l'annulation."));
@@ -56,15 +58,16 @@ export function CancelRentalDialog({ open, onOpenChange, rental }: CancelRentalD
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-2">
-          <Label htmlFor="cancelledReason">Motif (optionnel)</Label>
-          <Textarea
-            id="cancelledReason"
-            rows={3}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-          />
-        </div>
+        {paidAmount > 0 && (
+          <div className="flex items-start gap-2.5 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+            <Wallet className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <p>
+              Ce client a déjà réglé{' '}
+              <span className="font-mono font-semibold tabular-nums">{paidAmount.toLocaleString('fr-TN')} DT</span>{' '}
+              pour cette réservation — l&apos;annulation ne rembourse rien automatiquement.
+            </p>
+          </div>
+        )}
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
