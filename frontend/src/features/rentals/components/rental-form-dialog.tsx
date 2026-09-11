@@ -365,9 +365,6 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
                       <Label htmlFor="collectDepositNow" className="cursor-pointer">
                         Encaissée maintenant
                       </Label>
-                      <p className="text-sm text-muted-foreground">
-                        {Number(depositAmount).toLocaleString('fr-TN')} DT de caution reçus à la remise des clés.
-                      </p>
                     </div>
                     <Switch
                       id="collectDepositNow"
@@ -443,11 +440,6 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
                     </Select>
                   </div>
                 </div>
-                {collectDepositNow && (
-                  <p className="text-sm text-muted-foreground">
-                    Un seul paiement peut être encaissé à la création — la caution est déjà sélectionnée ci-dessus.
-                  </p>
-                )}
               </div>
             )}
           </div>

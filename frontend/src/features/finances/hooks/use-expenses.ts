@@ -8,10 +8,11 @@ function invalidateExpenseEffects(queryClient: ReturnType<typeof useQueryClient>
   queryClient.invalidateQueries({ queryKey: financeSummaryKeys.all });
 }
 
-export function useExpensesQuery(params: ExpenseListParams) {
+export function useExpensesQuery(params: ExpenseListParams, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: expenseKeys.list(params),
     queryFn: () => financesApi.listExpenses(params),
+    enabled: options?.enabled,
   });
 }
 

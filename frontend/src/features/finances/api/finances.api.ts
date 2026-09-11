@@ -59,10 +59,25 @@ export type FinanceSummary = {
   // DEPOSIT/DEPOSIT_REFUND excluded — a caution is a refundable hold, not
   // agency income (see deposits below, tracked separately).
   revenue: { total: number; byType: Record<RevenuePaymentType, number> };
+  // All-time totals, NOT scoped to `period` — the Cautions card ignores the
+  // Résumé date filter (see FinanceSummaryService.getSummary).
   deposits: { collected: number; refunded: number };
   expenses: { total: number; byCategory: Record<ExpenseCategory, number> };
   pendingTotal: number;
   net: number;
+};
+
+// One row per rental holding a collected caution, refunded or not — see
+// FinanceSummaryService.listDeposits (backend). `refundedAt` is null while
+// still outstanding.
+export type Deposit = {
+  rentalId: string;
+  rentalNumber: string;
+  car: { brand: string; model: string };
+  client: { firstName: string; lastName: string };
+  amount: number;
+  collectedAt: string | null;
+  refundedAt: string | null;
 };
 
 export type PaymentListParams = {
@@ -73,6 +88,8 @@ export type PaymentListParams = {
   type?: string;
   status?: string;
   method?: string;
+  from?: string;
+  to?: string;
   includeArchived?: boolean;
 };
 
@@ -81,10 +98,20 @@ export type ExpenseListParams = {
   pageSize?: number;
   search?: string;
   category?: string;
+  subcategory?: string;
   carId?: string;
   from?: string;
   to?: string;
   includeArchived?: boolean;
+};
+
+export type DepositListParams = {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: 'OUTSTANDING' | 'REFUNDED';
+  from?: string;
+  to?: string;
 };
 
 export const financesApi = {
@@ -115,4 +142,6 @@ export const financesApi = {
 
   getSummary: (from: string, to: string) =>
     apiClient.get<FinanceSummary>(`/finances/summary${buildQueryString({ from, to })}`),
+  listDeposits: (params: DepositListParams) =>
+    apiClient.getPaginated<Deposit>(`/finances/deposits${buildQueryString(params)}`),
 };

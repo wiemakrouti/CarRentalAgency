@@ -33,5 +33,5 @@ export const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   INSURANCE: 'Assurance',
   REPAIR: 'Réparation',
   REGISTRATION: 'Immatriculation',
-  OTHER: 'Autre',
+  OTHER: 'Personnalisé',
 };

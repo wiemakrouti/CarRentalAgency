@@ -74,7 +74,7 @@ export function ClientDocumentManagerDialog({ open, onOpenChange, clientId }: Cl
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col">
           <DialogHeader>
             <DialogTitle>
               Documents{client ? ` — ${client.firstName} ${client.lastName}` : ''}
@@ -85,51 +85,57 @@ export function ClientDocumentManagerDialog({ open, onOpenChange, clientId }: Cl
           {isLoading && <LoadingState message="Chargement des documents..." />}
 
           {client && (
-            <div className="space-y-4">
-              {client.documents.length === 0 ? (
-                <EmptyState
-                  icon={FileX}
-                  title="Aucun document"
-                  description="Ajoutez une pièce d'identité, un permis ou un passeport."
-                />
-              ) : (
-                <div className="grid grid-cols-3 gap-3">
-                  {client.documents.map((document) => (
-                    <div key={document.id} className="relative overflow-hidden rounded-lg border border-border">
-                      <img src={document.url} alt="" className="h-32 w-full object-cover" />
-                      <div className="absolute inset-x-0 bottom-0 bg-background/90 px-2 py-1 text-xs font-medium">
-                        {CLIENT_DOCUMENT_TYPE_LABELS[document.type]}
+            <div className="flex min-h-0 flex-1 flex-col gap-4">
+              {/* Its own scroll area, not the "Ajouter" control below — a
+                  client can accumulate several documents over time, and the
+                  upload control should stay reachable without scrolling past
+                  the whole gallery to find it. */}
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                {client.documents.length === 0 ? (
+                  <EmptyState
+                    icon={FileX}
+                    title="Aucun document"
+                    description="Ajoutez une pièce d'identité, un permis ou un passeport."
+                  />
+                ) : (
+                  <div className="grid grid-cols-3 gap-3">
+                    {client.documents.map((document) => (
+                      <div key={document.id} className="relative overflow-hidden rounded-lg border border-border">
+                        <img src={document.url} alt="" className="h-32 w-full object-cover" />
+                        <div className="absolute inset-x-0 bottom-0 bg-background/90 px-2 py-1 text-xs font-medium">
+                          {CLIENT_DOCUMENT_TYPE_LABELS[document.type]}
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="secondary"
+                              className="absolute right-2 top-2 h-7 w-7"
+                              aria-label="Actions sur le document"
+                            >
+                              <MoreHorizontal className="h-3.5 w-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem asChild>
+                              <a href={document.url} target="_blank" rel="noreferrer">
+                                <ExternalLink className="h-4 w-4" />
+                                Voir
+                              </a>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => setDocumentToDelete(document)}
+                            >
+                              Supprimer
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            size="icon"
-                            variant="secondary"
-                            className="absolute right-2 top-2 h-7 w-7"
-                            aria-label="Actions sur le document"
-                          >
-                            <MoreHorizontal className="h-3.5 w-3.5" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem asChild>
-                            <a href={document.url} target="_blank" rel="noreferrer">
-                              <ExternalLink className="h-4 w-4" />
-                              Voir
-                            </a>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onClick={() => setDocumentToDelete(document)}
-                          >
-                            Supprimer
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )}
+              </div>
 
               <div className="flex flex-wrap items-end gap-3 rounded-lg border border-border p-3">
                 <div className="space-y-1.5">

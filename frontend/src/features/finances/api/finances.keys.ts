@@ -1,4 +1,4 @@
-import type { ExpenseListParams, PaymentListParams } from './finances.api';
+import type { DepositListParams, ExpenseListParams, PaymentListParams } from './finances.api';
 
 export const paymentKeys = {
   all: ['payments'] as const,
@@ -19,4 +19,10 @@ export const expenseKeys = {
 export const financeSummaryKeys = {
   all: ['finance-summary'] as const,
   range: (from: string, to: string) => [...financeSummaryKeys.all, from, to] as const,
+};
+
+export const depositsKeys = {
+  all: ['deposits'] as const,
+  lists: () => [...depositsKeys.all, 'list'] as const,
+  list: (params: DepositListParams) => [...depositsKeys.lists(), params] as const,
 };

@@ -29,18 +29,37 @@ export const updatePaymentSchema = z.object({
 
 export type UpdatePaymentInput = z.infer<typeof updatePaymentSchema>;
 
-export const createExpenseSchema = z.object({
+const baseExpenseSchema = z.object({
   category: z.enum(EXPENSE_CATEGORIES),
   amount: z.coerce.number().positive('Le montant doit être positif'),
   carId: z.string().uuid().nullable().optional(),
-  description: z.string().trim().min(1, 'La description est requise'),
+  description: z.string().trim().default(''),
   date: z.coerce.date(),
   receiptUrl: z.string().trim().url("L'URL du justificatif est invalide").nullable().optional(),
 });
 
+// "Autre" is a catch-all category — unlike Carburant/Assurance/etc., its own
+// label says nothing about what was actually purchased, so it's the one case
+// where a description earns its keep. Every other category stays optional
+// (an amount + car link is already self-explanatory there).
+function requireDescriptionForOther(
+  data: { category?: (typeof EXPENSE_CATEGORIES)[number]; description?: string },
+  ctx: z.RefinementCtx,
+) {
+  if (data.category === 'OTHER' && !data.description?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['description'],
+      message: 'Précisez la nature de cette dépense.',
+    });
+  }
+}
+
+export const createExpenseSchema = baseExpenseSchema.superRefine(requireDescriptionForOther);
+
 export type CreateExpenseInput = z.infer<typeof createExpenseSchema>;
 
-export const updateExpenseSchema = createExpenseSchema.partial();
+export const updateExpenseSchema = baseExpenseSchema.partial().superRefine(requireDescriptionForOther);
 
 export type UpdateExpenseInput = z.infer<typeof updateExpenseSchema>;
 

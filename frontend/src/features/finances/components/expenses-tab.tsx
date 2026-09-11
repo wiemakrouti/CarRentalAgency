@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { flexRender, getCoreRowModel, useReactTable, createColumnHelper } from '@tanstack/react-table';
-import { EXPENSE_CATEGORIES } from '@car-rental/shared';
 import { Plus, Receipt } from 'lucide-react';
 
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
@@ -11,16 +11,15 @@ import { SearchBar } from '@/components/common/search-bar';
 import { FilterBar } from '@/components/common/filter-bar';
 import { Pagination } from '@/components/common/pagination';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 import { useExpensesQuery } from '../hooks/use-expenses';
 import type { Expense } from '../api/finances.api';
 import { ExpenseRowActions } from './expense-row-actions';
 import { ExpenseFormDialog } from './expense-form-dialog';
+import { ExpenseFiltersPopover, type ExpenseFilters } from './expense-filters-popover';
 import { EXPENSE_CATEGORY_LABELS } from '../lib/finance-labels';
 
-const ALL_VALUE = '__all__';
 const PAGE_SIZE = 20;
 
 function formatDate(iso: string): string {
@@ -29,14 +28,27 @@ function formatDate(iso: string): string {
 
 const columnHelper = createColumnHelper<Expense>();
 
+// Actions only needs room for the "..." button, and Montant is a short
+// right-aligned number that doesn't need a full share either — Date,
+// Catégorie and Voiture split what's left between them equally.
+function columnWidthClass(id: string): string {
+  if (id === 'actions') return 'w-[8%]';
+  if (id === 'amount') return 'w-[17%]';
+  return 'w-[25%]';
+}
+
 function buildColumns(onEdit: (expense: Expense) => void) {
   return [
     columnHelper.accessor('date', { header: 'Date', cell: ({ getValue }) => formatDate(getValue()) }),
     columnHelper.accessor('category', {
       header: 'Catégorie',
-      cell: ({ getValue }) => EXPENSE_CATEGORY_LABELS[getValue()],
+      // "Personnalisé" (OTHER) has no meaningful label of its own — show the
+      // name the admin typed for it (stored in `description`) instead.
+      cell: ({ row }) =>
+        row.original.category === 'OTHER'
+          ? row.original.description || EXPENSE_CATEGORY_LABELS.OTHER
+          : EXPENSE_CATEGORY_LABELS[row.original.category],
     }),
-    columnHelper.accessor('description', { header: 'Description' }),
     columnHelper.accessor((row) => (row.car ? `${row.car.brand} ${row.car.model}` : '—'), {
       id: 'car',
       header: 'Voiture',
@@ -54,9 +66,12 @@ function buildColumns(onEdit: (expense: Expense) => void) {
 }
 
 export function ExpensesTab() {
+  const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
-  const [category, setCategory] = useState<string | undefined>(undefined);
+  // Category + date range in one object, applied together from the
+  // "Filtrer" popover.
+  const [filters, setFilters] = useState<ExpenseFilters>({});
   const [formOpen, setFormOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | undefined>(undefined);
 
@@ -66,14 +81,25 @@ export function ExpensesTab() {
     page,
     pageSize: PAGE_SIZE,
     search: debouncedSearch || undefined,
-    category,
+    category: filters.category,
+    from: filters.from,
+    to: filters.to,
   });
+
+  function applyFilters(next: ExpenseFilters) {
+    setFilters(next);
+    setPage(1);
+  }
 
   function clearAllFilters() {
     setSearchInput('');
-    setCategory(undefined);
+    setFilters({});
     setPage(1);
   }
+
+  const activeFilterCount = [filters.category, filters.from || filters.to].filter(
+    Boolean,
+  ).length;
 
   function openCreateForm() {
     setEditingExpense(undefined);
@@ -106,26 +132,8 @@ export function ExpensesTab() {
             placeholder="Rechercher par description..."
             className="w-72"
           />
-          <FilterBar activeCount={category ? 1 : 0} onClearAll={clearAllFilters}>
-            <Select
-              value={category ?? ALL_VALUE}
-              onValueChange={(value) => {
-                setCategory(value === ALL_VALUE ? undefined : value);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="w-44">
-                <SelectValue placeholder="Catégorie" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_VALUE}>Toutes les catégories</SelectItem>
-                {EXPENSE_CATEGORIES.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {EXPENSE_CATEGORY_LABELS[c]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <FilterBar activeCount={activeFilterCount} onClearAll={clearAllFilters}>
+            <ExpenseFiltersPopover value={filters} onApply={applyFilters} activeCount={activeFilterCount} />
           </FilterBar>
         </div>
         <Button onClick={openCreateForm}>
@@ -149,14 +157,17 @@ export function ExpensesTab() {
       {!isLoading && !isError && data && data.items.length > 0 && (
         <>
           <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-elevation">
-            <Table>
+            {/* table-fixed + explicit widths so no column stretches to fit
+                its content — Date/Catégorie/Voiture/Montant share the row
+                evenly, Actions stays just wide enough for the "..." button. */}
+            <Table className="table-fixed">
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (
                   <TableRow key={headerGroup.id}>
                     {headerGroup.headers.map((header) => (
                       <TableHead
                         key={header.id}
-                        className={header.column.id === 'amount' ? 'text-right' : undefined}
+                        className={`${columnWidthClass(header.column.id)} truncate${header.column.id === 'amount' ? ' text-right' : ''}`}
                       >
                         {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                       </TableHead>
@@ -165,18 +176,29 @@ export function ExpensesTab() {
                 ))}
               </TableHeader>
               <TableBody>
-                {table.getRowModel().rows.map((row) => (
-                  <TableRow key={row.id}>
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell
-                        key={cell.id}
-                        className={cell.column.id === 'amount' ? 'text-right tabular-nums' : undefined}
-                      >
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))}
+                {table.getRowModel().rows.map((row) => {
+                  // Only a car-linked expense has a "concerned module" to
+                  // jump to — a general expense (no car) has nowhere to go,
+                  // so its row stays inert rather than navigating nowhere.
+                  const carId = row.original.carId;
+                  return (
+                    <TableRow
+                      key={row.id}
+                      className={carId ? 'cursor-pointer' : undefined}
+                      onClick={carId ? () => navigate(`/cars?openId=${carId}`) : undefined}
+                    >
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell
+                          key={cell.id}
+                          className={`${columnWidthClass(cell.column.id)} truncate${cell.column.id === 'amount' ? ' text-right tabular-nums' : ''}`}
+                          onClick={cell.column.id === 'actions' ? (e) => e.stopPropagation() : undefined}
+                        >
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>

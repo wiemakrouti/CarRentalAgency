@@ -89,7 +89,7 @@ export function ActivateRentalDialog({ open, onOpenChange, rental }: ActivateRen
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="flex max-h-[85vh] max-w-md flex-col">
         <DialogHeader>
           <DialogTitle>Activer la location</DialogTitle>
           <DialogDescription>
@@ -97,48 +97,79 @@ export function ActivateRentalDialog({ open, onOpenChange, rental }: ActivateRen
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-          <div className="space-y-2">
-            <Label htmlFor="mileageAtPickup" required>
-              Kilométrage au départ
-            </Label>
-            <Input
-              id="mileageAtPickup"
-              type="number"
-              {...register('mileageAtPickup', { setValueAs: Number })}
-            />
-            {errors.mileageAtPickup && (
-              <p className="text-sm text-destructive">{errors.mileageAtPickup.message}</p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="fuelLevelAtPickup" required>
-              Niveau de carburant
-            </Label>
-            <Input
-              id="fuelLevelAtPickup"
-              placeholder="Ex. Plein, 3/4, Moitié..."
-              {...register('fuelLevelAtPickup')}
-            />
-            {errors.fuelLevelAtPickup && (
-              <p className="text-sm text-destructive">{errors.fuelLevelAtPickup.message}</p>
-            )}
-          </div>
+        <form onSubmit={handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col" noValidate>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+            <div className="space-y-2">
+              <Label htmlFor="mileageAtPickup" required>
+                Kilométrage au départ
+              </Label>
+              <Input
+                id="mileageAtPickup"
+                type="number"
+                {...register('mileageAtPickup', { setValueAs: Number })}
+              />
+              {errors.mileageAtPickup && (
+                <p className="text-sm text-destructive">{errors.mileageAtPickup.message}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="fuelLevelAtPickup" required>
+                Niveau de carburant
+              </Label>
+              <Input
+                id="fuelLevelAtPickup"
+                placeholder="Ex. Plein, 3/4, Moitié..."
+                {...register('fuelLevelAtPickup')}
+              />
+              {errors.fuelLevelAtPickup && (
+                <p className="text-sm text-destructive">{errors.fuelLevelAtPickup.message}</p>
+              )}
+            </div>
 
-          {/* Same receipt-style breakdown language as ReturnRentalDialog —
-              only shows an adjustment when the pickup is actually late or
-              early, so an on-time activation stays a single plain line. */}
-          <div className="overflow-hidden rounded-xl border border-border">
-            <div className="divide-y divide-border">
-              {isDateAdjusted ? (
-                <>
-                  <div className="flex items-center justify-between gap-3 px-4 py-2.5 opacity-60">
+            {/* Same receipt-style breakdown language as ReturnRentalDialog —
+                only shows an adjustment when the pickup is actually late or
+                early, so an on-time activation stays a single plain line. */}
+            <div className="overflow-hidden rounded-xl border border-border">
+              <div className="divide-y divide-border">
+                {isDateAdjusted ? (
+                  <>
+                    <div className="flex items-center justify-between gap-3 px-4 py-2.5 opacity-60">
+                      <div className="flex items-center gap-2 text-sm text-foreground">
+                        <CarFront className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        Réservé initialement
+                      </div>
+                      <div className="text-right">
+                        <p className="font-mono text-sm font-semibold tabular-nums text-muted-foreground line-through">
+                          {originalTotal.toLocaleString('fr-TN')} DT
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {originalNights} j × {dailyRate.toLocaleString('fr-TN')} DT
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 bg-primary/5 px-4 py-2.5">
+                      <div className="flex items-center gap-2 text-sm font-medium text-primary">
+                        <Clock className="h-3.5 w-3.5 shrink-0" />
+                        Ajusté ({isLatePickup ? `${lateDays} j de retard` : `${earlyDays} j d'avance`})
+                      </div>
+                      <div className="text-right">
+                        <p className="font-mono text-sm font-semibold tabular-nums text-primary">
+                          {adjustedTotal.toLocaleString('fr-TN')} DT
+                        </p>
+                        <p className="text-[11px] text-primary/75">
+                          {adjustedNights} j × {dailyRate.toLocaleString('fr-TN')} DT
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                     <div className="flex items-center gap-2 text-sm text-foreground">
                       <CarFront className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      Réservé initialement
+                      Location
                     </div>
                     <div className="text-right">
-                      <p className="font-mono text-sm font-semibold tabular-nums text-muted-foreground line-through">
+                      <p className="font-mono text-sm font-semibold tabular-nums text-foreground">
                         {originalTotal.toLocaleString('fr-TN')} DT
                       </p>
                       <p className="text-[11px] text-muted-foreground">
@@ -146,56 +177,27 @@ export function ActivateRentalDialog({ open, onOpenChange, rental }: ActivateRen
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center justify-between gap-3 bg-primary/5 px-4 py-2.5">
-                    <div className="flex items-center gap-2 text-sm font-medium text-primary">
-                      <Clock className="h-3.5 w-3.5 shrink-0" />
-                      Ajusté ({isLatePickup ? `${lateDays} j de retard` : `${earlyDays} j d'avance`})
-                    </div>
-                    <div className="text-right">
-                      <p className="font-mono text-sm font-semibold tabular-nums text-primary">
-                        {adjustedTotal.toLocaleString('fr-TN')} DT
-                      </p>
-                      <p className="text-[11px] text-primary/75">
-                        {adjustedNights} j × {dailyRate.toLocaleString('fr-TN')} DT
-                      </p>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="flex items-center justify-between gap-3 px-4 py-2.5">
-                  <div className="flex items-center gap-2 text-sm text-foreground">
-                    <CarFront className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    Location
-                  </div>
-                  <div className="text-right">
-                    <p className="font-mono text-sm font-semibold tabular-nums text-foreground">
-                      {originalTotal.toLocaleString('fr-TN')} DT
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {originalNights} j × {dailyRate.toLocaleString('fr-TN')} DT
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
 
-            <div
-              className={cn(
-                'flex items-center justify-between gap-3 border-t border-border px-4 py-3',
-                isDateAdjusted ? 'bg-primary/10' : 'bg-muted',
-              )}
-            >
-              <span className="text-sm font-bold text-foreground">
-                {isDateAdjusted ? 'Total ajusté' : 'Total'}
-              </span>
-              <span
+              <div
                 className={cn(
-                  'font-mono text-lg font-extrabold tabular-nums',
-                  isDateAdjusted ? 'text-primary' : 'text-foreground',
+                  'flex items-center justify-between gap-3 border-t border-border px-4 py-3',
+                  isDateAdjusted ? 'bg-primary/10' : 'bg-muted',
                 )}
               >
-                {adjustedTotal.toLocaleString('fr-TN')} DT
-              </span>
+                <span className="text-sm font-bold text-foreground">
+                  {isDateAdjusted ? 'Total ajusté' : 'Total'}
+                </span>
+                <span
+                  className={cn(
+                    'font-mono text-lg font-extrabold tabular-nums',
+                    isDateAdjusted ? 'text-primary' : 'text-foreground',
+                  )}
+                >
+                  {adjustedTotal.toLocaleString('fr-TN')} DT
+                </span>
+              </div>
             </div>
           </div>
 

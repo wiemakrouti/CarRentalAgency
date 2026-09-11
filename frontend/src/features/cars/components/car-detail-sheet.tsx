@@ -1,7 +1,10 @@
 import { useState } from 'react';
-import { CalendarDays, ChevronRight, ImageOff, Images, RefreshCw } from 'lucide-react';
+import { CalendarDays, ChevronRight, ImageOff, Images, Plus, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { MANUALLY_SETTABLE_CAR_STATUSES } from '@car-rental/shared';
+import { ExpenseFormDialog } from '@/features/finances/components/expense-form-dialog';
+import { useExpensesQuery } from '@/features/finances/hooks/use-expenses';
+import { EXPENSE_CATEGORY_LABELS } from '@/features/finances/lib/finance-labels';
 import {
   Sheet,
   SheetContent,
@@ -79,8 +82,17 @@ export function CarDetailSheet({
   onOpenCalendar,
 }: CarDetailSheetProps) {
   const [rentedNoticeOpen, setRentedNoticeOpen] = useState(false);
+  const [expenseFormOpen, setExpenseFormOpen] = useState(false);
   const { data: car, isLoading } = useCarQuery(carId ?? '');
   const { data: stats } = useCarStatsQuery(carId);
+  // Most recent first (the backend's own default order) — a compact side
+  // panel, not the full Finances ledger, so 5 is plenty; the "au total"
+  // count next to the heading covers the rest without a car filter/deep
+  // link Finances' own Dépenses tab doesn't support yet.
+  const { data: carExpenses } = useExpensesQuery(
+    { carId: carId ?? '', pageSize: 5 },
+    { enabled: Boolean(carId) },
+  );
   const updateStatusMutation = useUpdateCarStatusMutation();
 
   const primaryImage = car?.images.find((img) => img.isPrimary) ?? car?.images[0];
@@ -277,6 +289,55 @@ export function CarDetailSheet({
 
             <Separator className="my-4" />
 
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Dépenses
+                </p>
+                <div className="flex items-center gap-2">
+                  {carExpenses && carExpenses.meta.total > carExpenses.items.length && (
+                    <span className="text-xs text-muted-foreground">{carExpenses.meta.total} au total</span>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1 text-xs"
+                    onClick={() => setExpenseFormOpen(true)}
+                  >
+                    <Plus className="h-3 w-3" />
+                    Ajouter
+                  </Button>
+                </div>
+              </div>
+              {!carExpenses ? (
+                <Skeleton className="h-16 w-full" />
+              ) : carExpenses.items.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
+                  Aucune dépense enregistrée pour cette voiture.
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  {carExpenses.items.map((expense) => (
+                    <li
+                      key={expense.id}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-border p-2.5 text-sm"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium">{EXPENSE_CATEGORY_LABELS[expense.category]}</p>
+                        <p className="truncate text-xs text-muted-foreground">{expense.description}</p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="font-semibold text-foreground">{formatAmount(expense.amount)}</p>
+                        <p className="text-xs text-muted-foreground">{formatDate(expense.date)}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <Separator className="my-4" />
+
             <Button variant="outline" className="w-full justify-between" onClick={() => onOpenCalendar(car)}>
               <span className="flex items-center gap-2">
                 <CalendarDays className="h-4 w-4" />
@@ -293,6 +354,14 @@ export function CarDetailSheet({
         onOpenChange={setRentedNoticeOpen}
         carId={carId ?? ''}
       />
+
+      {/* Mounted only while open, not toggled via a persistent instance —
+          guarantees defaultCarId is always this sheet's current car, not a
+          stale value left over from react-hook-form's own defaultValues
+          being fixed at first mount. */}
+      {expenseFormOpen && carId && (
+        <ExpenseFormDialog open={expenseFormOpen} onOpenChange={setExpenseFormOpen} defaultCarId={carId} />
+      )}
     </Sheet>
   );
 }

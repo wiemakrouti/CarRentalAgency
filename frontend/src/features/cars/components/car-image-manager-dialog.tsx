@@ -84,7 +84,7 @@ export function CarImageManagerDialog({ open, onOpenChange, carId }: CarImageMan
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col">
           <DialogHeader>
             <DialogTitle>Images{car ? ` — ${car.brand} ${car.model}` : ''}</DialogTitle>
             <DialogDescription>
@@ -95,73 +95,81 @@ export function CarImageManagerDialog({ open, onOpenChange, carId }: CarImageMan
           {isLoading && <LoadingState message="Chargement des images..." />}
 
           {car && (
-            <div className="space-y-4">
-              {car.images.length === 0 ? (
-                <EmptyState
-                  icon={ImageOff}
-                  title="Aucune image"
-                  description="Ajoutez une première photo de ce véhicule."
-                />
-              ) : (
-                <div className="grid grid-cols-3 gap-3">
-                  {car.images.map((image) => (
-                    <div
-                      key={image.id}
-                      className="relative overflow-hidden rounded-lg border border-border"
-                    >
-                      <img src={image.url} alt="" className="h-32 w-full object-cover" />
-                      {image.isPrimary && (
-                        <Badge className="absolute left-2 top-2">Principale</Badge>
-                      )}
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            size="icon"
-                            variant="secondary"
-                            className="absolute right-2 top-2 h-7 w-7"
-                            aria-label="Actions sur l'image"
-                          >
-                            <MoreHorizontal className="h-3.5 w-3.5" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {!image.isPrimary && (
-                            <DropdownMenuItem onClick={() => handleSetPrimary(image)}>
-                              Définir comme principale
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onClick={() => setImageToDelete(image)}
-                          >
-                            Supprimer
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="hidden"
-                onChange={handleFileSelected}
-              />
-              <Button
-                variant="outline"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadMutation.isPending}
-              >
-                {uploadMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+            <div className="flex min-h-0 flex-1 flex-col gap-4">
+              {/* Its own scroll area, not the "Ajouter" button below — a
+                  fleet car can pick up a dozen photos over time, and the
+                  upload control should stay reachable without scrolling
+                  past the whole gallery to find it. */}
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                {car.images.length === 0 ? (
+                  <EmptyState
+                    icon={ImageOff}
+                    title="Aucune image"
+                    description="Ajoutez une première photo de ce véhicule."
+                  />
                 ) : (
-                  <Upload className="h-4 w-4" />
+                  <div className="grid grid-cols-3 gap-3">
+                    {car.images.map((image) => (
+                      <div
+                        key={image.id}
+                        className="relative overflow-hidden rounded-lg border border-border"
+                      >
+                        <img src={image.url} alt="" className="h-32 w-full object-cover" />
+                        {image.isPrimary && (
+                          <Badge className="absolute left-2 top-2">Principale</Badge>
+                        )}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="secondary"
+                              className="absolute right-2 top-2 h-7 w-7"
+                              aria-label="Actions sur l'image"
+                            >
+                              <MoreHorizontal className="h-3.5 w-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {!image.isPrimary && (
+                              <DropdownMenuItem onClick={() => handleSetPrimary(image)}>
+                                Définir comme principale
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => setImageToDelete(image)}
+                            >
+                              Supprimer
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    ))}
+                  </div>
                 )}
-                Ajouter une image
-              </Button>
+              </div>
+
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={handleFileSelected}
+                />
+                <Button
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadMutation.isPending}
+                >
+                  {uploadMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4" />
+                  )}
+                  Ajouter une image
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>

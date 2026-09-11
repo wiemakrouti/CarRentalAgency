@@ -1,7 +1,7 @@
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
-import { AlertTriangle, CarFront, CheckCircle2, Loader2 } from 'lucide-react';
+import { AlertTriangle, CarFront, CheckCircle2, Loader2, Wrench } from 'lucide-react';
 import {
   MANUALLY_SETTABLE_CAR_STATUSES,
   returnRentalSchema,
@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -55,6 +56,7 @@ export function ReturnRentalDialog({ open, onOpenChange, rental }: ReturnRentalD
     control,
     handleSubmit,
     reset,
+    watch,
     formState: { errors },
   } = useForm<ReturnRentalInput>({
     resolver: zodResolver(returnRentalSchema),
@@ -90,7 +92,11 @@ export function ReturnRentalDialog({ open, onOpenChange, rental }: ReturnRentalD
   // multiplies back out to the exact totalAmount shown, extensions included.
   const rentalAmount = Number(rental.totalAmount);
   const rentalNights = Math.round(rentalAmount / dailyRate);
-  const estimatedTotal = rentalAmount + estimatedLateFee;
+  // Live-watched, not just read at submit — the receipt breakdown below
+  // updates as the admin types the damage amount, same as the late-fee line
+  // (computed) does automatically from the return date.
+  const damageFeeAmount = Number(watch('damageFeeAmount')) || 0;
+  const estimatedTotal = rentalAmount + estimatedLateFee + damageFeeAmount;
 
   async function onSubmit(values: ReturnRentalInput) {
     try {
@@ -105,7 +111,7 @@ export function ReturnRentalDialog({ open, onOpenChange, rental }: ReturnRentalD
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="flex max-h-[85vh] max-w-md flex-col">
         <DialogHeader>
           <DialogTitle>Clôturer la location</DialogTitle>
           <DialogDescription>
@@ -113,125 +119,178 @@ export function ReturnRentalDialog({ open, onOpenChange, rental }: ReturnRentalD
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="mileageAtReturn" required>
-                Kilométrage au retour
-              </Label>
-              <Input
-                id="mileageAtReturn"
-                type="number"
-                {...register('mileageAtReturn', { setValueAs: Number })}
-              />
-              {errors.mileageAtReturn && (
-                <p className="text-sm text-destructive">{errors.mileageAtReturn.message}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="fuelLevelAtReturn" required>
-                Niveau de carburant
-              </Label>
-              <Input
-                id="fuelLevelAtReturn"
-                placeholder="Ex. Plein, 3/4, Moitié..."
-                {...register('fuelLevelAtReturn')}
-              />
-              {errors.fuelLevelAtReturn && (
-                <p className="text-sm text-destructive">{errors.fuelLevelAtReturn.message}</p>
-              )}
-            </div>
-          </div>
-
-          <Separator />
-
-          <div className="space-y-2">
-            <Label>État de la voiture après retour</Label>
-            <Controller
-              name="carStatusAfterReturn"
-              control={control}
-              render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MANUALLY_SETTABLE_CAR_STATUSES.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {CAR_STATUS_LABELS[s]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            />
-            <p className="text-xs text-muted-foreground">
-              Par défaut la voiture redevient disponible. Choisissez Maintenance ou Hors service si
-              elle ne peut pas repartir immédiatement (panne, dommage à réparer...).
-            </p>
-          </div>
-
-          <Separator />
-
-          {/* Receipt-style breakdown — same dotted-ledger language as the
-              rental detail sheet's own Paiements list, so "what will this
-              closing cost" reads the same way everywhere in the app rather
-              than as a one-off paragraph of text. */}
-          <div className="overflow-hidden rounded-xl border border-border">
-            <div className="divide-y divide-border">
-              <div className="flex items-center justify-between gap-3 px-4 py-2.5">
-                <div className="flex items-center gap-2 text-sm text-foreground">
-                  <CarFront className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  Location
-                </div>
-                <div className="text-right">
-                  <p className="font-mono text-sm font-semibold tabular-nums text-foreground">
-                    {rentalAmount.toLocaleString('fr-TN')} DT
-                  </p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {rentalNights} j × {dailyRate.toLocaleString('fr-TN')} DT
-                  </p>
-                </div>
+        {/* The footer sits outside this scrolling div — a sticky footer
+            sharing the same scroll container as tall content gets visually
+            pulled up over whatever hasn't scrolled past it yet, overlapping
+            it instead of floating cleanly above it (see rental-form-dialog). */}
+        <form onSubmit={handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col" noValidate>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="mileageAtReturn" required>
+                  Kilométrage au retour
+                </Label>
+                <Input
+                  id="mileageAtReturn"
+                  type="number"
+                  {...register('mileageAtReturn', { setValueAs: Number })}
+                />
+                {errors.mileageAtReturn && (
+                  <p className="text-sm text-destructive">{errors.mileageAtReturn.message}</p>
+                )}
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="fuelLevelAtReturn" required>
+                  Niveau de carburant
+                </Label>
+                <Input
+                  id="fuelLevelAtReturn"
+                  placeholder="Ex. Plein, 3/4, Moitié..."
+                  {...register('fuelLevelAtReturn')}
+                />
+                {errors.fuelLevelAtReturn && (
+                  <p className="text-sm text-destructive">{errors.fuelLevelAtReturn.message}</p>
+                )}
+              </div>
+            </div>
 
-              {lateDays > 0 ? (
-                <div className="flex items-center justify-between gap-3 bg-destructive/5 px-4 py-2.5">
-                  <div className="flex items-center gap-2 text-sm font-medium text-destructive">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                    Retard
+            <Separator />
+
+            <div className="space-y-2">
+              <Label>État de la voiture après retour</Label>
+              <Controller
+                name="carStatusAfterReturn"
+                control={control}
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MANUALLY_SETTABLE_CAR_STATUSES.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {CAR_STATUS_LABELS[s]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
+
+            <Separator />
+
+            <div className="space-y-3">
+              <Label>Dommage</Label>
+              <div className="space-y-2">
+                <Label htmlFor="damageFeeAmount" className="text-xs font-normal text-muted-foreground">
+                  Frais de dommage
+                </Label>
+                <Input
+                  id="damageFeeAmount"
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  placeholder="Montant en DT"
+                  {...register('damageFeeAmount', {
+                    setValueAs: (v) => (v === '' ? undefined : Number(v)),
+                  })}
+                />
+                {errors.damageFeeAmount && (
+                  <p className="text-sm text-destructive">{errors.damageFeeAmount.message}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="damageFeeNotes" className="text-xs font-normal text-muted-foreground">
+                  Description de dommage
+                </Label>
+                <Textarea
+                  id="damageFeeNotes"
+                  placeholder="Ex. Rayure portière avant droite"
+                  className="min-h-16 resize-none"
+                  rows={2}
+                  {...register('damageFeeNotes')}
+                />
+                {errors.damageFeeNotes && (
+                  <p className="text-sm text-destructive">{errors.damageFeeNotes.message}</p>
+                )}
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Receipt-style breakdown — same dotted-ledger language as the
+                rental detail sheet's own Paiements list, so "what will this
+                closing cost" reads the same way everywhere in the app rather
+                than as a one-off paragraph of text. */}
+            <div className="overflow-hidden rounded-xl border border-border">
+              <div className="divide-y divide-border">
+                <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+                  <div className="flex items-center gap-2 text-sm text-foreground">
+                    <CarFront className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    Location
                   </div>
                   <div className="text-right">
-                    <p className="font-mono text-sm font-semibold tabular-nums text-destructive">
-                      {estimatedLateFee.toLocaleString('fr-TN')} DT
+                    <p className="font-mono text-sm font-semibold tabular-nums text-foreground">
+                      {rentalAmount.toLocaleString('fr-TN')} DT
                     </p>
-                    <p className="text-[11px] text-destructive/75">
-                      {lateDays} j × {dailyRate.toLocaleString('fr-TN')} DT
+                    <p className="text-[11px] text-muted-foreground">
+                      {rentalNights} j × {dailyRate.toLocaleString('fr-TN')} DT
                     </p>
                   </div>
                 </div>
-              ) : (
-                <div className="flex items-center gap-2 bg-success/5 px-4 py-2.5 text-sm font-medium text-success">
-                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                  Retour dans les délais — aucun frais de retard
-                </div>
-              )}
-            </div>
 
-            <div
-              className={cn(
-                'flex items-center justify-between gap-3 border-t border-border px-4 py-3',
-                lateDays > 0 ? 'bg-destructive/10' : 'bg-muted',
-              )}
-            >
-              <span className="text-sm font-bold text-foreground">Total estimé</span>
-              <span
+                {lateDays > 0 ? (
+                  <div className="flex items-center justify-between gap-3 bg-destructive/5 px-4 py-2.5">
+                    <div className="flex items-center gap-2 text-sm font-medium text-destructive">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      Retard
+                    </div>
+                    <div className="text-right">
+                      <p className="font-mono text-sm font-semibold tabular-nums text-destructive">
+                        {estimatedLateFee.toLocaleString('fr-TN')} DT
+                      </p>
+                      <p className="text-[11px] text-destructive/75">
+                        {lateDays} j × {dailyRate.toLocaleString('fr-TN')} DT
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 bg-success/5 px-4 py-2.5 text-sm font-medium text-success">
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                    Retour dans les délais — aucun frais de retard
+                  </div>
+                )}
+
+                {damageFeeAmount > 0 && (
+                  <div className="flex items-center justify-between gap-3 bg-destructive/5 px-4 py-2.5">
+                    <div className="flex items-center gap-2 text-sm font-medium text-destructive">
+                      <Wrench className="h-3.5 w-3.5 shrink-0" />
+                      Dommage
+                    </div>
+                    <p className="font-mono text-sm font-semibold tabular-nums text-destructive">
+                      {damageFeeAmount.toLocaleString('fr-TN')} DT
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div
                 className={cn(
-                  'font-mono text-lg font-extrabold tabular-nums',
-                  lateDays > 0 ? 'text-destructive' : 'text-foreground',
+                  'flex items-center justify-between gap-3 border-t border-border px-4 py-3',
+                  lateDays > 0 || damageFeeAmount > 0 ? 'bg-destructive/10' : 'bg-muted',
                 )}
               >
-                {estimatedTotal.toLocaleString('fr-TN')} DT
-              </span>
+                <span className="text-sm font-bold text-foreground">Total estimé</span>
+                <span
+                  className={cn(
+                    'font-mono text-lg font-extrabold tabular-nums',
+                    lateDays > 0 || damageFeeAmount > 0 ? 'text-destructive' : 'text-foreground',
+                  )}
+                >
+                  {estimatedTotal.toLocaleString('fr-TN')} DT
+                </span>
+              </div>
             </div>
           </div>
 

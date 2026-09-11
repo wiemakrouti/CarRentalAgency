@@ -13,6 +13,7 @@ import { asyncHandler } from '../utils/async-handler.js';
 import { uploadPaymentAttachment } from '../middleware/upload.js';
 import { FinancesController } from '../controllers/finances.controller.js';
 import {
+  depositListQuerySchema,
   expenseIdParamSchema,
   expenseListQuerySchema,
   paymentAttachmentIdParamSchema,
@@ -28,6 +29,11 @@ financesRouter.get(
   '/finances/summary',
   validate({ query: financeSummaryQuerySchema }),
   asyncHandler(FinancesController.getSummary),
+);
+financesRouter.get(
+  '/finances/deposits',
+  validate({ query: depositListQuerySchema }),
+  asyncHandler(FinancesController.listDeposits),
 );
 
 // Payments

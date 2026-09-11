@@ -4,7 +4,7 @@ import { AppError } from '../utils/app-error.js';
 import { PaymentsService } from '../services/payments.service.js';
 import { ExpensesService } from '../services/expenses.service.js';
 import { FinanceSummaryService } from '../services/finance-summary.service.js';
-import type { ExpenseListQuery, PaymentListQuery } from '../validators/finance.validator.js';
+import type { DepositListQuery, ExpenseListQuery, PaymentListQuery } from '../validators/finance.validator.js';
 import type { FinanceSummaryQuery } from '@car-rental/shared';
 
 export const FinancesController = {
@@ -99,5 +99,15 @@ export const FinancesController = {
     const query = req.query as unknown as FinanceSummaryQuery;
     const summary = await FinanceSummaryService.getSummary(query);
     res.status(200).json({ success: true, data: summary });
+  },
+
+  async listDeposits(req: Request, res: Response) {
+    const query = req.query as unknown as DepositListQuery;
+    const result = await FinanceSummaryService.listDeposits(query);
+    res.status(200).json({
+      success: true,
+      data: result.items,
+      meta: { page: result.page, pageSize: result.pageSize, total: result.total },
+    });
   },
 };

@@ -144,7 +144,7 @@ export function ClientCalendarDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[36rem]">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-[36rem]">
         <DialogHeader>
           <DialogTitle>
             Calendrier des locations —{' '}

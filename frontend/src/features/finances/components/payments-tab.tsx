@@ -1,6 +1,6 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { flexRender, getCoreRowModel, useReactTable, createColumnHelper } from '@tanstack/react-table';
-import { PAYMENT_METHODS, PAYMENT_STATUSES, PAYMENT_TYPES } from '@car-rental/shared';
 import { Plus, Wallet } from 'lucide-react';
 
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
@@ -10,23 +10,16 @@ import { ErrorState } from '@/components/common/error-state';
 import { SearchBar } from '@/components/common/search-bar';
 import { FilterBar } from '@/components/common/filter-bar';
 import { Pagination } from '@/components/common/pagination';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 import { usePaymentsQuery } from '../hooks/use-payments';
 import type { Payment } from '../api/finances.api';
 import { PaymentRowActions } from './payment-row-actions';
 import { PaymentFormDialog } from './payment-form-dialog';
-import {
-  PAYMENT_METHOD_LABELS,
-  PAYMENT_STATUS_BADGE_VARIANT,
-  PAYMENT_STATUS_LABELS,
-  PAYMENT_TYPE_LABELS,
-} from '../lib/finance-labels';
+import { PaymentFiltersPopover, type PaymentFilters } from './payment-filters-popover';
+import { PAYMENT_METHOD_LABELS, PAYMENT_TYPE_LABELS } from '../lib/finance-labels';
 
-const ALL_VALUE = '__all__';
 const PAGE_SIZE = 20;
 
 function formatDate(iso: string | null): string {
@@ -46,12 +39,6 @@ const columns = [
     header: 'Méthode',
     cell: ({ getValue }) => PAYMENT_METHOD_LABELS[getValue()],
   }),
-  columnHelper.accessor('status', {
-    header: 'Statut',
-    cell: ({ getValue }) => (
-      <Badge variant={PAYMENT_STATUS_BADGE_VARIANT[getValue()]}>{PAYMENT_STATUS_LABELS[getValue()]}</Badge>
-    ),
-  }),
   columnHelper.accessor('paidAt', { header: 'Encaissé le', cell: ({ getValue }) => formatDate(getValue()) }),
   columnHelper.accessor('amount', {
     header: 'Montant',
@@ -65,11 +52,12 @@ const columns = [
 ];
 
 export function PaymentsTab() {
+  const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
-  const [type, setType] = useState<string | undefined>(undefined);
-  const [status, setStatus] = useState<string | undefined>(undefined);
-  const [method, setMethod] = useState<string | undefined>(undefined);
+  // Every filter (type, status, method, date range) lives in one object,
+  // applied together from the "Filtrer" popover.
+  const [filters, setFilters] = useState<PaymentFilters>({});
   const [formOpen, setFormOpen] = useState(false);
 
   const debouncedSearch = useDebouncedValue(searchInput);
@@ -78,20 +66,30 @@ export function PaymentsTab() {
     page,
     pageSize: PAGE_SIZE,
     search: debouncedSearch || undefined,
-    type,
-    status,
-    method,
+    type: filters.type,
+    status: filters.status,
+    method: filters.method,
+    from: filters.from,
+    to: filters.to,
   });
 
-  function clearAllFilters() {
-    setSearchInput('');
-    setType(undefined);
-    setStatus(undefined);
-    setMethod(undefined);
+  function applyFilters(next: PaymentFilters) {
+    setFilters(next);
     setPage(1);
   }
 
-  const activeFilterCount = [type, status, method].filter(Boolean).length;
+  function clearAllFilters() {
+    setSearchInput('');
+    setFilters({});
+    setPage(1);
+  }
+
+  const activeFilterCount = [
+    filters.type,
+    filters.status,
+    filters.method,
+    filters.from || filters.to,
+  ].filter(Boolean).length;
 
   const table = useReactTable({
     data: data?.items ?? [],
@@ -113,65 +111,7 @@ export function PaymentsTab() {
             className="w-72"
           />
           <FilterBar activeCount={activeFilterCount} onClearAll={clearAllFilters}>
-            <Select
-              value={type ?? ALL_VALUE}
-              onValueChange={(value) => {
-                setType(value === ALL_VALUE ? undefined : value);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_VALUE}>Tous les types</SelectItem>
-                {PAYMENT_TYPES.map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {PAYMENT_TYPE_LABELS[t]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={status ?? ALL_VALUE}
-              onValueChange={(value) => {
-                setStatus(value === ALL_VALUE ? undefined : value);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Statut" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_VALUE}>Tous les statuts</SelectItem>
-                {PAYMENT_STATUSES.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {PAYMENT_STATUS_LABELS[s]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={method ?? ALL_VALUE}
-              onValueChange={(value) => {
-                setMethod(value === ALL_VALUE ? undefined : value);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Méthode" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_VALUE}>Toutes les méthodes</SelectItem>
-                {PAYMENT_METHODS.map((m) => (
-                  <SelectItem key={m} value={m}>
-                    {PAYMENT_METHOD_LABELS[m]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <PaymentFiltersPopover value={filters} onApply={applyFilters} activeCount={activeFilterCount} />
           </FilterBar>
         </div>
         <Button onClick={() => setFormOpen(true)}>
@@ -212,11 +152,19 @@ export function PaymentsTab() {
               </TableHeader>
               <TableBody>
                 {table.getRowModel().rows.map((row) => (
-                  <TableRow key={row.id}>
+                  // Every payment belongs to a rental — clicking the row
+                  // jumps to that rental's own detail sheet (same
+                  // deep-link pattern as the Cautions tab's row link).
+                  <TableRow
+                    key={row.id}
+                    className="cursor-pointer"
+                    onClick={() => navigate(`/rentals?openId=${row.original.rentalId}`)}
+                  >
                     {row.getVisibleCells().map((cell) => (
                       <TableCell
                         key={cell.id}
                         className={cell.column.id === 'amount' ? 'text-right tabular-nums' : undefined}
+                        onClick={cell.column.id === 'actions' ? (e) => e.stopPropagation() : undefined}
                       >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </TableCell>

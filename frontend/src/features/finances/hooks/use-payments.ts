@@ -4,7 +4,7 @@ import { carKeys } from '@/features/cars/api/cars.keys';
 import { clientKeys } from '@/features/clients/api/clients.keys';
 import { rentalKeys } from '@/features/rentals/api/rentals.keys';
 import { financesApi, type PaymentListParams } from '../api/finances.api';
-import { financeSummaryKeys, paymentKeys } from '../api/finances.keys';
+import { depositsKeys, financeSummaryKeys, paymentKeys } from '../api/finances.keys';
 
 // A payment always belongs to a rental (and a DEPOSIT_REFUND flips
 // Rental.depositReturned) — invalidate broadly enough that the Rentals
@@ -25,6 +25,9 @@ function invalidatePaymentEffects(queryClient: ReturnType<typeof useQueryClient>
   queryClient.invalidateQueries({ queryKey: rentalKeys.lists() });
   queryClient.invalidateQueries({ queryKey: carKeys.all });
   queryClient.invalidateQueries({ queryKey: clientKeys.all });
+  // A DEPOSIT (adds a row) or a DEPOSIT_REFUND (sets its refundedAt) both
+  // change the "Cautions" ledger.
+  queryClient.invalidateQueries({ queryKey: depositsKeys.all });
 }
 
 export function usePaymentsQuery(params: PaymentListParams) {

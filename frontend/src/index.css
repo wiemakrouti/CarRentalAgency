@@ -144,6 +144,51 @@
   }
 }
 
+/* Scrollbar — thin, blue-accented ("Option B" from the design preview),
+   applied globally: Firefox via scrollbar-width/scrollbar-color (inherited,
+   so setting it on `*` covers every scrollable element at once), Chromium/
+   Safari via the ::-webkit-scrollbar pseudo-elements (NOT inherited — each
+   scrolling element needs its own rule, hence the `*` selector here too).
+   The numbered primary-300/500 tokens don't get their own dark-mode values
+   (see the `.dark` block above), so dark mode falls back to the adaptive
+   --primary token instead, the same escape hatch KpiCard and the Finances
+   tab strip already use for this. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--primary-300)) hsl(var(--muted) / 0.5);
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: hsl(var(--muted) / 0.5);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary-300));
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary-500));
+}
+
+.dark {
+  scrollbar-color: hsl(var(--primary) / 0.4) hsl(var(--muted) / 0.5);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary) / 0.4);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / 0.65);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

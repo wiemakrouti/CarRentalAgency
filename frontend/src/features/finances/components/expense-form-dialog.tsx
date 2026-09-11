@@ -1,8 +1,9 @@
+import { useEffect } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import type { Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Undo2 } from 'lucide-react';
 import {
   EXPENSE_CATEGORIES,
   createExpenseSchema,
@@ -16,7 +17,6 @@ import { useCarsQuery } from '@/features/cars/hooks/use-cars';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Dialog,
@@ -37,22 +37,32 @@ type ExpenseFormDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   expense?: Expense;
+  // Pre-selects (but doesn't lock) the "Voiture concernée" field — used when
+  // this dialog is opened from a car's own detail sheet, so the admin isn't
+  // stuck picking the same car back out of a 100+ entry dropdown. Ignored in
+  // edit mode, where the expense's own carId already wins.
+  defaultCarId?: string;
 };
 
 function toDateInputValue(iso: string): string {
   return iso.slice(0, 10);
 }
 
-function buildDefaultValues(expense?: Expense): UpdateExpenseInput {
+// `date` is kept as a plain "yyyy-MM-dd" string here — the format the native
+// <input type="date"> actually displays — rather than a Date object. Zod's
+// `z.coerce.date()` on the schema turns it into a real Date at submit time;
+// storing a Date object in RHF's own state instead makes the date input
+// render blank, since its DOM value has to be that exact string format.
+function buildDefaultValues(expense?: Expense, defaultCarId?: string): UpdateExpenseInput {
   if (!expense) {
-    return { date: new Date() };
+    return { date: toDateInputValue(new Date().toISOString()) as unknown as Date, carId: defaultCarId ?? null };
   }
   return {
     category: expense.category,
     amount: Number(expense.amount),
     carId: expense.carId,
     description: expense.description,
-    date: new Date(expense.date),
+    date: toDateInputValue(expense.date) as unknown as Date,
     receiptUrl: expense.receiptUrl,
   };
 }
@@ -61,7 +71,7 @@ function errorMessage(err: unknown, fallback: string): string {
   return err instanceof ApiClientError ? err.message : fallback;
 }
 
-export function ExpenseFormDialog({ open, onOpenChange, expense }: ExpenseFormDialogProps) {
+export function ExpenseFormDialog({ open, onOpenChange, expense, defaultCarId }: ExpenseFormDialogProps) {
   const isEdit = Boolean(expense);
   const { data: carsData } = useCarsQuery({ pageSize: 100 });
   const createMutation = useCreateExpenseMutation();
@@ -72,11 +82,32 @@ export function ExpenseFormDialog({ open, onOpenChange, expense }: ExpenseFormDi
     register,
     control,
     handleSubmit,
+    watch,
+    setValue,
+    reset,
     formState: { errors },
   } = useForm<UpdateExpenseInput>({
     resolver: zodResolver(isEdit ? updateExpenseSchema : createExpenseSchema) as Resolver<UpdateExpenseInput>,
-    defaultValues: buildDefaultValues(expense),
+    defaultValues: buildDefaultValues(expense, defaultCarId),
   });
+
+  // This dialog stays mounted in ExpensesTab the whole time (only `open`
+  // toggles Radix's own visibility) — `useForm`'s defaultValues are only
+  // read once, at that first mount, so without this the form would keep
+  // showing whatever expense (or blank "create") state was loaded the very
+  // first time the dialog opened, no matter which row is edited next.
+  // Re-running on every open (not just when `expense` changes) also covers
+  // opening "Nouvelle dépense" twice in a row, where `expense` stays
+  // `undefined` both times.
+  useEffect(() => {
+    if (open) reset(buildDefaultValues(expense, defaultCarId));
+  }, [open, expense, defaultCarId, reset]);
+
+  // "Personnalisé" (stored as 'OTHER') is the one category with no fixed
+  // meaning of its own — instead of a label, its slot becomes a free-text
+  // input naming the expense, stored in `description` (enforced schema-side
+  // too, see requireDescriptionForOther).
+  const isOtherCategory = watch('category') === 'OTHER';
 
   async function onSubmit(values: UpdateExpenseInput) {
     try {
@@ -112,25 +143,57 @@ export function ExpenseFormDialog({ open, onOpenChange, expense }: ExpenseFormDi
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label required>Catégorie</Label>
-              <Controller
-                name="category"
-                control={control}
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sélectionner" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {EXPENSE_CATEGORIES.map((c) => (
-                        <SelectItem key={c} value={c}>
-                          {EXPENSE_CATEGORY_LABELS[c]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
+              {isOtherCategory ? (
+                // "Personnalisé" swaps the select for a plain text input, in
+                // the same slot — the category stays 'OTHER' underneath, the
+                // typed name is stored in `description` (unchanged schema).
+                <div className="flex gap-2">
+                  <Input
+                    autoFocus
+                    placeholder="Nommer la dépense"
+                    {...register('description')}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0"
+                    title="Choisir une autre catégorie"
+                    onClick={() => {
+                      setValue('category', undefined as unknown as UpdateExpenseInput['category']);
+                      setValue('description', '');
+                    }}
+                  >
+                    <Undo2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <Controller
+                  name="category"
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      value={field.value}
+                      onValueChange={(next) => field.onChange(next)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Sélectionner" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {EXPENSE_CATEGORIES.map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {EXPENSE_CATEGORY_LABELS[c]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              )}
               {errors.category && <p className="text-sm text-destructive">{errors.category.message}</p>}
+              {isOtherCategory && errors.description && (
+                <p className="text-sm text-destructive">{errors.description.message}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="amount" required>
@@ -167,36 +230,12 @@ export function ExpenseFormDialog({ open, onOpenChange, expense }: ExpenseFormDi
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="date" required>
-                Date
-              </Label>
-              <Input
-                id="date"
-                type="date"
-                defaultValue={expense?.date ? toDateInputValue(expense.date) : toDateInputValue(new Date().toISOString())}
-                {...register('date', { setValueAs: (v) => (v === '' ? undefined : new Date(v)) })}
-              />
-              {errors.date && <p className="text-sm text-destructive">{errors.date.message}</p>}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="receiptUrl">Justificatif — URL</Label>
-              <Input
-                id="receiptUrl"
-                placeholder="https://..."
-                {...register('receiptUrl', { setValueAs: (v) => (v === '' ? null : v) })}
-              />
-              {errors.receiptUrl && <p className="text-sm text-destructive">{errors.receiptUrl.message}</p>}
-            </div>
-          </div>
-
           <div className="space-y-2">
-            <Label htmlFor="description" required>
-              Description
+            <Label htmlFor="date" required>
+              Date
             </Label>
-            <Textarea id="description" rows={2} {...register('description')} />
-            {errors.description && <p className="text-sm text-destructive">{errors.description.message}</p>}
+            <Input id="date" type="date" {...register('date')} />
+            {errors.date && <p className="text-sm text-destructive">{errors.date.message}</p>}
           </div>
           </div>
 

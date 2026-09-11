@@ -79,7 +79,7 @@ export function ExtendRentalDialog({ open, onOpenChange, rental }: ExtendRentalD
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="flex max-h-[85vh] max-w-md flex-col">
         <DialogHeader>
           <DialogTitle>Prolonger la location</DialogTitle>
           <DialogDescription>
@@ -87,70 +87,72 @@ export function ExtendRentalDialog({ open, onOpenChange, rental }: ExtendRentalD
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-          <div className="space-y-2">
-            <Label htmlFor="newReturnDate">Nouvelle date de retour</Label>
-            <Input
-              id="newReturnDate"
-              type="date"
-              {...register('newReturnDate', { setValueAs: (v) => (v === '' ? undefined : new Date(v)) })}
-            />
-            {errors.newReturnDate && <p className="text-sm text-destructive">{errors.newReturnDate.message}</p>}
-          </div>
-
-          {/* Same receipt-style breakdown language as Return/Activate — the
-              current contract amount, then what the extension adds on top,
-              then the resulting new total. */}
-          <div className="overflow-hidden rounded-xl border border-border">
-            <div className="divide-y divide-border">
-              <div className="flex items-center justify-between gap-3 px-4 py-2.5">
-                <div className="flex items-center gap-2 text-sm text-foreground">
-                  <CarFront className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  Location actuelle
-                </div>
-                <div className="text-right">
-                  <p className="font-mono text-sm font-semibold tabular-nums text-foreground">
-                    {currentTotal.toLocaleString('fr-TN')} DT
-                  </p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {currentNights} j × {dailyRate.toLocaleString('fr-TN')} DT
-                  </p>
-                </div>
-              </div>
-
-              {newReturnDateValue && !isValidExtension ? (
-                <div className="flex items-center gap-2 px-4 py-2.5 text-sm text-destructive">
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                  La nouvelle date doit être postérieure au {currentPlannedReturn.toLocaleDateString('fr-TN')}.
-                </div>
-              ) : isValidExtension ? (
-                <div className="flex items-center justify-between gap-3 bg-primary/5 px-4 py-2.5">
-                  <div className="flex items-center gap-2 text-sm font-medium text-primary">
-                    <CalendarPlus className="h-3.5 w-3.5 shrink-0" />
-                    Prolongation
-                  </div>
-                  <div className="text-right">
-                    <p className="font-mono text-sm font-semibold tabular-nums text-primary">
-                      +{estimatedAdditionalAmount.toLocaleString('fr-TN')} DT
-                    </p>
-                    <p className="text-[11px] text-primary/75">
-                      {additionalNights} j × {dailyRate.toLocaleString('fr-TN')} DT
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="px-4 py-2.5 text-sm text-muted-foreground">Choisissez une nouvelle date de retour.</div>
-              )}
+        <form onSubmit={handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col" noValidate>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+            <div className="space-y-2">
+              <Label htmlFor="newReturnDate">Nouvelle date de retour</Label>
+              <Input
+                id="newReturnDate"
+                type="date"
+                {...register('newReturnDate', { setValueAs: (v) => (v === '' ? undefined : new Date(v)) })}
+              />
+              {errors.newReturnDate && <p className="text-sm text-destructive">{errors.newReturnDate.message}</p>}
             </div>
 
-            {isValidExtension && (
-              <div className="flex items-center justify-between gap-3 border-t border-border bg-primary/10 px-4 py-3">
-                <span className="text-sm font-bold text-foreground">Nouveau total</span>
-                <span className="font-mono text-lg font-extrabold tabular-nums text-primary">
-                  {newTotal.toLocaleString('fr-TN')} DT
-                </span>
+            {/* Same receipt-style breakdown language as Return/Activate — the
+                current contract amount, then what the extension adds on top,
+                then the resulting new total. */}
+            <div className="overflow-hidden rounded-xl border border-border">
+              <div className="divide-y divide-border">
+                <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+                  <div className="flex items-center gap-2 text-sm text-foreground">
+                    <CarFront className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    Location actuelle
+                  </div>
+                  <div className="text-right">
+                    <p className="font-mono text-sm font-semibold tabular-nums text-foreground">
+                      {currentTotal.toLocaleString('fr-TN')} DT
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {currentNights} j × {dailyRate.toLocaleString('fr-TN')} DT
+                    </p>
+                  </div>
+                </div>
+
+                {newReturnDateValue && !isValidExtension ? (
+                  <div className="flex items-center gap-2 px-4 py-2.5 text-sm text-destructive">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    La nouvelle date doit être postérieure au {currentPlannedReturn.toLocaleDateString('fr-TN')}.
+                  </div>
+                ) : isValidExtension ? (
+                  <div className="flex items-center justify-between gap-3 bg-primary/5 px-4 py-2.5">
+                    <div className="flex items-center gap-2 text-sm font-medium text-primary">
+                      <CalendarPlus className="h-3.5 w-3.5 shrink-0" />
+                      Prolongation
+                    </div>
+                    <div className="text-right">
+                      <p className="font-mono text-sm font-semibold tabular-nums text-primary">
+                        +{estimatedAdditionalAmount.toLocaleString('fr-TN')} DT
+                      </p>
+                      <p className="text-[11px] text-primary/75">
+                        {additionalNights} j × {dailyRate.toLocaleString('fr-TN')} DT
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="px-4 py-2.5 text-sm text-muted-foreground">Choisissez une nouvelle date de retour.</div>
+                )}
               </div>
-            )}
+
+              {isValidExtension && (
+                <div className="flex items-center justify-between gap-3 border-t border-border bg-primary/10 px-4 py-3">
+                  <span className="text-sm font-bold text-foreground">Nouveau total</span>
+                  <span className="font-mono text-lg font-extrabold tabular-nums text-primary">
+                    {newTotal.toLocaleString('fr-TN')} DT
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
 
           <DialogFooter>

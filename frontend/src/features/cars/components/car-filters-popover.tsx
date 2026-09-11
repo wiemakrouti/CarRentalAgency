@@ -85,7 +85,10 @@ export function CarFiltersPopover({ value, onApply, activeCount }: CarFiltersPop
           {activeCount > 0 && <span className="text-muted-foreground">({activeCount})</span>}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 space-y-4" align="start">
+      <PopoverContent
+        className="max-h-[var(--radix-popover-content-available-height)] w-80 space-y-4 overflow-y-auto"
+        align="start"
+      >
         <div className="space-y-2">
           <Label>Catégorie</Label>
           <Select

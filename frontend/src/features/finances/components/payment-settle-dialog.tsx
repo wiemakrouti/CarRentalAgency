@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
@@ -32,6 +33,22 @@ function toDateInputValue(iso: string | null): string {
   return iso ? iso.slice(0, 10) : '';
 }
 
+// `paidAt` is kept as a plain "yyyy-MM-dd" string (or '') here — the format
+// the native <input type="date"> actually displays — rather than a Date
+// object. react-hook-form's `register` assigns defaultValues straight onto
+// the input's DOM value on mount; a Date object stringifies to something
+// like "Wed Sep 09 2026 ...", which the browser rejects, silently blanking
+// the field. Zod's `z.coerce.date()` on the schema turns the string back
+// into a real Date at submit time.
+function buildDefaultValues(payment: Payment): UpdatePaymentInput {
+  return {
+    amount: Number(payment.amount),
+    method: payment.method,
+    status: payment.status,
+    paidAt: toDateInputValue(payment.paidAt) as unknown as Date | null,
+  };
+}
+
 function errorMessage(err: unknown, fallback: string): string {
   return err instanceof ApiClientError ? err.message : fallback;
 }
@@ -43,16 +60,21 @@ export function PaymentSettleDialog({ open, onOpenChange, payment }: PaymentSett
     register,
     control,
     handleSubmit,
+    reset,
     formState: { errors },
   } = useForm<UpdatePaymentInput>({
     resolver: zodResolver(updatePaymentSchema),
-    defaultValues: {
-      amount: Number(payment.amount),
-      method: payment.method,
-      status: payment.status,
-      paidAt: payment.paidAt ? new Date(payment.paidAt) : null,
-    },
+    defaultValues: buildDefaultValues(payment),
   });
+
+  // Reset on every open, not just once at mount — this dialog is created
+  // once per row and stays mounted (only Radix's own visibility toggles),
+  // so without this a stale reopen after the underlying payment data
+  // changed elsewhere would keep showing whatever was loaded the first
+  // time it opened (same class of bug as ExpenseFormDialog).
+  useEffect(() => {
+    if (open) reset(buildDefaultValues(payment));
+  }, [open, payment, reset]);
 
   async function onSubmit(values: UpdatePaymentInput) {
     try {
@@ -88,12 +110,11 @@ export function PaymentSettleDialog({ open, onOpenChange, payment }: PaymentSett
             </div>
             <div className="space-y-2">
               <Label htmlFor="paidAt">Date d&apos;encaissement</Label>
-              <Input
-                id="paidAt"
-                type="date"
-                defaultValue={toDateInputValue(payment.paidAt)}
-                {...register('paidAt', { setValueAs: (v) => (v === '' ? null : new Date(v)) })}
-              />
+              {/* z.coerce.date() can't coerce '' (an emptied date input) into
+                  null on its own — it'd throw as an invalid date — so this
+                  still needs to map that one case by hand. Non-empty values
+                  pass through as the raw string; the schema coerces those. */}
+              <Input id="paidAt" type="date" {...register('paidAt', { setValueAs: (v) => (v === '' ? null : v) })} />
             </div>
           </div>
 

@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { Prisma, PrismaClient, type RentalStatus } from '@prisma/client';
+import { Prisma, PrismaClient, type ExpenseCategory, type PaymentType, type RentalStatus } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 // Phase 0: seeds only what the app needs to boot (one admin user + the
@@ -1375,6 +1375,320 @@ async function seedCalendarTestRentals(adminUserId: string) {
   }
 }
 
+// --- Demo payments (enriches Finances' "Revenus par type") -----------------
+//
+// The rental seeds above create COMPLETED rentals with a `totalAmount`, but
+// never a Payment row for it (the one exception is seedCalendarTestRentals'
+// single PENDING late fee, kept as-is — it's its own scenario). Without any
+// COMPLETED payments, the Finances Résumé donut has nothing to show. This
+// gives every completed seed rental its rent payment, plus a scaled sample
+// of extensions/late fees/damage fees layered on top of a subset of them —
+// sized as a *share of total rent revenue* rather than fixed amounts, so the
+// donut looks like a real, unevenly-distributed agency (rent still leads,
+// but the other three types stay clearly visible) regardless of how many
+// completed rentals happen to exist.
+//
+// Idempotent per (rentalId, type): a rerun re-derives the same deterministic
+// selection (completedRentals is ordered by rentalNumber) and skips any pair
+// that already has a payment, so it never doubles up.
+
+async function createPaymentIfMissing(
+  rentalId: string,
+  type: PaymentType,
+  amount: number,
+  notes: string,
+  // Defaults to "now", same as before — passed explicitly by
+  // seedBackdatedRevenue() below to land a payment in an earlier window
+  // instead of today.
+  recordedAt: Date = new Date(),
+): Promise<boolean> {
+  const existing = await prisma.payment.findFirst({ where: { rentalId, type } });
+  if (existing) return false;
+  await prisma.payment.create({
+    data: {
+      rentalId,
+      type,
+      amount,
+      status: 'COMPLETED',
+      method: 'CASH',
+      paidAt: recordedAt,
+      createdAt: recordedAt,
+      notes,
+    },
+  });
+  return true;
+}
+
+async function seedDemoPayments() {
+  const completedRentals = await prisma.rental.findMany({
+    where: { rentalNumber: { startsWith: 'LOC-SEED' }, status: 'COMPLETED', deletedAt: null },
+    orderBy: { rentalNumber: 'asc' },
+  });
+
+  if (completedRentals.length === 0) {
+    console.log('No completed seed rentals found, skipping demo payments.');
+    return;
+  }
+
+  let created = 0;
+
+  // Every completed rental gets its rent recorded as encaissé — always the
+  // largest revenue type in a real agency too.
+  for (const rental of completedRentals) {
+    if (await createPaymentIfMissing(rental.id, 'RENTAL_PAYMENT', Number(rental.totalAmount), 'Paiement du loyer (seed).')) {
+      created += 1;
+    }
+  }
+
+  const rentTotal = completedRentals.reduce((sum, r) => sum + Number(r.totalAmount), 0);
+
+  const SECONDARY_TYPES: { type: PaymentType; share: number; count: number; label: string }[] = [
+    { type: 'EXTENSION_PAYMENT', share: 0.14, count: 6, label: 'Prolongation' },
+    { type: 'LATE_FEE', share: 0.08, count: 5, label: 'Frais de retard' },
+    { type: 'DAMAGE_FEE', share: 0.06, count: 4, label: 'Frais de dommage' },
+  ];
+
+  let rentalCursor = 0;
+  for (const { type, share, count, label } of SECONDARY_TYPES) {
+    const perPayment = (rentTotal * share) / count;
+    for (let i = 0; i < count; i += 1) {
+      const rental = completedRentals[rentalCursor % completedRentals.length]!;
+      rentalCursor += 1;
+      // ±30% jitter (deterministic, not random) so a type's payments aren't
+      // all an identical, suspiciously round amount.
+      const amount = Math.max(30, Math.round(perPayment * (0.7 + (0.6 * ((i * 37) % 10)) / 10)));
+      if (await createPaymentIfMissing(rental.id, type, amount, `${label} (seed).`)) {
+        created += 1;
+      }
+    }
+  }
+
+  console.log(`Demo payments added (${created} new) across ${completedRentals.length} completed seed rental(s).`);
+}
+
+// --- Backdated revenue (a real "vs. période précédente" comparison) -------
+//
+// Every payment seedDemoPayments creates gets `createdAt`/`paidAt` at insert
+// time (today, whenever the seed last ran) — so the Résumé's "vs. période
+// précédente" trend badges (finance-summary-tab.tsx's computeTrend) compare
+// Revenus/Résultat net/Paiements en attente against a window with literally
+// no data, landing on the "±∞%" case every time. This backdates a few
+// payments into the tail end of last month so that comparison window has
+// real numbers instead.
+//
+// Deliberately landed right before the 1st of the month, not scattered
+// earlier: "Ce mois-ci"'s comparison window is the same length as the
+// current selection, ending the day before this month started, and its
+// start creeps backward as the month goes on — a date near the end of last
+// month stays inside that window for the rest of the current month, an
+// earlier one wouldn't necessarily be included yet.
+//
+// Idempotent per (rentalId, type): reruns skip rows already seeded (same
+// createPaymentIfMissing helper as seedDemoPayments — a rental that already
+// got an EXTENSION_PAYMENT from that cyclic assignment is simply skipped
+// here, not duplicated).
+async function seedBackdatedRevenue() {
+  const completedRentals = await prisma.rental.findMany({
+    where: { rentalNumber: { startsWith: 'LOC-SEED' }, status: 'COMPLETED', deletedAt: null },
+    // Descending — the opposite end of seedDemoPayments' own ascending
+    // cyclic pick, so this naturally lands on rentals that don't already
+    // have an EXTENSION_PAYMENT instead of colliding with them.
+    orderBy: { rentalNumber: 'desc' },
+  });
+
+  if (completedRentals.length === 0) {
+    console.log('No completed seed rentals found, skipping backdated revenue.');
+    return;
+  }
+
+  let created = 0;
+  const backdatedNote = 'Prolongation (mois précédent, seed).';
+
+  const BACKDATED_COUNT = 4;
+  for (let i = 0; i < BACKDATED_COUNT && i < completedRentals.length; i += 1) {
+    const rental = completedRentals[i]!;
+    const recordedAt = daysFromNow(-(11 + i)); // lands in the last days of last month
+    const amount = Math.max(60, Math.round(Number(rental.totalAmount) * 0.15));
+    if (await createPaymentIfMissing(rental.id, 'EXTENSION_PAYMENT', amount, backdatedNote, recordedAt)) {
+      created += 1;
+    }
+  }
+
+  // One PENDING payment too, so "Paiements en attente" gets a real
+  // comparison instead of "±∞%" — createPaymentIfMissing always writes
+  // COMPLETED, so this one is a plain findFirst-then-create.
+  const pendingNote = 'Frais de retard (mois précédent, seed).';
+  const pendingRental = completedRentals[completedRentals.length - 1];
+  if (pendingRental) {
+    const existingPending = await prisma.payment.findFirst({
+      where: { rentalId: pendingRental.id, notes: pendingNote },
+    });
+    if (!existingPending) {
+      await prisma.payment.create({
+        data: {
+          rentalId: pendingRental.id,
+          type: 'LATE_FEE',
+          amount: 90,
+          status: 'PENDING',
+          method: 'CASH',
+          paidAt: null,
+          createdAt: daysFromNow(-15), // same previous-period window as the EXTENSION_PAYMENT rows above
+          notes: pendingNote,
+        },
+      });
+      created += 1;
+    }
+  }
+
+  console.log(`Backdated revenue payments added (${created} new).`);
+}
+
+// --- Demo expenses (enriches Finances' "Dépenses par catégorie") -----------
+//
+// Sourced from the Cars module's own data — each DEMO_CARS entry gets an
+// insurance renewal and a registration fee tiered by its category, plus
+// fuel fill-ups scaled off its daily rate (skipped for electric cars, which
+// get a "Recharge électrique" entry under OTHER instead) and a repair line
+// for the higher-mileage cars, scaled off their actual mileage. A short list
+// of one-off cleaning/parking entries fills out OTHER. This mirrors the
+// Car→Finances entry point (car-detail-sheet's own "Dépenses" section, same
+// ExpenseFormDialog/mutation) rather than inventing a second data source —
+// see the recommendation this followed: no duplicated business logic.
+//
+// Idempotent per (carId, category, description): a rerun skips any triple
+// that already exists, so it never doubles up.
+
+async function createExpenseIfMissing(
+  carId: string,
+  category: ExpenseCategory,
+  amount: number,
+  description: string,
+  date: Date,
+): Promise<boolean> {
+  const existing = await prisma.expense.findFirst({ where: { carId, category, description } });
+  if (existing) return false;
+  await prisma.expense.create({ data: { carId, category, amount, description, date } });
+  return true;
+}
+
+const INSURANCE_TIER_BY_CATEGORY: Record<string, number> = {
+  ECONOMY: 180,
+  COMPACT: 220,
+  SUV: 280,
+  LUXURY: 380,
+  VAN: 240,
+};
+
+const REGISTRATION_TIER_BY_CATEGORY: Record<string, number> = {
+  ECONOMY: 60,
+  COMPACT: 70,
+  SUV: 90,
+  LUXURY: 120,
+  VAN: 80,
+};
+
+const OTHER_EXPENSE_EXTRAS: { plate: string; amount: number; label: string; offsetDays: number }[] = [
+  { plate: '206 TUN 5515', amount: 60, label: 'Nettoyage complet avant location', offsetDays: 4 },
+  { plate: '210 TUN 5519', amount: 90, label: 'Nettoyage complet avant location', offsetDays: 9 },
+  { plate: '211 TUN 5520', amount: 45, label: 'Frais de parking', offsetDays: 18 },
+  { plate: '208 TUN 5517', amount: 55, label: 'Nettoyage complet avant location', offsetDays: 40 },
+];
+
+async function seedDemoExpenses() {
+  const cars = await prisma.car.findMany({
+    where: { licensePlate: { in: DEMO_CARS.map((c) => c.licensePlate as string) } },
+    orderBy: { licensePlate: 'asc' },
+  });
+
+  if (cars.length === 0) {
+    console.log('No demo cars found, skipping demo expenses.');
+    return;
+  }
+
+  let created = 0;
+
+  for (const [index, car] of cars.entries()) {
+    // Insurance — one renewal per car, tiered by category.
+    const insuranceAmount = INSURANCE_TIER_BY_CATEGORY[car.category] ?? 200;
+    const insuranceCreated = await createExpenseIfMissing(
+      car.id,
+      'INSURANCE',
+      insuranceAmount,
+      `Assurance annuelle — ${car.brand} ${car.model}`,
+      daysFromNow(-(20 + index * 11)),
+    );
+    if (insuranceCreated) created += 1;
+
+    // Registration — one flat fee per car, tiered by category.
+    const registrationAmount = REGISTRATION_TIER_BY_CATEGORY[car.category] ?? 70;
+    const registrationCreated = await createExpenseIfMissing(
+      car.id,
+      'REGISTRATION',
+      registrationAmount,
+      `Vignette / immatriculation — ${car.brand} ${car.model}`,
+      daysFromNow(-(35 + index * 9)),
+    );
+    if (registrationCreated) created += 1;
+
+    if (car.fuelType === 'ELECTRIC') {
+      // No dedicated ExpenseCategory for electricity yet — filed under OTHER.
+      const rechargeCreated = await createExpenseIfMissing(
+        car.id,
+        'OTHER',
+        Math.round(15 + Number(car.dailyRate) * 0.08),
+        `Recharge électrique — ${car.brand} ${car.model}`,
+        daysFromNow(-(8 + index * 6)),
+      );
+      if (rechargeCreated) created += 1;
+    } else {
+      // Fuel — two fill-ups per car, scaled off its own daily rate (a proxy
+      // for tank size/segment), with a small deterministic jitter so both
+      // fill-ups aren't an identical, suspiciously round amount.
+      const base = 40 + Math.round(Number(car.dailyRate) * 0.3);
+      for (let i = 0; i < 2; i += 1) {
+        const jitter = 0.85 + (0.3 * ((index * 5 + i * 7) % 10)) / 10;
+        const amount = Math.round(base * jitter);
+        const fuelCreated = await createExpenseIfMissing(
+          car.id,
+          'FUEL',
+          amount,
+          `Plein carburant #${i + 1} — ${car.brand} ${car.model}`,
+          daysFromNow(-(5 + index * 6 + i * 27)),
+        );
+        if (fuelCreated) created += 1;
+      }
+    }
+
+    // Repair — only the higher-mileage cars, scaled off their actual mileage.
+    if (car.mileage > 50000) {
+      const repairAmount = 200 + Math.round(car.mileage / 300);
+      const repairCreated = await createExpenseIfMissing(
+        car.id,
+        'REPAIR',
+        repairAmount,
+        `Réparation mécanique — ${car.brand} ${car.model}`,
+        daysFromNow(-(15 + index * 8)),
+      );
+      if (repairCreated) created += 1;
+    }
+  }
+
+  for (const extra of OTHER_EXPENSE_EXTRAS) {
+    const car = cars.find((c) => c.licensePlate === extra.plate);
+    if (!car) continue;
+    const extraCreated = await createExpenseIfMissing(
+      car.id,
+      'OTHER',
+      extra.amount,
+      `${extra.label} — ${car.brand} ${car.model}`,
+      daysFromNow(-extra.offsetDays),
+    );
+    if (extraCreated) created += 1;
+  }
+
+  console.log(`Demo expenses added (${created} new) across ${cars.length} demo car(s).`);
+}
+
 async function main() {
   if (process.env.NODE_ENV === 'production') {
     throw new Error('Refusing to run the seed script against NODE_ENV=production.');
@@ -1415,6 +1729,9 @@ async function main() {
   await seedDemoRentals(admin.id);
   await seedCalendarTestCars();
   await seedCalendarTestRentals(admin.id);
+  await seedDemoPayments();
+  await seedBackdatedRevenue();
+  await seedDemoExpenses();
 }
 
 main()

@@ -24,8 +24,17 @@ function buildWhere(query: ExpenseListQuery): Prisma.ExpenseWhereInput {
     };
   }
 
-  if (query.search) {
-    where.description = { contains: query.search, mode: 'insensitive' };
+  // Both `search` and `subcategory` narrow `description`; AND them so they
+  // compose instead of one silently overwriting the other.
+  const descriptionFilters: Prisma.ExpenseWhereInput[] = [];
+  if (query.search) descriptionFilters.push({ description: { contains: query.search, mode: 'insensitive' } });
+  if (query.subcategory) {
+    descriptionFilters.push({ description: { contains: query.subcategory, mode: 'insensitive' } });
+  }
+  if (descriptionFilters.length === 1) {
+    Object.assign(where, descriptionFilters[0]);
+  } else if (descriptionFilters.length > 1) {
+    where.AND = descriptionFilters;
   }
 
   return where;

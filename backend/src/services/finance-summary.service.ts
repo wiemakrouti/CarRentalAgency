@@ -7,6 +7,7 @@ import {
 } from '@car-rental/shared';
 import { PaymentsRepository } from '../repositories/payments.repository.js';
 import { ExpensesRepository } from '../repositories/expenses.repository.js';
+import type { DepositListQuery } from '../validators/finance.validator.js';
 
 // Zero-fills every known type/category (not just the ones with rows in
 // range) so the frontend never has to special-case "no data yet" per key —
@@ -27,12 +28,16 @@ export const FinanceSummaryService = {
   async getSummary(query: FinanceSummaryQuery) {
     const range = { from: query.from, to: query.to };
 
-    const [revenueByTypeRows, pendingByTypeRows, expensesByCategoryRows, expensesTotal] = await Promise.all([
-      PaymentsRepository.sumByTypeForStatus('COMPLETED', range),
-      PaymentsRepository.sumByTypeForStatus('PENDING', range),
-      ExpensesRepository.sumByCategory(range),
-      ExpensesRepository.sumTotal(range),
-    ]);
+    const [revenueByTypeRows, pendingByTypeRows, expensesByCategoryRows, expensesTotal, depositFlows] =
+      await Promise.all([
+        PaymentsRepository.sumByTypeForStatus('COMPLETED', range),
+        PaymentsRepository.sumByTypeForStatus('PENDING', range),
+        ExpensesRepository.sumByCategory(range),
+        ExpensesRepository.sumTotal(range),
+        // All-time on purpose — the Résumé's Cautions card ignores `range`,
+        // so this reads the whole history rather than the period.
+        PaymentsRepository.sumDepositFlows(),
+      ]);
 
     // DEPOSIT/DEPOSIT_REFUND are excluded from "Revenus" — a caution is a
     // refundable hold, not agency income (mirrors rental-balance.ts's own
@@ -64,21 +69,50 @@ export const FinanceSummaryService = {
       .filter((row) => isRevenueType(row.type))
       .reduce((sum, row) => sum + Number(row._sum.amount ?? 0), 0);
 
-    // Cautions, tracked separately from revenue — visible here rather than
-    // silently dropped now that they no longer feed into "Revenus" above.
-    const depositsCollected = revenueByTypeRows.find((row) => row.type === 'DEPOSIT');
-    const depositsRefunded = revenueByTypeRows.find((row) => row.type === 'DEPOSIT_REFUND');
-
     return {
       period: { from: query.from, to: query.to },
       revenue: { total: revenueTotal, byType: revenueByType },
-      deposits: {
-        collected: Number(depositsCollected?._sum.amount ?? 0),
-        refunded: Number(depositsRefunded?._sum.amount ?? 0),
-      },
+      // All-time (see depositFlows above) — tracked separately from revenue
+      // since a caution is a refundable hold, not agency income.
+      deposits: depositFlows,
       expenses: { total: expensesTotalNumber, byCategory: expensesByCategory },
       pendingTotal,
       net: revenueTotal - expensesTotalNumber,
     };
+  },
+
+  // "Cautions" tab: a page of the ledger, one row per rental rather than per
+  // payment — a rental could in principle have more than one COMPLETED
+  // DEPOSIT row (e.g. a corrected amount), and depositReturned is a single
+  // flag on the rental, not on each payment, so the collected amount is
+  // their sum. Covers every caution ever collected, refunded or not —
+  // `refundedAt` is null for the ones still outstanding.
+  async listDeposits(query: DepositListQuery) {
+    const { items: payments, total } = await PaymentsRepository.findDepositsPage(query);
+
+    const byRental = new Map<string, Omit<(typeof payments)[number], 'amount'> & { amount: number }>();
+    for (const payment of payments) {
+      const existing = byRental.get(payment.rentalId);
+      if (existing) {
+        existing.amount += Number(payment.amount);
+      } else {
+        byRental.set(payment.rentalId, { ...payment, amount: Number(payment.amount) });
+      }
+    }
+
+    const refunds = await PaymentsRepository.findDepositRefunds(Array.from(byRental.keys()));
+    const refundedAtByRental = new Map(refunds.map((refund) => [refund.rentalId, refund.paidAt]));
+
+    const items = Array.from(byRental.values()).map((payment) => ({
+      rentalId: payment.rentalId,
+      rentalNumber: payment.rental.rentalNumber,
+      car: { brand: payment.rental.car.brand, model: payment.rental.car.model },
+      client: { firstName: payment.rental.client.firstName, lastName: payment.rental.client.lastName },
+      amount: payment.amount,
+      collectedAt: payment.paidAt,
+      refundedAt: refundedAtByRental.get(payment.rentalId) ?? null,
+    }));
+
+    return { items, total, page: query.page, pageSize: query.pageSize };
   },
 };

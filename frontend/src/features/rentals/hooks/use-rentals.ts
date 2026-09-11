@@ -8,7 +8,7 @@ import type {
 } from '@car-rental/shared';
 import { carKeys } from '@/features/cars/api/cars.keys';
 import { clientKeys } from '@/features/clients/api/clients.keys';
-import { financeSummaryKeys, paymentKeys } from '@/features/finances/api/finances.keys';
+import { depositsKeys, financeSummaryKeys, paymentKeys } from '@/features/finances/api/finances.keys';
 import { notificationKeys } from '@/features/notifications/api/notifications.keys';
 import { rentalsApi, type RentalListParams } from '../api/rentals.api';
 import { rentalKeys } from '../api/rentals.keys';
@@ -67,6 +67,9 @@ export function useCreateRentalMutation() {
       // ledger and summary widget need to pick that up too.
       queryClient.invalidateQueries({ queryKey: paymentKeys.lists() });
       queryClient.invalidateQueries({ queryKey: financeSummaryKeys.all });
+      // ...and that initial payment could itself be the DEPOSIT — a rental
+      // booked and paid in one step can show up in "Cautions" immediately.
+      queryClient.invalidateQueries({ queryKey: depositsKeys.all });
       // The "Location immédiate" tab can also activate the rental right at
       // booking (RentalsService.create's activation) — same reminder
       // implications as a manual activate() (its RENTAL_PICKUP_OVERDUE
