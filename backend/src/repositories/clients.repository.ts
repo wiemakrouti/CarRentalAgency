@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { REVENUE_PAYMENT_TYPES, type ClientDocumentType, type CreateClientInput, type UpdateClientInput } from '@car-rental/shared';
 import { prisma } from '../lib/prisma-client.js';
+import { endOfDayExclusive } from '../lib/date-utils.js';
 import type { ClientExportQuery, ClientListQuery } from '../validators/client.validator.js';
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -30,6 +31,16 @@ function buildWhere(query: ClientFilterQuery): Prisma.ClientWhereInput {
 
   if (query.city) {
     where.city = { contains: query.city, mode: 'insensitive' };
+  }
+
+  // createdAt is a real timestamp, not a date-only field like
+  // drivingLicenseExpiry below — endOfDayExclusive keeps the whole
+  // `createdTo` calendar day covered instead of cutting it off at 00:00 UTC.
+  if (query.createdFrom || query.createdTo) {
+    where.createdAt = {
+      ...(query.createdFrom ? { gte: query.createdFrom } : {}),
+      ...(query.createdTo ? { lt: endOfDayExclusive(query.createdTo) } : {}),
+    };
   }
 
   if (query.licenseStatus) {

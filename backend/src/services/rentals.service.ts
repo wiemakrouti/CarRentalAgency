@@ -15,8 +15,8 @@ import { RentalExtensionsRepository } from '../repositories/rental-extensions.re
 import { CarsService } from './cars.service.js';
 import { ClientsService } from './clients.service.js';
 import { AuditService } from './audit.service.js';
-import { startOfDay, startOfToday } from '../lib/date-utils.js';
-import type { RentalListQuery } from '../validators/rental.validator.js';
+import { formatDateOnly, startOfDayUTC } from '../lib/date-utils.js';
+import type { RentalListQuery, RentalOccupancyQuery } from '../validators/rental.validator.js';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
@@ -60,8 +60,13 @@ export const RentalsService = {
   // and getSummary() on the same page load just no-ops the second time.
   async sweepExpiredReservations() {
     // Start of today, not `new Date()` — a reservation whose plannedReturnDate
-    // is today hasn't actually expired until today is over.
-    const expired = await RentalsRepository.findExpiredReservations(startOfToday());
+    // is today hasn't actually expired until today is over. startOfDayUTC, not
+    // startOfToday's server-local midnight: plannedReturnDate is UTC-midnight
+    // of a calendar day, and on any server not running in UTC (this one runs
+    // in Africa/Lagos, UTC+1) a local midnight rolls over up to `offset` early
+    // — which used to auto-cancel a reservation up to an hour before its
+    // planned day had actually finished.
+    const expired = await RentalsRepository.findExpiredReservations(startOfDayUTC(new Date()));
     if (expired.length === 0) return 0;
 
     await prisma.$transaction(async (tx) => {
@@ -93,6 +98,45 @@ export const RentalsService = {
   async getSummary() {
     await RentalsService.sweepExpiredReservations();
     return RentalsRepository.getSummaryCounts();
+  },
+
+  // Dashboard's occupancy heatmap: one { date, count } row per calendar day
+  // in [from, to], `count` being how many cars were actually out that day.
+  // Fetches the (small) set of candidate rentals once, then buckets them by
+  // day in application code rather than running one query per day — the
+  // range is at most MAX_OCCUPANCY_RANGE_DAYS (400) days, so this stays
+  // cheap without needing raw SQL for per-day aggregation.
+  async getOccupancy(query: RentalOccupancyQuery) {
+    // Already UTC-midnight of a calendar day (z.coerce.date() of a
+    // "YYYY-MM-DD" query param) — the same representation pickupDate itself
+    // uses, so no truncation needed here. startOfDay (local midnight) must
+    // NOT be applied to these: on any server not running in UTC it shifts
+    // them by the server's own offset, which used to make `to` disagree
+    // with a rental's own `pickupDate` by up to a day (see startOfDayUTC's
+    // comment in date-utils.ts).
+    const { from, to } = query;
+    const rentals = await RentalsRepository.findOccupancyRentals(from, to);
+    // An ongoing rental (no actualReturnDate yet) counts as occupying every
+    // day up to and including today — never plannedReturnDate, which for an
+    // overdue return already sits in the past while the car is still out.
+    // "Today" is truncated with startOfDayUTC, not startOfToday's local
+    // midnight, to stay in the same UTC-midnight terms as `from`/`to`/
+    // `pickup` above.
+    const ongoingEnd = new Date(startOfDayUTC(new Date()).getTime() + MS_PER_DAY);
+
+    const days: { date: string; count: number }[] = [];
+    for (let cursor = from; cursor.getTime() <= to.getTime(); cursor = new Date(cursor.getTime() + MS_PER_DAY)) {
+      const count = rentals.reduce((total, rental) => {
+        const pickup = rental.pickupDate;
+        // actualReturnDate is a real timestamp (returnRental below sets it
+        // to `new Date()`), not a date-only value like pickupDate — still
+        // needs truncating to a comparable UTC calendar day.
+        const end = rental.actualReturnDate ? startOfDayUTC(rental.actualReturnDate) : ongoingEnd;
+        return cursor.getTime() >= pickup.getTime() && cursor.getTime() < end.getTime() ? total + 1 : total;
+      }, 0);
+      days.push({ date: formatDateOnly(cursor), count });
+    }
+    return days;
   },
 
   async getById(id: string, options?: { includeArchived?: boolean }) {
@@ -367,14 +411,18 @@ export const RentalsService = {
     // itself is 0 days late, not 1: comparing the exact instant (the old
     // `actualReturnDate > plannedReturnDate` + Math.ceil) rounded any moment
     // past midnight of that day up to a full day late, charging a fee for a
-    // return that was actually on time. Both sides go through startOfDay, not
-    // just actualReturnDate — plannedReturnDate is stored as UTC midnight,
-    // which for a positive UTC offset (Tunisia is UTC+1) sits an hour or more
-    // *after* local midnight; leaving it untruncated silently rounded every
-    // clean N-day gap down to N-1 (a genuinely 2-day-late return billed as 1).
+    // return that was actually on time. actualReturnDate (a real timestamp)
+    // is truncated with startOfDayUTC, not startOfDay's server-local midnight
+    // — plannedReturnDate is already UTC midnight, so comparing it against a
+    // local-midnight truncation of actualReturnDate silently mis-charges a
+    // return made in the last `offset` stretch of the planned day itself (on
+    // this server, the last hour before UTC midnight: local time has already
+    // rolled to the next calendar day, billing an on-time return as 1 day
+    // late). plannedReturnDate needs no truncation of its own — it's already
+    // the UTC-midnight instant this comparison wants.
     const lateDays = Math.max(
       0,
-      Math.floor((startOfDay(actualReturnDate).getTime() - startOfDay(rental.plannedReturnDate).getTime()) / MS_PER_DAY),
+      Math.floor((startOfDayUTC(actualReturnDate).getTime() - rental.plannedReturnDate.getTime()) / MS_PER_DAY),
     );
     const lateFeeAmount = lateDays * Number(rental.dailyRate);
 

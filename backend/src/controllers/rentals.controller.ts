@@ -7,7 +7,7 @@ import type {
   ReturnRentalInput,
 } from '@car-rental/shared';
 import { RentalsService } from '../services/rentals.service.js';
-import type { RentalListQuery } from '../validators/rental.validator.js';
+import type { RentalListQuery, RentalOccupancyQuery } from '../validators/rental.validator.js';
 
 export const RentalsController = {
   async list(req: Request, res: Response) {
@@ -23,6 +23,12 @@ export const RentalsController = {
   async getSummary(_req: Request, res: Response) {
     const summary = await RentalsService.getSummary();
     res.status(200).json({ success: true, data: summary });
+  },
+
+  async getOccupancy(req: Request, res: Response) {
+    const query = req.query as unknown as RentalOccupancyQuery;
+    const days = await RentalsService.getOccupancy(query);
+    res.status(200).json({ success: true, data: days });
   },
 
   async getById(req: Request, res: Response) {

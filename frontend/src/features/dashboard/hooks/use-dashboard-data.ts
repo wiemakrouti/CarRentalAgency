@@ -1,5 +1,4 @@
 import { useQueries, useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { CAR_CATEGORIES, type CarCategory } from '@car-rental/shared';
 
 import { carsApi } from '@/features/cars/api/cars.api';
 import { carKeys } from '@/features/cars/api/cars.keys';
@@ -7,7 +6,7 @@ import { clientsApi } from '@/features/clients/api/clients.api';
 import { clientKeys } from '@/features/clients/api/clients.keys';
 import { financesApi, type FinanceSummary } from '@/features/finances/api/finances.api';
 import { financeSummaryKeys } from '@/features/finances/api/finances.keys';
-import { useRentalSummaryQuery } from '@/features/rentals/hooks/use-rentals';
+import { useRentalOccupancyQuery, useRentalSummaryQuery } from '@/features/rentals/hooks/use-rentals';
 
 const MONTH_LABELS = [
   'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc',
@@ -17,6 +16,10 @@ const MONTH_LABELS = [
 // same one extra Prisma count() query however small `items` is, and a
 // pageSize of 1 keeps the payload itself negligible.
 const COUNT_ONLY = { page: 1, pageSize: 1 } as const;
+
+// Occupancy heatmap window — 90 days ending today (inclusive), matching the
+// "90 derniers jours" the widget itself is labeled with.
+const OCCUPANCY_WINDOW_DAYS = 90;
 
 // Local getters, not `toISOString()` — the Date objects built below (e.g.
 // `startOfMonth`) are local midnight, and `toISOString()` converts to UTC
@@ -78,16 +81,6 @@ export function useDashboardData() {
     queryKey: carKeys.list({ ...COUNT_ONLY, status: 'AVAILABLE' }),
     queryFn: () => carsApi.list({ ...COUNT_ONLY, status: 'AVAILABLE' }),
   });
-  // One request per category rather than a single pageSize=100 fetch —
-  // stays accurate (via each response's own count()-derived meta.total)
-  // even if the fleet ever grows past the API's 100-row page cap.
-  const categoryQueries = useQueries({
-    queries: CAR_CATEGORIES.map((category) => ({
-      queryKey: carKeys.list({ ...COUNT_ONLY, category }),
-      queryFn: () => carsApi.list({ ...COUNT_ONLY, category }),
-    })),
-  });
-
   const totalClientsQuery = useQuery({
     queryKey: clientKeys.list(COUNT_ONLY),
     queryFn: () => clientsApi.list(COUNT_ONLY),
@@ -113,15 +106,29 @@ export function useDashboardData() {
     queryFn: () => financesApi.getSummary(previousPeriod.from, previousPeriod.to),
   });
 
+  // "+X ce mois-ci" under the Clients enregistrés KPI — same month-to-date
+  // window as the revenue/profit figures above.
+  const newClientsParams = { ...COUNT_ONLY, createdFrom: currentPeriod.from, createdTo: currentPeriod.to };
+  const newClientsQuery = useQuery({
+    queryKey: clientKeys.list(newClientsParams),
+    queryFn: () => clientsApi.list(newClientsParams),
+  });
+
   // Six calendar months ending with the current one (month-to-date) — the
   // chart's own trend line, independent of the like-for-like pair above.
   const monthRanges = Array.from({ length: 6 }, (_, i) => {
     const monthsAgo = 5 - i;
     const monthStart = new Date(now.getFullYear(), now.getMonth() - monthsAgo, 1);
     const monthEnd = monthsAgo === 0 ? now : endOfMonth(monthStart);
-    return { label: MONTH_LABELS[monthStart.getMonth()], from: toDateParam(monthStart), to: toDateParam(monthEnd) };
+    // Non-null: getMonth() always returns 0-11 and MONTH_LABELS has exactly
+    // 12 entries — guaranteed in range, just not something noUncheckedIndexedAccess can see.
+    return { label: MONTH_LABELS[monthStart.getMonth()]!, from: toDateParam(monthStart), to: toDateParam(monthEnd) };
   });
   const monthlyRevenueQueries = useFinanceSummaryQueries(monthRanges);
+
+  const occupancyFrom = new Date(now);
+  occupancyFrom.setDate(occupancyFrom.getDate() - (OCCUPANCY_WINDOW_DAYS - 1));
+  const occupancyQuery = useRentalOccupancyQuery(toDateParam(occupancyFrom), toDateParam(now));
 
   const allQueries: UseQueryResult<unknown>[] = [
     rentalSummaryQuery,
@@ -130,7 +137,8 @@ export function useDashboardData() {
     totalClientsQuery,
     currentRevenueQuery,
     previousRevenueQuery,
-    ...categoryQueries,
+    newClientsQuery,
+    occupancyQuery,
     ...monthlyRevenueQueries,
   ];
   const isLoading = allQueries.some((q) => q.isLoading);
@@ -138,18 +146,26 @@ export function useDashboardData() {
 
   const previousRevenue = previousRevenueQuery.data?.revenue.total ?? 0;
   const currentRevenue = currentRevenueQuery.data?.revenue.total ?? 0;
-  // No fair baseline (e.g. the agency's first month ever) means no trend —
-  // shown as an absence, never a fabricated "+0%".
-  const monthRevenueTrend = previousRevenue > 0 ? ((currentRevenue - previousRevenue) / previousRevenue) * 100 : null;
+  const previousExpenses = previousRevenueQuery.data?.expenses.total ?? 0;
+  const currentExpenses = currentRevenueQuery.data?.expenses.total ?? 0;
+  const previousProfit = previousRevenue - previousExpenses;
+  const currentProfit = currentRevenue - currentExpenses;
+  // No fair baseline (e.g. the agency's first month ever, or a prior period
+  // that broke exactly even) means no trend — shown as an absence, never a
+  // fabricated percentage. Divides by |previousProfit|, not previousProfit —
+  // a negative prior-month result would otherwise flip the percentage's
+  // sign relative to the actual direction of change (mirrors
+  // finance-summary-tab.tsx's own computeTrend for the same reason).
+  const monthProfitTrend =
+    previousProfit !== 0 ? ((currentProfit - previousProfit) / Math.abs(previousProfit)) * 100 : null;
 
-  const categoryBreakdown = CAR_CATEGORIES.map((category, i) => ({
-    category: category as CarCategory,
-    count: categoryQueries[i]?.data?.meta.total ?? 0,
-  })).filter((row) => row.count > 0);
-
-  const monthlyRevenue = monthRanges.map((range, i) => ({
+  // Both sides of the Revenus vs Dépenses chart come from the same
+  // per-month FinanceSummary already fetched above for the revenue trend —
+  // expenses.total was already in that response, just unused until now.
+  const monthlyFinance = monthRanges.map((range, i) => ({
     month: range.label,
     revenue: monthlyRevenueQueries[i]?.data?.revenue.total ?? 0,
+    expenses: monthlyRevenueQueries[i]?.data?.expenses.total ?? 0,
   }));
 
   function refetch() {
@@ -172,9 +188,10 @@ export function useDashboardData() {
     activeRentals: (rentalSummaryQuery.data?.active ?? 0) + (rentalSummaryQuery.data?.overdueReturn ?? 0),
     overdueRentals: rentalSummaryQuery.data?.overdueReturn ?? 0,
     totalClients: totalClientsQuery.data?.meta.total ?? 0,
-    monthRevenue: currentRevenue,
-    monthRevenueTrend,
-    categoryBreakdown,
-    monthlyRevenue,
+    newClientsThisMonth: newClientsQuery.data?.meta.total ?? 0,
+    monthProfit: currentProfit,
+    monthProfitTrend,
+    monthlyFinance,
+    occupancy: occupancyQuery.data ?? [],
   };
 }

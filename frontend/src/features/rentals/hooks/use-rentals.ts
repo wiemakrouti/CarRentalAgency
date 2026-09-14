@@ -36,6 +36,13 @@ export function useRentalSummaryQuery() {
   });
 }
 
+export function useRentalOccupancyQuery(from: string, to: string) {
+  return useQuery({
+    queryKey: rentalKeys.occupancy(from, to),
+    queryFn: () => rentalsApi.getOccupancy(from, to),
+  });
+}
+
 export function useRentalQuery(id: string) {
   return useQuery({
     queryKey: rentalKeys.detail(id),

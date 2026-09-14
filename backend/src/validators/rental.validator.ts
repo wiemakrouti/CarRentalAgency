@@ -16,6 +16,38 @@ export const rentalListQuerySchema = paginationQuerySchema.merge(includeArchived
   // `status` in buildWhere when present, so the KPI cards can link here
   // without also having to agree on a matching `status` value.
   pickupOverdue: booleanQueryParam(),
+  // Backs the Dashboard's status-pipeline gauge — one count-only /rentals
+  // call per status, scoped to a pickupDate window (e.g. month-to-date).
+  // Independent of pickupOverdue/status:'OVERDUE' above, which own
+  // pickupDate for their own narrower purpose — combining both isn't a
+  // real caller need and buildWhere merges them onto the same field rather
+  // than guarding against it.
+  pickupFrom: z.coerce.date().optional(),
+  pickupTo: z.coerce.date().optional(),
 });
 
 export type RentalListQuery = z.infer<typeof rentalListQuerySchema>;
+
+const MAX_OCCUPANCY_RANGE_DAYS = 400;
+
+// Backs the Dashboard's occupancy heatmap (RentalsService.getOccupancy) —
+// `from`/`to` are date-only strings, coerced the same way
+// financeSummaryQuerySchema does for the identical reason (see its comment).
+export const rentalOccupancyQuerySchema = z
+  .object({
+    from: z.coerce.date(),
+    to: z.coerce.date(),
+  })
+  .refine((data) => data.to >= data.from, {
+    message: 'La date de fin doit être postérieure ou égale à la date de début.',
+    path: ['to'],
+  })
+  .refine(
+    (data) => data.to.getTime() - data.from.getTime() <= MAX_OCCUPANCY_RANGE_DAYS * 24 * 60 * 60 * 1000,
+    {
+      message: `La période ne peut pas dépasser ${MAX_OCCUPANCY_RANGE_DAYS} jours.`,
+      path: ['to'],
+    },
+  );
+
+export type RentalOccupancyQuery = z.infer<typeof rentalOccupancyQuerySchema>;

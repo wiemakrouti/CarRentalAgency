@@ -46,6 +46,9 @@ export type ClientListParams = {
   search?: string;
   city?: string;
   licenseStatus?: ClientLicenseStatus;
+  // Date-only strings (YYYY-MM-DD) — backs the Dashboard's "+X ce mois-ci".
+  createdFrom?: string;
+  createdTo?: string;
   sortBy?: ClientSortField;
   sortOrder?: SortOrder;
 };

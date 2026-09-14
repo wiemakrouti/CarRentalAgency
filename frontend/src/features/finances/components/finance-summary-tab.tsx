@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
+import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts';
 import { REVENUE_PAYMENT_TYPES, EXPENSE_CATEGORIES, type ExpenseCategory, type RevenuePaymentType } from '@car-rental/shared';
 import { Clock, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 
@@ -9,6 +9,7 @@ import { ErrorState } from '@/components/common/error-state';
 import { DateRangeFilter, computeDateRangePreset, toDateParam, type DateRange } from '@/components/common/date-range-filter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { cn } from '@/lib/utils';
 
 import { useFinanceSummaryQuery } from '../hooks/use-finance-summary';
 import { EXPENSE_CATEGORY_LABELS, PAYMENT_TYPE_LABELS } from '../lib/finance-labels';
@@ -17,14 +18,6 @@ import { DepositsCard } from './deposits-card';
 function formatMoney(amount: number): string {
   return `${amount.toLocaleString('fr-TN')} DT`;
 }
-
-const tooltipStyle = {
-  backgroundColor: 'hsl(var(--popover))',
-  borderColor: 'hsl(var(--border))',
-  borderRadius: 'var(--radius)',
-  color: 'hsl(var(--popover-foreground))',
-  fontSize: '13px',
-};
 
 function chartColor(index: number): string {
   return `hsl(var(--chart-${(index % 5) + 1}))`;
@@ -109,6 +102,10 @@ function BreakdownCard<Key extends string>({
   // (possibly shorter) filtered `chartData` — so a category dropping to 0
   // DT one period never reshuffles every other slice's color the next.
   const colorByKey = new Map(rows.map((row, index) => [row.key, chartColor(index)]));
+  // Linked highlight instead of a floating Tooltip — on a donut this small,
+  // the default cursor-following tooltip lands on top of the total-amount
+  // label centered in the hole (same fix as the Dashboard's category donut).
+  const [hoveredKey, setHoveredKey] = useState<Key | null>(null);
 
   return (
     <Card className="shadow-xs">
@@ -128,12 +125,23 @@ function BreakdownCard<Key extends string>({
                   outerRadius={66}
                   paddingAngle={3}
                   stroke="none"
+                  // Instant render — an onMouseEnter that re-renders on
+                  // every hover fights the mount-in sweep animation,
+                  // leaving sectors stuck interpolated at a sliver of
+                  // their real angle.
+                  isAnimationActive={false}
+                  onMouseEnter={(datum: { key?: Key }) => setHoveredKey(datum.key ?? null)}
+                  onMouseLeave={() => setHoveredKey(null)}
                 >
                   {chartData.map((row) => (
-                    <Cell key={row.key} fill={colorByKey.get(row.key)} />
+                    <Cell
+                      key={row.key}
+                      fill={colorByKey.get(row.key)}
+                      fillOpacity={hoveredKey && hoveredKey !== row.key ? 0.35 : 1}
+                      style={{ transition: 'fill-opacity 150ms ease' }}
+                    />
                   ))}
                 </Pie>
-                <Tooltip contentStyle={tooltipStyle} formatter={(value: number, name: string) => [formatMoney(value), name]} />
               </PieChart>
             </ResponsiveContainer>
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
@@ -155,7 +163,12 @@ function BreakdownCard<Key extends string>({
           </TableHeader>
           <TableBody>
             {rows.map((row) => (
-              <TableRow key={row.key}>
+              <TableRow
+                key={row.key}
+                className={cn(hoveredKey === row.key && 'bg-muted/60')}
+                onMouseEnter={() => row.amount > 0 && setHoveredKey(row.key)}
+                onMouseLeave={() => setHoveredKey(null)}
+              >
                 <TableCell>
                   <span className="flex items-center gap-2">
                     <span

@@ -11,7 +11,11 @@ import { authorize } from '../middleware/authorize.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { RentalsController } from '../controllers/rentals.controller.js';
-import { rentalIdParamSchema, rentalListQuerySchema } from '../validators/rental.validator.js';
+import {
+  rentalIdParamSchema,
+  rentalListQuerySchema,
+  rentalOccupancyQuerySchema,
+} from '../validators/rental.validator.js';
 
 export const rentalsRouter = Router();
 
@@ -22,6 +26,13 @@ rentalsRouter.post('/rentals', validate({ body: createRentalSchema }), asyncHand
 // Must come before /rentals/:id — otherwise "summary" is captured as :id
 // and fails UUID validation instead of reaching this handler.
 rentalsRouter.get('/rentals/summary', asyncHandler(RentalsController.getSummary));
+// Same reasoning as /rentals/summary above — "occupancy" would otherwise be
+// captured as :id.
+rentalsRouter.get(
+  '/rentals/occupancy',
+  validate({ query: rentalOccupancyQuerySchema }),
+  asyncHandler(RentalsController.getOccupancy),
+);
 rentalsRouter.get(
   '/rentals/:id',
   validate({ params: rentalIdParamSchema }),

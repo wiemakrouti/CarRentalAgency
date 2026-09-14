@@ -60,6 +60,13 @@ export type RentalSummary = {
   upcomingReservations: number;
 };
 
+// Dashboard's occupancy heatmap — one row per calendar day in the
+// requested range, `count` being how many cars were actually out that day.
+export type RentalOccupancyDay = {
+  date: string;
+  count: number;
+};
+
 export type RentalListParams = {
   page?: number;
   pageSize?: number;
@@ -72,11 +79,17 @@ export type RentalListParams = {
   // validator's own comment. Set by the Rentals KPI header's "Départs en
   // retard" (true) / "Réservations à venir" (false) cards.
   pickupOverdue?: boolean;
+  // Date-only strings (YYYY-MM-DD) — backs the Dashboard's status-pipeline
+  // gauge, one count-only call per status scoped to a pickupDate window.
+  pickupFrom?: string;
+  pickupTo?: string;
 };
 
 export const rentalsApi = {
   list: (params: RentalListParams) => apiClient.getPaginated<Rental>(`/rentals${buildQueryString(params)}`),
   getSummary: () => apiClient.get<RentalSummary>('/rentals/summary'),
+  getOccupancy: (from: string, to: string) =>
+    apiClient.get<RentalOccupancyDay[]>(`/rentals/occupancy${buildQueryString({ from, to })}`),
   getById: (id: string) => apiClient.get<Rental>(`/rentals/${id}`),
   create: (input: CreateRentalInput) => apiClient.post<Rental>('/rentals', input),
   activate: (id: string, input: ActivateRentalInput) => apiClient.post<Rental>(`/rentals/${id}/activate`, input),

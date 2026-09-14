@@ -1,5 +1,4 @@
 import { prisma } from '../lib/prisma-client.js';
-import { startOfToday } from '../lib/date-utils.js';
 import { RentalsService } from './rentals.service.js';
 
 export type ReminderType =
@@ -66,14 +65,16 @@ export class RemindersService {
     // "expiring soon" for the rest of that day — two views of the same app
     // visibly disagreeing about whether something has expired *today*.
     const todayUtcMidnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    // Local start-of-today for the rental queries below — pickupDate/
-    // plannedReturnDate get the exact same "not overdue until the day is
-    // over" treatment as the calendar-day fields above (rental-calendar.ts's
+    // The rental queries below reuse this same todayUtcMidnight, not a
+    // separate server-local "start of today" — pickupDate/plannedReturnDate
+    // get the exact same "not overdue until the day is over" treatment as
+    // the calendar-day fields above (rental-calendar.ts's
     // getEffectiveRentalStatus mirrors this same boundary on the frontend),
     // rather than the exact instant `now`, which used to mark a rental
     // "en retard"/"non récupérée" the moment any hour past midnight of its
-    // due day ticked by.
-    const today = startOfToday();
+    // due day ticked by. A local-midnight cutoff here would silently disagree
+    // with these UTC-midnight fields by the server's own offset — on a
+    // server not running in UTC, up to `offset` early.
 
     const [dueSoonRentals, overdueRentals, overduePickups, maintenanceDue, licensesExpiring, carsWithDocuments] =
       await Promise.all([
@@ -83,10 +84,10 @@ export class RemindersService {
         // at an archived rental would be a dead click: GET /rentals/:id
         // 404s on an archived row, so the deep link could never resolve.
         prisma.rental.findMany({
-          where: { status: 'ACTIVE', deletedAt: null, plannedReturnDate: { gte: today, lte: horizon } },
+          where: { status: 'ACTIVE', deletedAt: null, plannedReturnDate: { gte: todayUtcMidnight, lte: horizon } },
         }),
         prisma.rental.findMany({
-          where: { status: 'ACTIVE', deletedAt: null, plannedReturnDate: { lt: today } },
+          where: { status: 'ACTIVE', deletedAt: null, plannedReturnDate: { lt: todayUtcMidnight } },
         }),
         // A RESERVED rental whose pickupDate has passed without ever being
         // activated — the client never showed up, or the admin forgot to
@@ -95,7 +96,7 @@ export class RemindersService {
         // a reservation that's merely coming up in the next few days needs
         // no proactive alert — only a MISSED one does.
         prisma.rental.findMany({
-          where: { status: 'RESERVED', deletedAt: null, pickupDate: { lt: today } },
+          where: { status: 'RESERVED', deletedAt: null, pickupDate: { lt: todayUtcMidnight } },
         }),
         // No lower bound: a maintenance due date already in the past is
         // still due (overdue), not filtered out — same fix as the car

@@ -7,4 +7,5 @@ export const rentalKeys = {
   details: () => [...rentalKeys.all, 'detail'] as const,
   detail: (id: string) => [...rentalKeys.details(), id] as const,
   summary: () => [...rentalKeys.all, 'summary'] as const,
+  occupancy: (from: string, to: string) => [...rentalKeys.all, 'occupancy', from, to] as const,
 };
