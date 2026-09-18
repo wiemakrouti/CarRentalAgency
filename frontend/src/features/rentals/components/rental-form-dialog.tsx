@@ -210,9 +210,17 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col" noValidate>
           <div className="min-h-0 flex-1 space-y-6 overflow-y-auto">
             <Tabs value={bookingMode} onValueChange={(v) => handleBookingModeChange(v as BookingMode)}>
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="IMMEDIATE">Location immédiate</TabsTrigger>
-                <TabsTrigger value="ADVANCE">Réservation à l'avance</TabsTrigger>
+              {/* h-auto + whitespace-normal override TabsTrigger's default
+                  single-line fit: at dialog widths under ~420px, "Réservation
+                  à l'avance" doesn't fit half a 2-column row on one line and
+                  was overflowing past the dialog edge instead of wrapping. */}
+              <TabsList className="grid h-auto w-full grid-cols-2">
+                <TabsTrigger value="IMMEDIATE" className="whitespace-normal py-2 text-center leading-tight">
+                  Location immédiate
+                </TabsTrigger>
+                <TabsTrigger value="ADVANCE" className="whitespace-normal py-2 text-center leading-tight">
+                  Réservation à l'avance
+                </TabsTrigger>
               </TabsList>
             </Tabs>
 

@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { flexRender, getCoreRowModel, useReactTable, createColumnHelper } from '@tanstack/react-table';
 import { Plus, Wallet } from 'lucide-react';
 
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
+import { useFormatMoney } from '@/hooks/use-format-money';
 import { EmptyState } from '@/components/common/empty-state';
 import { LoadingState } from '@/components/common/loading-state';
 import { ErrorState } from '@/components/common/error-state';
@@ -28,28 +29,30 @@ function formatDate(iso: string | null): string {
 
 const columnHelper = createColumnHelper<Payment>();
 
-const columns = [
-  columnHelper.accessor((row) => row.rental?.rentalNumber ?? '—', { id: 'rentalNumber', header: 'N° location' }),
-  columnHelper.accessor(
-    (row) => (row.rental ? `${row.rental.client.firstName} ${row.rental.client.lastName}` : '—'),
-    { id: 'client', header: 'Client' },
-  ),
-  columnHelper.accessor('type', { header: 'Type', cell: ({ getValue }) => PAYMENT_TYPE_LABELS[getValue()] }),
-  columnHelper.accessor('method', {
-    header: 'Méthode',
-    cell: ({ getValue }) => PAYMENT_METHOD_LABELS[getValue()],
-  }),
-  columnHelper.accessor('paidAt', { header: 'Encaissé le', cell: ({ getValue }) => formatDate(getValue()) }),
-  columnHelper.accessor('amount', {
-    header: 'Montant',
-    cell: ({ getValue }) => `${Number(getValue()).toLocaleString('fr-TN')} DT`,
-  }),
-  columnHelper.display({
-    id: 'actions',
-    header: '',
-    cell: ({ row }) => <PaymentRowActions payment={row.original} />,
-  }),
-];
+function buildColumns(formatMoney: (amount: number) => string) {
+  return [
+    columnHelper.accessor((row) => row.rental?.rentalNumber ?? '—', { id: 'rentalNumber', header: 'N° location' }),
+    columnHelper.accessor(
+      (row) => (row.rental ? `${row.rental.client.firstName} ${row.rental.client.lastName}` : '—'),
+      { id: 'client', header: 'Client' },
+    ),
+    columnHelper.accessor('type', { header: 'Type', cell: ({ getValue }) => PAYMENT_TYPE_LABELS[getValue()] }),
+    columnHelper.accessor('method', {
+      header: 'Méthode',
+      cell: ({ getValue }) => PAYMENT_METHOD_LABELS[getValue()],
+    }),
+    columnHelper.accessor('paidAt', { header: 'Encaissé le', cell: ({ getValue }) => formatDate(getValue()) }),
+    columnHelper.accessor('amount', {
+      header: 'Montant',
+      cell: ({ getValue }) => formatMoney(Number(getValue())),
+    }),
+    columnHelper.display({
+      id: 'actions',
+      header: '',
+      cell: ({ row }) => <PaymentRowActions payment={row.original} />,
+    }),
+  ];
+}
 
 export function PaymentsTab() {
   const navigate = useNavigate();
@@ -90,6 +93,9 @@ export function PaymentsTab() {
     filters.method,
     filters.from || filters.to,
   ].filter(Boolean).length;
+
+  const formatMoney = useFormatMoney();
+  const columns = useMemo(() => buildColumns(formatMoney), [formatMoney]);
 
   const table = useReactTable({
     data: data?.items ?? [],

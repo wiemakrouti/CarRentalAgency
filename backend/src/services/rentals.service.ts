@@ -24,7 +24,8 @@ const WRITE_CONFLICT = 'P2034';
 const MAX_RENTAL_NUMBER_ATTEMPTS = 5;
 const LIFECYCLE_ISOLATION = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable };
 
-const AUTO_CANCEL_REASON = 'Annulée automatiquement — jamais récupérée avant la fin de la période réservée.';
+const AUTO_CANCEL_REASON =
+  'Annulée automatiquement — jamais récupérée avant la fin de la période réservée.';
 
 // Auto-generated charges (late fee, extension) have no payment-collection UI
 // yet (Phase 5) — CASH is a placeholder method and PENDING reflects that the
@@ -58,7 +59,7 @@ export const RentalsService = {
   // themselves. Safe to call redundantly: cancelExpiredReservations
   // re-checks status: 'RESERVED' itself, so calling this from both list()
   // and getSummary() on the same page load just no-ops the second time.
-  async sweepExpiredReservations() {
+  async sweepExpiredReservations(agencyId: string) {
     // Start of today, not `new Date()` — a reservation whose plannedReturnDate
     // is today hasn't actually expired until today is over. startOfDayUTC, not
     // startOfToday's server-local midnight: plannedReturnDate is UTC-midnight
@@ -66,7 +67,10 @@ export const RentalsService = {
     // in Africa/Lagos, UTC+1) a local midnight rolls over up to `offset` early
     // — which used to auto-cancel a reservation up to an hour before its
     // planned day had actually finished.
-    const expired = await RentalsRepository.findExpiredReservations(startOfDayUTC(new Date()));
+    const expired = await RentalsRepository.findExpiredReservations(
+      agencyId,
+      startOfDayUTC(new Date()),
+    );
     if (expired.length === 0) return 0;
 
     await prisma.$transaction(async (tx) => {
@@ -89,15 +93,15 @@ export const RentalsService = {
     return expired.length;
   },
 
-  async list(query: RentalListQuery) {
-    await RentalsService.sweepExpiredReservations();
-    const { items, total } = await RentalsRepository.findMany(query);
+  async list(agencyId: string, query: RentalListQuery) {
+    await RentalsService.sweepExpiredReservations(agencyId);
+    const { items, total } = await RentalsRepository.findMany(agencyId, query);
     return { items, total, page: query.page, pageSize: query.pageSize };
   },
 
-  async getSummary() {
-    await RentalsService.sweepExpiredReservations();
-    return RentalsRepository.getSummaryCounts();
+  async getSummary(agencyId: string) {
+    await RentalsService.sweepExpiredReservations(agencyId);
+    return RentalsRepository.getSummaryCounts(agencyId);
   },
 
   // Dashboard's occupancy heatmap: one { date, count } row per calendar day
@@ -106,7 +110,7 @@ export const RentalsService = {
   // day in application code rather than running one query per day — the
   // range is at most MAX_OCCUPANCY_RANGE_DAYS (400) days, so this stays
   // cheap without needing raw SQL for per-day aggregation.
-  async getOccupancy(query: RentalOccupancyQuery) {
+  async getOccupancy(agencyId: string, query: RentalOccupancyQuery) {
     // Already UTC-midnight of a calendar day (z.coerce.date() of a
     // "YYYY-MM-DD" query param) — the same representation pickupDate itself
     // uses, so no truncation needed here. startOfDay (local midnight) must
@@ -115,7 +119,7 @@ export const RentalsService = {
     // with a rental's own `pickupDate` by up to a day (see startOfDayUTC's
     // comment in date-utils.ts).
     const { from, to } = query;
-    const rentals = await RentalsRepository.findOccupancyRentals(from, to);
+    const rentals = await RentalsRepository.findOccupancyRentals(agencyId, from, to);
     // An ongoing rental (no actualReturnDate yet) counts as occupying every
     // day up to and including today — never plannedReturnDate, which for an
     // overdue return already sits in the past while the car is still out.
@@ -125,31 +129,37 @@ export const RentalsService = {
     const ongoingEnd = new Date(startOfDayUTC(new Date()).getTime() + MS_PER_DAY);
 
     const days: { date: string; count: number }[] = [];
-    for (let cursor = from; cursor.getTime() <= to.getTime(); cursor = new Date(cursor.getTime() + MS_PER_DAY)) {
+    for (
+      let cursor = from;
+      cursor.getTime() <= to.getTime();
+      cursor = new Date(cursor.getTime() + MS_PER_DAY)
+    ) {
       const count = rentals.reduce((total, rental) => {
         const pickup = rental.pickupDate;
         // actualReturnDate is a real timestamp (returnRental below sets it
         // to `new Date()`), not a date-only value like pickupDate — still
         // needs truncating to a comparable UTC calendar day.
         const end = rental.actualReturnDate ? startOfDayUTC(rental.actualReturnDate) : ongoingEnd;
-        return cursor.getTime() >= pickup.getTime() && cursor.getTime() < end.getTime() ? total + 1 : total;
+        return cursor.getTime() >= pickup.getTime() && cursor.getTime() < end.getTime()
+          ? total + 1
+          : total;
       }, 0);
       days.push({ date: formatDateOnly(cursor), count });
     }
     return days;
   },
 
-  async getById(id: string, options?: { includeArchived?: boolean }) {
-    const rental = await RentalsRepository.findById(id, options);
+  async getById(agencyId: string, id: string, options?: { includeArchived?: boolean }) {
+    const rental = await RentalsRepository.findById(agencyId, id, options);
     if (!rental) {
       throw new AppError(404, 'RENTAL_NOT_FOUND', 'Location introuvable.');
     }
     return rental;
   },
 
-  async create(input: CreateRentalInput, userId: string, ipAddress?: string) {
-    const car = await CarsService.getById(input.carId);
-    await ClientsService.getById(input.clientId);
+  async create(agencyId: string, input: CreateRentalInput, userId: string, ipAddress?: string) {
+    const car = await CarsService.getById(agencyId, input.carId);
+    await ClientsService.getById(agencyId, input.clientId);
 
     if (car.status !== 'AVAILABLE') {
       throw new AppError(
@@ -171,10 +181,14 @@ export const RentalsService = {
       returnDate: input.plannedReturnDate,
     });
     if (overlapping) {
-      throw new AppError(409, 'CAR_NOT_AVAILABLE', 'Cette voiture est déjà réservée pour ces dates.');
+      throw new AppError(
+        409,
+        'CAR_NOT_AVAILABLE',
+        'Cette voiture est déjà réservée pour ces dates.',
+      );
     }
 
-    const setting = await prisma.setting.findFirst();
+    const setting = await prisma.setting.findFirst({ where: { agencyId } });
     const depositAmount = input.depositAmount ?? Number(setting?.defaultDepositAmount ?? 0);
     const nights = calculateNights(input.pickupDate, input.plannedReturnDate);
     const totalAmount = Number(car.dailyRate) * nights;
@@ -193,12 +207,17 @@ export const RentalsService = {
             tx,
           );
           if (stillOverlapping) {
-            throw new AppError(409, 'CAR_NOT_AVAILABLE', 'Cette voiture est déjà réservée pour ces dates.');
+            throw new AppError(
+              409,
+              'CAR_NOT_AVAILABLE',
+              'Cette voiture est déjà réservée pour ces dates.',
+            );
           }
 
           const rental = await RentalsRepository.create(
             {
               rentalNumber,
+              agencyId,
               carId: input.carId,
               clientId: input.clientId,
               pickupDate: input.pickupDate,
@@ -218,6 +237,7 @@ export const RentalsService = {
           // both commit, or neither does.
           if (input.initialPayment) {
             await PaymentsRepository.create(
+              agencyId,
               {
                 rentalId: rental.id,
                 amount: input.initialPayment.amount,
@@ -279,10 +299,13 @@ export const RentalsService = {
             after: rental,
             ipAddress,
           });
-          return RentalsRepository.findById(rental.id, undefined, tx);
+          return RentalsRepository.findById(agencyId, rental.id, undefined, tx);
         }, LIFECYCLE_ISOLATION);
       } catch (err) {
-        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === UNIQUE_CONSTRAINT_VIOLATION) {
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === UNIQUE_CONSTRAINT_VIOLATION
+        ) {
           continue;
         }
         // Postgres SERIALIZABLE aborts the losing side of a genuine race
@@ -290,17 +313,31 @@ export const RentalsService = {
         // surfaces as a raw 500 instead of the same friendly conflict
         // message the non-racing path already throws above.
         if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === WRITE_CONFLICT) {
-          throw new AppError(409, 'CAR_NOT_AVAILABLE', 'Cette voiture vient d’être réservée, veuillez réessayer.');
+          throw new AppError(
+            409,
+            'CAR_NOT_AVAILABLE',
+            'Cette voiture vient d’être réservée, veuillez réessayer.',
+          );
         }
         throw err;
       }
     }
 
-    throw new AppError(500, 'RENTAL_NUMBER_GENERATION_FAILED', 'Impossible de générer un numéro de location.');
+    throw new AppError(
+      500,
+      'RENTAL_NUMBER_GENERATION_FAILED',
+      'Impossible de générer un numéro de location.',
+    );
   },
 
-  async activate(id: string, input: ActivateRentalInput, userId: string, ipAddress?: string) {
-    const rental = await RentalsService.getById(id);
+  async activate(
+    agencyId: string,
+    id: string,
+    input: ActivateRentalInput,
+    userId: string,
+    ipAddress?: string,
+  ) {
+    const rental = await RentalsService.getById(agencyId, id);
 
     if (rental.status !== 'RESERVED') {
       throw new AppError(
@@ -335,7 +372,11 @@ export const RentalsService = {
           tx,
         );
         if (overlapping) {
-          throw new AppError(409, 'CAR_NOT_AVAILABLE', 'Cette voiture est déjà en location sur cette période.');
+          throw new AppError(
+            409,
+            'CAR_NOT_AVAILABLE',
+            'Cette voiture est déjà en location sur cette période.',
+          );
         }
       }
 
@@ -373,7 +414,7 @@ export const RentalsService = {
         );
       }
 
-      const updated = await RentalsRepository.findById(id, undefined, tx);
+      const updated = await RentalsRepository.findById(agencyId, id, undefined, tx);
       await AuditService.record(tx, {
         userId,
         action: 'RENTAL_ACTIVATE',
@@ -387,8 +428,14 @@ export const RentalsService = {
     }, LIFECYCLE_ISOLATION);
   },
 
-  async returnRental(id: string, input: ReturnRentalInput, userId: string, ipAddress?: string) {
-    const rental = await RentalsService.getById(id);
+  async returnRental(
+    agencyId: string,
+    id: string,
+    input: ReturnRentalInput,
+    userId: string,
+    ipAddress?: string,
+  ) {
+    const rental = await RentalsService.getById(agencyId, id);
 
     if (rental.status !== 'ACTIVE') {
       throw new AppError(
@@ -422,7 +469,10 @@ export const RentalsService = {
     // the UTC-midnight instant this comparison wants.
     const lateDays = Math.max(
       0,
-      Math.floor((startOfDayUTC(actualReturnDate).getTime() - rental.plannedReturnDate.getTime()) / MS_PER_DAY),
+      Math.floor(
+        (startOfDayUTC(actualReturnDate).getTime() - rental.plannedReturnDate.getTime()) /
+          MS_PER_DAY,
+      ),
     );
     const lateFeeAmount = lateDays * Number(rental.dailyRate);
 
@@ -462,6 +512,7 @@ export const RentalsService = {
 
       if (lateFeeAmount > 0) {
         await PaymentsRepository.create(
+          agencyId,
           {
             rentalId: id,
             amount: lateFeeAmount,
@@ -476,6 +527,7 @@ export const RentalsService = {
 
       if (input.damageFeeAmount) {
         await PaymentsRepository.create(
+          agencyId,
           {
             rentalId: id,
             amount: input.damageFeeAmount,
@@ -488,7 +540,7 @@ export const RentalsService = {
         );
       }
 
-      const updated = await RentalsRepository.findById(id, undefined, tx);
+      const updated = await RentalsRepository.findById(agencyId, id, undefined, tx);
       await AuditService.record(tx, {
         userId,
         action: 'RENTAL_RETURN',
@@ -502,8 +554,14 @@ export const RentalsService = {
     }, LIFECYCLE_ISOLATION);
   },
 
-  async extend(id: string, input: ExtendRentalInput, userId: string, ipAddress?: string) {
-    const rental = await RentalsService.getById(id);
+  async extend(
+    agencyId: string,
+    id: string,
+    input: ExtendRentalInput,
+    userId: string,
+    ipAddress?: string,
+  ) {
+    const rental = await RentalsService.getById(agencyId, id);
 
     if (rental.status !== 'ACTIVE') {
       throw new AppError(
@@ -532,7 +590,11 @@ export const RentalsService = {
         tx,
       );
       if (overlapping) {
-        throw new AppError(409, 'CAR_NOT_AVAILABLE', 'Cette voiture est déjà réservée pour ces dates.');
+        throw new AppError(
+          409,
+          'CAR_NOT_AVAILABLE',
+          'Cette voiture est déjà réservée pour ces dates.',
+        );
       }
 
       const rentalGuarded = await RentalsRepository.updateGuarded(
@@ -563,6 +625,7 @@ export const RentalsService = {
       );
 
       await PaymentsRepository.create(
+        agencyId,
         {
           rentalId: id,
           amount: additionalAmount,
@@ -574,7 +637,7 @@ export const RentalsService = {
         tx,
       );
 
-      const updated = await RentalsRepository.findById(id, undefined, tx);
+      const updated = await RentalsRepository.findById(agencyId, id, undefined, tx);
       await AuditService.record(tx, {
         userId,
         action: 'RENTAL_EXTEND',
@@ -588,8 +651,14 @@ export const RentalsService = {
     }, LIFECYCLE_ISOLATION);
   },
 
-  async cancel(id: string, input: CancelRentalInput, userId: string, ipAddress?: string) {
-    const rental = await RentalsService.getById(id);
+  async cancel(
+    agencyId: string,
+    id: string,
+    input: CancelRentalInput,
+    userId: string,
+    ipAddress?: string,
+  ) {
+    const rental = await RentalsService.getById(agencyId, id);
 
     if (rental.status !== 'RESERVED') {
       throw new AppError(
@@ -614,7 +683,7 @@ export const RentalsService = {
         );
       }
 
-      const updated = await RentalsRepository.findById(id, undefined, tx);
+      const updated = await RentalsRepository.findById(agencyId, id, undefined, tx);
       await AuditService.record(tx, {
         userId,
         action: 'RENTAL_CANCEL',

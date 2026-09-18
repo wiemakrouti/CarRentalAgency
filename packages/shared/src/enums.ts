@@ -25,23 +25,16 @@ export type CarStatus = (typeof CAR_STATUSES)[number];
 // CarsRepository.updateStatusGuarded), never through the general car update
 // path. Admin-facing status pickers (edit form, quick-change menu, detail
 // sheet) only offer these three.
-export const MANUALLY_SETTABLE_CAR_STATUSES = ['AVAILABLE', 'MAINTENANCE', 'OUT_OF_SERVICE'] as const;
-
-export const CLIENT_DOCUMENT_TYPES = [
-  'ID_CARD',
-  'DRIVING_LICENSE',
-  'PASSPORT',
-  'OTHER',
+export const MANUALLY_SETTABLE_CAR_STATUSES = [
+  'AVAILABLE',
+  'MAINTENANCE',
+  'OUT_OF_SERVICE',
 ] as const;
+
+export const CLIENT_DOCUMENT_TYPES = ['ID_CARD', 'DRIVING_LICENSE', 'PASSPORT', 'OTHER'] as const;
 export type ClientDocumentType = (typeof CLIENT_DOCUMENT_TYPES)[number];
 
-export const RENTAL_STATUSES = [
-  'RESERVED',
-  'ACTIVE',
-  'COMPLETED',
-  'CANCELLED',
-  'OVERDUE',
-] as const;
+export const RENTAL_STATUSES = ['RESERVED', 'ACTIVE', 'COMPLETED', 'CANCELLED', 'OVERDUE'] as const;
 export type RentalStatus = (typeof RENTAL_STATUSES)[number];
 
 export const PAYMENT_METHODS = ['CASH', 'CARD', 'BANK_TRANSFER', 'CHECK'] as const;
@@ -65,20 +58,15 @@ export type PaymentType = (typeof PAYMENT_TYPES)[number];
 // counting a caution again in one without the other — collecting then fully
 // refunding one would otherwise inflate revenue by 2x its amount.
 export const REVENUE_PAYMENT_TYPES = PAYMENT_TYPES.filter(
-  (type): type is Exclude<PaymentType, 'DEPOSIT' | 'DEPOSIT_REFUND'> => type !== 'DEPOSIT' && type !== 'DEPOSIT_REFUND',
+  (type): type is Exclude<PaymentType, 'DEPOSIT' | 'DEPOSIT_REFUND'> =>
+    type !== 'DEPOSIT' && type !== 'DEPOSIT_REFUND',
 );
 export type RevenuePaymentType = (typeof REVENUE_PAYMENT_TYPES)[number];
 
 export const PAYMENT_STATUSES = ['PENDING', 'COMPLETED', 'REFUNDED'] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
-export const EXPENSE_CATEGORIES = [
-  'FUEL',
-  'INSURANCE',
-  'REPAIR',
-  'REGISTRATION',
-  'OTHER',
-] as const;
+export const EXPENSE_CATEGORIES = ['FUEL', 'INSURANCE', 'REPAIR', 'REGISTRATION', 'OTHER'] as const;
 export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
 
 export const MAINTENANCE_TYPES = [
@@ -118,5 +106,12 @@ export const AUDIT_ACTIONS = [
   'PAYMENT_ATTACHMENT_ADD',
   'PAYMENT_ATTACHMENT_REMOVE',
   'SETTINGS_UPDATE',
+  'SETTINGS_LOGO_UPDATE',
+  'PROFILE_UPDATE',
+  'PASSWORD_CHANGE',
+  'PASSWORD_RESET',
+  'EMAIL_VERIFY',
+  'SESSION_REVOKE',
+  'SESSIONS_REVOKE_OTHERS',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

@@ -23,7 +23,7 @@ import {
 import { LoadingState } from '@/components/common/loading-state';
 import { ErrorState } from '@/components/common/error-state';
 import { cn } from '@/lib/utils';
-import { REFETCH_INTERVAL_MS, REMINDERS_WITHIN_DAYS, useRemindersQuery } from '../hooks/use-notifications';
+import { REFETCH_INTERVAL_MS, useReminderWindowDays, useRemindersQuery } from '../hooks/use-notifications';
 import { getReminderLink } from '../lib/reminder-links';
 import type { Reminder } from '../api/notifications.api';
 
@@ -121,6 +121,7 @@ const TABS: { key: TabKey; label: string }[] = [
 
 export function NotificationsMenu() {
   const { data: reminders, isLoading, isError, refetch } = useRemindersQuery();
+  const reminderWindowDays = useReminderWindowDays();
   const [tab, setTab] = useState<TabKey>('all');
 
   const count = reminders?.length ?? 0;
@@ -155,7 +156,14 @@ export function NotificationsMenu() {
         </Button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-[420px] overflow-hidden rounded-[20px] border-border p-0">
+      <DropdownMenuContent
+        align="end"
+        // max-w caps the fixed width on narrow viewports — Radix's collision
+        // detection can slide the panel to stay on-screen, but it can't
+        // shrink a fixed w-[420px] below the viewport itself, so on a phone
+        // the panel was overflowing the screen edge no matter where it slid.
+        className="w-[420px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-[20px] border-border p-0"
+      >
         <div className="relative flex items-center gap-3 px-[22px] pt-[22px]">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 ring-1 ring-primary/20">
             <Bell className="h-[18px] w-[18px] text-primary" />
@@ -163,7 +171,7 @@ export function NotificationsMenu() {
           <div className="min-w-0 flex-1">
             <p className="text-base font-bold tracking-tight text-foreground">Notifications</p>
             <p className="mt-px text-xs text-muted-foreground">
-              Échéances des {REMINDERS_WITHIN_DAYS} prochains jours
+              Échéances des {reminderWindowDays} prochains jours
             </p>
           </div>
         </div>

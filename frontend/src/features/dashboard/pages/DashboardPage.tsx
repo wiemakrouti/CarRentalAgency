@@ -1,5 +1,6 @@
 import { CarFront, ClipboardList, Users, Wallet } from 'lucide-react';
 
+import { useFormatMoney } from '@/hooks/use-format-money';
 import { PageContainer } from '@/components/common/page-container';
 import { PageHeader } from '@/components/common/page-header';
 import { PageHero } from '@/components/common/page-hero';
@@ -12,11 +13,8 @@ import { useDashboardData } from '../hooks/use-dashboard-data';
 import { OccupancyHeatmap } from '../components/occupancy-heatmap';
 import { RevenueExpenseChart } from '../components/revenue-expense-chart';
 
-function formatMoney(amount: number): string {
-  return `${amount.toLocaleString('fr-TN')} DT`;
-}
-
 export function DashboardPage() {
+  const formatMoney = useFormatMoney();
   const {
     isLoading,
     isError,

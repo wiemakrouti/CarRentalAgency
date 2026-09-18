@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { flexRender, getCoreRowModel, useReactTable, createColumnHelper } from '@tanstack/react-table';
 import { ChevronRight, ShieldCheck } from 'lucide-react';
 
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
+import { useFormatMoney } from '@/hooks/use-format-money';
 import { EmptyState } from '@/components/common/empty-state';
 import { LoadingState } from '@/components/common/loading-state';
 import { ErrorState } from '@/components/common/error-state';
@@ -19,62 +20,60 @@ import { DepositFiltersPopover, type DepositFilters } from './deposit-filters-po
 
 const PAGE_SIZE = 20;
 
-function formatMoney(amount: number): string {
-  return `${amount.toLocaleString('fr-TN')} DT`;
-}
-
 function formatDate(iso: string | null): string {
   return iso ? new Date(iso).toLocaleDateString('fr-TN') : '—';
 }
 
 const columnHelper = createColumnHelper<Deposit>();
 
-const columns = [
-  columnHelper.accessor('rentalNumber', {
-    header: 'Location',
-    cell: ({ getValue }) => <span className="font-mono text-xs">{getValue()}</span>,
-  }),
-  columnHelper.accessor((row) => `${row.client.firstName} ${row.client.lastName}`, {
-    id: 'client',
-    header: 'Client',
-  }),
-  columnHelper.accessor((row) => `${row.car.brand} ${row.car.model}`, {
-    id: 'car',
-    header: 'Voiture',
-  }),
-  columnHelper.display({
-    id: 'status',
-    header: 'Statut',
-    cell: ({ row }) =>
-      row.original.refundedAt ? (
-        <Badge variant="success">Remboursée</Badge>
-      ) : (
-        <Badge variant="warning">En cours</Badge>
+function buildColumns(formatMoney: (amount: number) => string) {
+  return [
+    columnHelper.accessor('rentalNumber', {
+      header: 'Location',
+      cell: ({ getValue }) => <span className="font-mono text-xs">{getValue()}</span>,
+    }),
+    columnHelper.accessor((row) => `${row.client.firstName} ${row.client.lastName}`, {
+      id: 'client',
+      header: 'Client',
+    }),
+    columnHelper.accessor((row) => `${row.car.brand} ${row.car.model}`, {
+      id: 'car',
+      header: 'Voiture',
+    }),
+    columnHelper.display({
+      id: 'status',
+      header: 'Statut',
+      cell: ({ row }) =>
+        row.original.refundedAt ? (
+          <Badge variant="success">Remboursée</Badge>
+        ) : (
+          <Badge variant="warning">En cours</Badge>
+        ),
+    }),
+    columnHelper.accessor('collectedAt', { header: 'Encaissée le', cell: ({ getValue }) => formatDate(getValue()) }),
+    columnHelper.accessor('refundedAt', {
+      header: 'Remboursée le',
+      cell: ({ getValue }) => {
+        const value = getValue();
+        return value ? formatDate(value) : <span className="text-muted-foreground">—</span>;
+      },
+    }),
+    columnHelper.accessor('amount', { header: 'Montant', cell: ({ getValue }) => formatMoney(getValue()) }),
+    columnHelper.display({
+      id: 'actions',
+      header: '',
+      cell: ({ row }) => (
+        <Link
+          to={`/rentals?openId=${row.original.rentalId}`}
+          className="flex items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+          title="Ouvrir la location"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Link>
       ),
-  }),
-  columnHelper.accessor('collectedAt', { header: 'Encaissée le', cell: ({ getValue }) => formatDate(getValue()) }),
-  columnHelper.accessor('refundedAt', {
-    header: 'Remboursée le',
-    cell: ({ getValue }) => {
-      const value = getValue();
-      return value ? formatDate(value) : <span className="text-muted-foreground">—</span>;
-    },
-  }),
-  columnHelper.accessor('amount', { header: 'Montant', cell: ({ getValue }) => formatMoney(getValue()) }),
-  columnHelper.display({
-    id: 'actions',
-    header: '',
-    cell: ({ row }) => (
-      <Link
-        to={`/rentals?openId=${row.original.rentalId}`}
-        className="flex items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-        title="Ouvrir la location"
-      >
-        <ChevronRight className="h-4 w-4" />
-      </Link>
-    ),
-  }),
-];
+    }),
+  ];
+}
 
 export function DepositsTab() {
   const [page, setPage] = useState(1);
@@ -108,6 +107,9 @@ export function DepositsTab() {
   }
 
   const activeFilterCount = [filters.status, filters.from || filters.to].filter(Boolean).length;
+
+  const formatMoney = useFormatMoney();
+  const columns = useMemo(() => buildColumns(formatMoney), [formatMoney]);
 
   const table = useReactTable({
     data: data?.items ?? [],

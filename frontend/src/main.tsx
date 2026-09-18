@@ -7,6 +7,7 @@ import { router } from './app/routes';
 import { queryClient } from './lib/query-client';
 import { ThemeProvider } from './providers/theme-provider';
 import { AuthProvider } from './providers/auth-provider';
+import { SettingsProvider } from './providers/settings-provider';
 import { QueryDevtools } from './dev/query-devtools';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from '@/components/ui/sonner';
@@ -18,7 +19,9 @@ createRoot(document.getElementById('root')!).render(
       <TooltipProvider delayDuration={200}>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
-            <RouterProvider router={router} />
+            <SettingsProvider>
+              <RouterProvider router={router} />
+            </SettingsProvider>
           </AuthProvider>
           <QueryDevtools />
         </QueryClientProvider>

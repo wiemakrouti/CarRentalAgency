@@ -1,5 +1,9 @@
 import type { CarStatus, Prisma, PrismaClient } from '@prisma/client';
-import { REVENUE_PAYMENT_TYPES, type CreateCarInput, type UpdateCarInput } from '@car-rental/shared';
+import {
+  REVENUE_PAYMENT_TYPES,
+  type CreateCarInput,
+  type UpdateCarInput,
+} from '@car-rental/shared';
 import { prisma } from '../lib/prisma-client.js';
 import { overlappingRentalsFilter } from '../lib/rental-availability.js';
 import type { CarExportQuery, CarListQuery } from '../validators/car.validator.js';
@@ -15,8 +19,9 @@ type CarFilterQuery = CarExportQuery;
 // deleted (CarsService.delete, guarded by countRelations below). Taking a
 // car out of active rotation without erasing it is what CarStatus is for
 // (e.g. OUT_OF_SERVICE) — see docs/architecture.md §1.
-function buildWhere(query: CarFilterQuery): Prisma.CarWhereInput {
+function buildWhere(agencyId: string, query: CarFilterQuery): Prisma.CarWhereInput {
   const where: Prisma.CarWhereInput = {
+    agencyId,
     category: query.category,
     status: query.status,
     transmission: query.transmission,
@@ -66,8 +71,8 @@ function withActiveRental<T extends { rentals: { plannedReturnDate: Date }[] }>(
 }
 
 export const CarsRepository = {
-  async findMany(query: CarListQuery, db: Db = prisma) {
-    const where = buildWhere(query);
+  async findMany(agencyId: string, query: CarListQuery, db: Db = prisma) {
+    const where = buildWhere(agencyId, query);
     const [items, total] = await Promise.all([
       db.car.findMany({
         where,
@@ -81,16 +86,16 @@ export const CarsRepository = {
     return { items: items.map(withActiveRental), total };
   },
 
-  async findById(id: string, db: Db = prisma) {
+  async findById(agencyId: string, id: string, db: Db = prisma) {
     const car = await db.car.findFirst({
-      where: { id },
+      where: { id, agencyId },
       include: { images: true, ...ACTIVE_RENTAL_INCLUDE },
     });
     return car ? withActiveRental(car) : null;
   },
 
-  create(data: CreateCarInput, db: Db = prisma) {
-    return db.car.create({ data, include: { images: true } });
+  create(agencyId: string, data: CreateCarInput, db: Db = prisma) {
+    return db.car.create({ data: { ...data, agencyId }, include: { images: true } });
   },
 
   update(id: string, data: UpdateCarInput, db: Db = prisma) {
@@ -162,8 +167,8 @@ export const CarsRepository = {
     return db.car.delete({ where: { id } });
   },
 
-  findAllForExport(query: CarExportQuery, db: Db = prisma) {
-    return db.car.findMany({ where: buildWhere(query), orderBy: buildOrderBy(query) });
+  findAllForExport(agencyId: string, query: CarExportQuery, db: Db = prisma) {
+    return db.car.findMany({ where: buildWhere(agencyId, query), orderBy: buildOrderBy(query) });
   },
 
   // Powers the Cars detail panel: rental counts by status, revenue actually
@@ -205,8 +210,9 @@ export const CarsRepository = {
     };
   },
 
-  findAvailable(params: { pickupDate: Date; returnDate: Date }, db: Db = prisma) {
+  findAvailable(agencyId: string, params: { pickupDate: Date; returnDate: Date }, db: Db = prisma) {
     const availabilityFilter: Prisma.CarWhereInput = {
+      agencyId,
       status: 'AVAILABLE',
       rentals: { none: overlappingRentalsFilter(params) },
     };

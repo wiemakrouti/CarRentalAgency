@@ -1,5 +1,14 @@
 import type { Request, Response } from 'express';
-import type { LoginInput } from '@car-rental/shared';
+import type {
+  ChangePasswordInput,
+  ForgotPasswordInput,
+  LoginInput,
+  RegisterInput,
+  ResendVerificationInput,
+  ResetPasswordInput,
+  UpdateProfileInput,
+  VerifyEmailInput,
+} from '@car-rental/shared';
 import { env } from '../config/env.js';
 import { parseDurationMs } from '../utils/parse-duration.js';
 import { AppError } from '../utils/app-error.js';
@@ -32,9 +41,43 @@ function clearRefreshCookie(res: Response) {
 }
 
 export const AuthController = {
+  async register(req: Request, res: Response) {
+    const input = req.body as RegisterInput;
+    const { email } = await AuthService.register(input);
+    res.status(201).json({ success: true, data: { email } });
+  },
+
+  async verifyEmail(req: Request, res: Response) {
+    const { token } = req.body as VerifyEmailInput;
+    await AuthService.verifyEmail(token);
+    res.status(200).json({ success: true, data: { verified: true } });
+  },
+
+  async resendVerification(req: Request, res: Response) {
+    const { email } = req.body as ResendVerificationInput;
+    await AuthService.resendVerification(email);
+    res.status(200).json({ success: true, data: { sent: true } });
+  },
+
+  async forgotPassword(req: Request, res: Response) {
+    const { email } = req.body as ForgotPasswordInput;
+    await AuthService.forgotPassword(email);
+    res.status(200).json({ success: true, data: { sent: true } });
+  },
+
+  async resetPassword(req: Request, res: Response) {
+    const { token, newPassword } = req.body as ResetPasswordInput;
+    await AuthService.resetPassword(token, newPassword);
+    res.status(200).json({ success: true, data: { reset: true } });
+  },
+
   async login(req: Request, res: Response) {
     const { email, password } = req.body as LoginInput;
-    const { accessToken, refreshToken, user } = await AuthService.login(email, password, sessionMeta(req));
+    const { accessToken, refreshToken, user } = await AuthService.login(
+      email,
+      password,
+      sessionMeta(req),
+    );
 
     setRefreshCookie(res, refreshToken);
     res.status(200).json({ success: true, data: { accessToken, user } });
@@ -63,5 +106,35 @@ export const AuthController = {
   async me(req: Request, res: Response) {
     const user = await AuthService.getCurrentUser(req.user!.id);
     res.status(200).json({ success: true, data: user });
+  },
+
+  async updateProfile(req: Request, res: Response) {
+    const input = req.body as UpdateProfileInput;
+    const user = await AuthService.updateProfile(req.user!.id, input, sessionMeta(req));
+    res.status(200).json({ success: true, data: user });
+  },
+
+  async changePassword(req: Request, res: Response) {
+    const input = req.body as ChangePasswordInput;
+    await AuthService.changePassword(req.user!.id, input, sessionMeta(req));
+    res.status(200).json({ success: true, data: { changed: true } });
+  },
+
+  async listSessions(req: Request, res: Response) {
+    const rawToken = req.cookies?.[REFRESH_COOKIE_NAME] as string | undefined;
+    const sessions = await AuthService.listSessions(req.user!.id, rawToken);
+    res.status(200).json({ success: true, data: sessions });
+  },
+
+  async revokeSession(req: Request, res: Response) {
+    const rawToken = req.cookies?.[REFRESH_COOKIE_NAME] as string | undefined;
+    await AuthService.revokeSession(req.user!.id, req.params.id!, rawToken, sessionMeta(req));
+    res.status(200).json({ success: true, data: { revoked: true } });
+  },
+
+  async revokeOtherSessions(req: Request, res: Response) {
+    const rawToken = req.cookies?.[REFRESH_COOKIE_NAME] as string | undefined;
+    await AuthService.revokeOtherSessions(req.user!.id, rawToken, sessionMeta(req));
+    res.status(200).json({ success: true, data: { revoked: true } });
   },
 };

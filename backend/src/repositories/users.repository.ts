@@ -15,4 +15,12 @@ export const UsersRepository = {
   updateLastLogin(id: string, db: Db = prisma) {
     return db.user.update({ where: { id }, data: { lastLoginAt: new Date() } });
   },
+
+  updateProfile(id: string, data: { fullName: string; email: string }, db: Db = prisma) {
+    return db.user.update({ where: { id }, data });
+  },
+
+  updatePassword(id: string, passwordHash: string, db: Db = prisma) {
+    return db.user.update({ where: { id }, data: { passwordHash } });
+  },
 };

@@ -6,6 +6,7 @@ import { AppError } from '../utils/app-error.js';
 interface AccessTokenPayload {
   sub: string;
   role: 'ADMIN';
+  agencyId: string;
 }
 
 // Verifies the short-lived JWT access token (issued by the Phase 1 login
@@ -22,7 +23,7 @@ export function authenticate(req: Request, _res: Response, next: NextFunction) {
 
   try {
     const payload = jwt.verify(token, env.JWT_ACCESS_SECRET) as AccessTokenPayload;
-    req.user = { id: payload.sub, role: payload.role };
+    req.user = { id: payload.sub, role: payload.role, agencyId: payload.agencyId };
     next();
   } catch {
     next(new AppError(401, 'UNAUTHENTICATED', 'Invalid or expired session.'));

@@ -1,10 +1,11 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { flexRender, getCoreRowModel, useReactTable, createColumnHelper } from '@tanstack/react-table';
 import { RENTAL_STATUSES } from '@car-rental/shared';
 import { ClipboardList, Plus } from 'lucide-react';
 
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
+import { useFormatMoney } from '@/hooks/use-format-money';
 import { PageContainer } from '@/components/common/page-container';
 import { PageHeader } from '@/components/common/page-header';
 import { PageHero } from '@/components/common/page-hero';
@@ -50,72 +51,74 @@ function formatDate(iso: string): string {
 
 const columnHelper = createColumnHelper<Rental>();
 
-const columns = [
-  columnHelper.accessor('rentalNumber', { header: 'N° location' }),
-  columnHelper.accessor((row) => `${row.car.brand} ${row.car.model} (${row.car.licensePlate})`, {
-    id: 'car',
-    header: 'Voiture',
-  }),
-  columnHelper.accessor((row) => `${row.client.firstName} ${row.client.lastName}`, {
-    id: 'client',
-    header: 'Client',
-    cell: ({ row }) => {
-      const { firstName, lastName } = row.original.client;
-      const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
-      return (
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-50 text-[11px] font-semibold text-primary-700 dark:bg-primary/15 dark:text-primary">
-            {initials}
+function buildColumns(formatMoney: (amount: number) => string) {
+  return [
+    columnHelper.accessor('rentalNumber', { header: 'N° location' }),
+    columnHelper.accessor((row) => `${row.car.brand} ${row.car.model} (${row.car.licensePlate})`, {
+      id: 'car',
+      header: 'Voiture',
+    }),
+    columnHelper.accessor((row) => `${row.client.firstName} ${row.client.lastName}`, {
+      id: 'client',
+      header: 'Client',
+      cell: ({ row }) => {
+        const { firstName, lastName } = row.original.client;
+        const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+        return (
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-50 text-[11px] font-semibold text-primary-700 dark:bg-primary/15 dark:text-primary">
+              {initials}
+            </div>
+            <span>
+              {firstName} {lastName}
+            </span>
           </div>
-          <span>
-            {firstName} {lastName}
-          </span>
-        </div>
-      );
-    },
-  }),
-  columnHelper.accessor('pickupDate', {
-    header: 'Départ',
-    cell: ({ getValue }) => formatDate(getValue()),
-  }),
-  columnHelper.accessor('plannedReturnDate', {
-    header: 'Retour prévu',
-    cell: ({ getValue }) => formatDate(getValue()),
-  }),
-  columnHelper.accessor('status', {
-    header: 'Statut',
-    // Display status, not the raw column — an ACTIVE rental past its
-    // plannedReturnDate reads as OVERDUE and a RESERVED one past its
-    // pickupDate reads as PICKUP_OVERDUE everywhere else in the app
-    // (calendar dialogs, the notification bell, the detail sheet's stamp);
-    // the table shouldn't be the one place that still calls either of them
-    // a plain "En cours"/"Réservée".
-    cell: ({ row }) => {
-      const status = getDisplayRentalStatusSummary(row.original);
-      return (
-        <Badge variant={DISPLAY_RENTAL_STATUS_BADGE_VARIANT[status]}>{DISPLAY_RENTAL_STATUS_LABELS[status]}</Badge>
-      );
-    },
-  }),
-  columnHelper.accessor('totalAmount', {
-    header: 'Total',
-    // A cancelled reservation's totalAmount is just what it would have
-    // cost, frozen at creation — same rule as the Paiement column right
-    // next to it, so the two never disagree about whether this row still
-    // has a real amount attached.
-    cell: ({ getValue, row }) =>
-      row.original.status === 'CANCELLED' ? (
-        <span className="text-muted-foreground">—</span>
-      ) : (
-        `${Number(getValue()).toLocaleString('fr-TN')} DT`
-      ),
-  }),
-  columnHelper.display({
-    id: 'actions',
-    header: '',
-    cell: ({ row }) => <RentalRowActions rental={row.original} />,
-  }),
-];
+        );
+      },
+    }),
+    columnHelper.accessor('pickupDate', {
+      header: 'Départ',
+      cell: ({ getValue }) => formatDate(getValue()),
+    }),
+    columnHelper.accessor('plannedReturnDate', {
+      header: 'Retour prévu',
+      cell: ({ getValue }) => formatDate(getValue()),
+    }),
+    columnHelper.accessor('status', {
+      header: 'Statut',
+      // Display status, not the raw column — an ACTIVE rental past its
+      // plannedReturnDate reads as OVERDUE and a RESERVED one past its
+      // pickupDate reads as PICKUP_OVERDUE everywhere else in the app
+      // (calendar dialogs, the notification bell, the detail sheet's stamp);
+      // the table shouldn't be the one place that still calls either of them
+      // a plain "En cours"/"Réservée".
+      cell: ({ row }) => {
+        const status = getDisplayRentalStatusSummary(row.original);
+        return (
+          <Badge variant={DISPLAY_RENTAL_STATUS_BADGE_VARIANT[status]}>{DISPLAY_RENTAL_STATUS_LABELS[status]}</Badge>
+        );
+      },
+    }),
+    columnHelper.accessor('totalAmount', {
+      header: 'Total',
+      // A cancelled reservation's totalAmount is just what it would have
+      // cost, frozen at creation — same rule as the Paiement column right
+      // next to it, so the two never disagree about whether this row still
+      // has a real amount attached.
+      cell: ({ getValue, row }) =>
+        row.original.status === 'CANCELLED' ? (
+          <span className="text-muted-foreground">—</span>
+        ) : (
+          formatMoney(Number(getValue()))
+        ),
+    }),
+    columnHelper.display({
+      id: 'actions',
+      header: '',
+      cell: ({ row }) => <RentalRowActions rental={row.original} />,
+    }),
+  ];
+}
 
 export function RentalsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -234,6 +237,9 @@ export function RentalsPage() {
   }
 
   const activeFilterCount = status ? 1 : 0;
+
+  const formatMoney = useFormatMoney();
+  const columns = useMemo(() => buildColumns(formatMoney), [formatMoney]);
 
   const table = useReactTable({
     data: data?.items ?? [],

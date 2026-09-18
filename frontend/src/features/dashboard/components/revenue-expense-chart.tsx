@@ -1,5 +1,7 @@
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
+import { useFormatMoney } from '@/hooks/use-format-money';
+
 const tooltipStyle = {
   backgroundColor: 'hsl(var(--popover))',
   borderColor: 'hsl(var(--border))',
@@ -16,6 +18,8 @@ type MonthlyFinance = { month: string; revenue: number; expenses: number };
 // enough to answer the actual question ("am I profitable this month?") at
 // a glance — the visual gap between the two bars is the margin.
 export function RevenueExpenseChart({ data }: { data: MonthlyFinance[] }) {
+  const formatMoney = useFormatMoney();
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={data} margin={{ left: -20, right: 8, top: 8, bottom: 0 }}>
@@ -30,10 +34,7 @@ export function RevenueExpenseChart({ data }: { data: MonthlyFinance[] }) {
         />
         <Tooltip
           contentStyle={tooltipStyle}
-          formatter={(value: number, name: string) => [
-            `${value.toLocaleString('fr-TN')} DT`,
-            name === 'expenses' ? 'Dépenses' : 'Revenu',
-          ]}
+          formatter={(value: number, name: string) => [formatMoney(value), name === 'expenses' ? 'Dépenses' : 'Revenu']}
         />
         <Bar dataKey="revenue" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} maxBarSize={28} />
         <Bar dataKey="expenses" fill="hsl(var(--chart-5))" radius={[4, 4, 0, 0]} maxBarSize={28} />

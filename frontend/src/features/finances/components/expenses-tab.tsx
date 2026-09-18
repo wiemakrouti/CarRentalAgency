@@ -4,6 +4,7 @@ import { flexRender, getCoreRowModel, useReactTable, createColumnHelper } from '
 import { Plus, Receipt } from 'lucide-react';
 
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
+import { useFormatMoney } from '@/hooks/use-format-money';
 import { EmptyState } from '@/components/common/empty-state';
 import { LoadingState } from '@/components/common/loading-state';
 import { ErrorState } from '@/components/common/error-state';
@@ -37,7 +38,7 @@ function columnWidthClass(id: string): string {
   return 'w-[25%]';
 }
 
-function buildColumns(onEdit: (expense: Expense) => void) {
+function buildColumns(onEdit: (expense: Expense) => void, formatMoney: (amount: number) => string) {
   return [
     columnHelper.accessor('date', { header: 'Date', cell: ({ getValue }) => formatDate(getValue()) }),
     columnHelper.accessor('category', {
@@ -55,7 +56,7 @@ function buildColumns(onEdit: (expense: Expense) => void) {
     }),
     columnHelper.accessor('amount', {
       header: 'Montant',
-      cell: ({ getValue }) => `${Number(getValue()).toLocaleString('fr-TN')} DT`,
+      cell: ({ getValue }) => formatMoney(Number(getValue())),
     }),
     columnHelper.display({
       id: 'actions',
@@ -111,7 +112,8 @@ export function ExpensesTab() {
     setFormOpen(true);
   }
 
-  const columns = useMemo(() => buildColumns(openEditForm), []);
+  const formatMoney = useFormatMoney();
+  const columns = useMemo(() => buildColumns(openEditForm, formatMoney), [formatMoney]);
 
   const table = useReactTable({
     data: data?.items ?? [],
@@ -159,8 +161,14 @@ export function ExpensesTab() {
           <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-elevation">
             {/* table-fixed + explicit widths so no column stretches to fit
                 its content — Date/Catégorie/Voiture/Montant share the row
-                evenly, Actions stays just wide enough for the "..." button. */}
-            <Table className="table-fixed">
+                evenly, Actions stays just wide enough for the "..." button.
+                min-w keeps those percentages off a real floor: without it,
+                a narrow (tablet/mobile) container shrinks a `w-full` fixed
+                table right along with itself, crushing every column's text
+                into unreadable truncation instead of letting the parent's
+                overflow-x-auto scroll — same fallback the Cars/Rentals
+                tables get for free from their natural (non-fixed) layout. */}
+            <Table className="table-fixed min-w-[640px]">
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (
                   <TableRow key={headerGroup.id}>

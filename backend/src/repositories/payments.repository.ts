@@ -27,9 +27,10 @@ const PAYMENT_LIST_INCLUDE = {
   rental: { include: { car: true, client: true } },
 } as const;
 
-function buildWhere(query: PaymentListQuery): Prisma.PaymentWhereInput {
+function buildWhere(agencyId: string, query: PaymentListQuery): Prisma.PaymentWhereInput {
   const where = notDeleted<Prisma.PaymentWhereInput>(
     {
+      agencyId,
       rentalId: query.rentalId,
       type: query.type,
       status: query.status,
@@ -66,8 +67,9 @@ function buildWhere(query: PaymentListQuery): Prisma.PaymentWhereInput {
 // the deposit was actually collected), not `createdAt` — unlike buildWhere
 // above, a caution's real-world "collected on" date is what a from/to filter
 // here should mean.
-function buildDepositWhere(query: DepositListQuery): Prisma.PaymentWhereInput {
+function buildDepositWhere(agencyId: string, query: DepositListQuery): Prisma.PaymentWhereInput {
   const where = notDeleted<Prisma.PaymentWhereInput>({
+    agencyId,
     type: 'DEPOSIT',
     status: 'COMPLETED',
     ...(query.status === 'OUTSTANDING' ? { rental: { depositReturned: false } } : {}),
@@ -98,12 +100,16 @@ export const PaymentsRepository = {
   // Used both by the Rentals lifecycle (Phase 4b's auto-generated
   // LATE_FEE/EXTENSION_PAYMENT/DAMAGE_FEE rows) and by Finances' manual
   // payment entry (Phase 5).
-  create(data: Prisma.PaymentUncheckedCreateInput, db: Db = prisma) {
-    return db.payment.create({ data, include: PAYMENT_INCLUDE });
+  create(
+    agencyId: string,
+    data: Omit<Prisma.PaymentUncheckedCreateInput, 'agencyId'>,
+    db: Db = prisma,
+  ) {
+    return db.payment.create({ data: { ...data, agencyId }, include: PAYMENT_INCLUDE });
   },
 
-  async findMany(query: PaymentListQuery, db: Db = prisma) {
-    const where = buildWhere(query);
+  async findMany(agencyId: string, query: PaymentListQuery, db: Db = prisma) {
+    const where = buildWhere(agencyId, query);
     const [items, total] = await Promise.all([
       db.payment.findMany({
         where,
@@ -117,9 +123,9 @@ export const PaymentsRepository = {
     return { items, total };
   },
 
-  findById(id: string, options?: { includeArchived?: boolean }, db: Db = prisma) {
+  findById(agencyId: string, id: string, options?: { includeArchived?: boolean }, db: Db = prisma) {
     return db.payment.findFirst({
-      where: notDeleted({ id }, options),
+      where: notDeleted({ id, agencyId }, options),
       include: PAYMENT_LIST_INCLUDE,
     });
   },
@@ -153,10 +159,19 @@ export const PaymentsRepository = {
   // so the same date filter works uniformly across every status. `to` needs
   // the same exclusive-next-day treatment as buildWhere above, or a summary
   // for "this month" would drop nearly all of today's payments.
-  sumByTypeForStatus(status: PaymentStatus, range: { from: Date; to: Date }, db: Db = prisma) {
+  sumByTypeForStatus(
+    agencyId: string,
+    status: PaymentStatus,
+    range: { from: Date; to: Date },
+    db: Db = prisma,
+  ) {
     return db.payment.groupBy({
       by: ['type'],
-      where: notDeleted({ status, createdAt: { gte: range.from, lt: endOfDayExclusive(range.to) } }),
+      where: notDeleted({
+        agencyId,
+        status,
+        createdAt: { gte: range.from, lt: endOfDayExclusive(range.to) },
+      }),
       _sum: { amount: true },
     });
   },
@@ -175,8 +190,8 @@ export const PaymentsRepository = {
   // Rental grain instead would lose the real `paidAt` ordering/filtering
   // this is built on, for a correction scenario rare enough not to matter in
   // practice.
-  async findDepositsPage(query: DepositListQuery, db: Db = prisma) {
-    const where = buildDepositWhere(query);
+  async findDepositsPage(agencyId: string, query: DepositListQuery, db: Db = prisma) {
+    const where = buildDepositWhere(agencyId, query);
     const [items, total] = await Promise.all([
       db.payment.findMany({
         where,
@@ -195,9 +210,10 @@ export const PaymentsRepository = {
   // Prisma has no direct relation between them, only a shared rentalId (see
   // PaymentsService.create's DEPOSIT_REFUND ↔ depositReturned sync) — so
   // this is a second query rather than a nested include.
-  findDepositRefunds(rentalIds: string[], db: Db = prisma) {
+  findDepositRefunds(agencyId: string, rentalIds: string[], db: Db = prisma) {
     return db.payment.findMany({
       where: notDeleted<Prisma.PaymentWhereInput>({
+        agencyId,
         type: 'DEPOSIT_REFUND',
         status: 'COMPLETED',
         rentalId: { in: rentalIds },
@@ -210,16 +226,18 @@ export const PaymentsRepository = {
   // collected and every one ever refunded. Not scoped to any date range —
   // the card deliberately ignores the Résumé tab's filter, so this reads
   // the whole history. "Encore retenus" is just collected − refunded.
-  async sumDepositFlows(db: Db = prisma) {
+  async sumDepositFlows(agencyId: string, db: Db = prisma) {
     const rows = await db.payment.groupBy({
       by: ['type'],
       where: notDeleted<Prisma.PaymentWhereInput>({
+        agencyId,
         type: { in: ['DEPOSIT', 'DEPOSIT_REFUND'] },
         status: 'COMPLETED',
       }),
       _sum: { amount: true },
     });
-    const sumFor = (type: string) => Number(rows.find((row) => row.type === type)?._sum.amount ?? 0);
+    const sumFor = (type: string) =>
+      Number(rows.find((row) => row.type === type)?._sum.amount ?? 0);
     return { collected: sumFor('DEPOSIT'), refunded: sumFor('DEPOSIT_REFUND') };
   },
 };

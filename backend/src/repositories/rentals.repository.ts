@@ -22,9 +22,10 @@ const RENTAL_INCLUDE = {
   payments: { where: notDeleted({}), include: { attachments: true } },
 } as const;
 
-function buildWhere(query: RentalListQuery): Prisma.RentalWhereInput {
+function buildWhere(agencyId: string, query: RentalListQuery): Prisma.RentalWhereInput {
   const where = notDeleted<Prisma.RentalWhereInput>(
     {
+      agencyId,
       carId: query.carId,
       clientId: query.clientId,
     },
@@ -92,8 +93,8 @@ function buildWhere(query: RentalListQuery): Prisma.RentalWhereInput {
 }
 
 export const RentalsRepository = {
-  async findMany(query: RentalListQuery, db: Db = prisma) {
-    const where = buildWhere(query);
+  async findMany(agencyId: string, query: RentalListQuery, db: Db = prisma) {
+    const where = buildWhere(agencyId, query);
     const [items, total] = await Promise.all([
       db.rental.findMany({
         where,
@@ -107,9 +108,9 @@ export const RentalsRepository = {
     return { items, total };
   },
 
-  findById(id: string, options?: { includeArchived?: boolean }, db: Db = prisma) {
+  findById(agencyId: string, id: string, options?: { includeArchived?: boolean }, db: Db = prisma) {
     return db.rental.findFirst({
-      where: notDeleted({ id }, options),
+      where: notDeleted({ id, agencyId }, options),
       include: RENTAL_INCLUDE,
     });
   },
@@ -120,9 +121,9 @@ export const RentalsRepository = {
   // RentalsService.sweepExpiredReservations, which auto-cancels these rather
   // than let "jours de retard" grow without bound on a reservation nobody
   // will ever activate.
-  findExpiredReservations(now: Date, db: Db = prisma) {
+  findExpiredReservations(agencyId: string, now: Date, db: Db = prisma) {
     return db.rental.findMany({
-      where: { status: 'RESERVED', deletedAt: null, plannedReturnDate: { lt: now } },
+      where: { agencyId, status: 'RESERVED', deletedAt: null, plannedReturnDate: { lt: now } },
       include: RENTAL_INCLUDE,
     });
   },
@@ -175,17 +176,25 @@ export const RentalsRepository = {
   // overdue-return, RESERVED vs. overdue-pickup), just as a count instead
   // of the full row set. Plain `count()` queries, not a shared "list
   // overdue rentals" helper: the header only ever needs the number.
-  async getSummaryCounts(db: Db = prisma) {
+  async getSummaryCounts(agencyId: string, db: Db = prisma) {
     // Start of today, not `now` — see buildWhere's own comment above: a
     // pickup/return due today isn't overdue until today is actually over.
     // startOfDayUTC, not startOfToday's server-local midnight — same reason
     // as buildWhere's own `today` above.
     const today = startOfDayUTC(new Date());
     const [active, overdueReturn, overduePickup, upcomingReservations] = await Promise.all([
-      db.rental.count({ where: { status: 'ACTIVE', deletedAt: null, plannedReturnDate: { gte: today } } }),
-      db.rental.count({ where: { status: 'ACTIVE', deletedAt: null, plannedReturnDate: { lt: today } } }),
-      db.rental.count({ where: { status: 'RESERVED', deletedAt: null, pickupDate: { lt: today } } }),
-      db.rental.count({ where: { status: 'RESERVED', deletedAt: null, pickupDate: { gte: today } } }),
+      db.rental.count({
+        where: { agencyId, status: 'ACTIVE', deletedAt: null, plannedReturnDate: { gte: today } },
+      }),
+      db.rental.count({
+        where: { agencyId, status: 'ACTIVE', deletedAt: null, plannedReturnDate: { lt: today } },
+      }),
+      db.rental.count({
+        where: { agencyId, status: 'RESERVED', deletedAt: null, pickupDate: { lt: today } },
+      }),
+      db.rental.count({
+        where: { agencyId, status: 'RESERVED', deletedAt: null, pickupDate: { gte: today } },
+      }),
     ]);
     return { active, overdueReturn, overduePickup, upcomingReservations };
   },
@@ -206,9 +215,10 @@ export const RentalsRepository = {
   // (e.g. a car collected earlier today) must still be a candidate, or it
   // silently vanishes from that day's count — the day-bucketing loop below
   // already treats `to` as inclusive, so the candidate filter has to agree.
-  findOccupancyRentals(from: Date, to: Date, db: Db = prisma) {
+  findOccupancyRentals(agencyId: string, from: Date, to: Date, db: Db = prisma) {
     return db.rental.findMany({
       where: {
+        agencyId,
         deletedAt: null,
         status: { in: ['ACTIVE', 'COMPLETED'] },
         pickupDate: { lte: to },

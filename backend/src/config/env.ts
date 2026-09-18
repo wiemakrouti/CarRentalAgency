@@ -13,6 +13,15 @@ const envSchema = z.object({
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),
   CLOUDINARY_API_SECRET: z.string().optional(),
+  // Optional on purpose (degraded mode): unset until a domain is bought and
+  // verified with Resend — see lib/email-client.ts, which logs instead of
+  // sending while this is empty, so registration/verification/password-reset
+  // stay fully testable without real email infrastructure.
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().default('Car Rental App <onboarding@resend.dev>'),
+  // Base URL of the frontend — used to build the links emailed for
+  // verification/password-reset (never guessed from request headers).
+  APP_URL: z.string().default('http://localhost:5173'),
 });
 
 const parsed = envSchema.safeParse(process.env);

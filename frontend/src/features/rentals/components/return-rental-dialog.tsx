@@ -3,12 +3,14 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { AlertTriangle, CarFront, CheckCircle2, Loader2, Wrench } from 'lucide-react';
 import {
+  CURRENCY_OPTIONS,
   MANUALLY_SETTABLE_CAR_STATUSES,
   returnRentalSchema,
   type ReturnRentalInput,
 } from '@car-rental/shared';
 
 import { ApiClientError } from '@/lib/api-client';
+import { useSettings } from '@/providers/settings-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -50,6 +52,8 @@ function errorMessage(err: unknown, fallback: string): string {
 
 export function ReturnRentalDialog({ open, onOpenChange, rental }: ReturnRentalDialogProps) {
   const returnMutation = useReturnRentalMutation();
+  const { settings } = useSettings();
+  const currencySymbol = CURRENCY_OPTIONS.find((o) => o.code === settings?.currencyCode)?.symbol ?? 'DT';
 
   const {
     register,
@@ -191,7 +195,7 @@ export function ReturnRentalDialog({ open, onOpenChange, rental }: ReturnRentalD
                   type="number"
                   step="0.001"
                   min="0"
-                  placeholder="Montant en DT"
+                  placeholder={`Montant en ${currencySymbol}`}
                   {...register('damageFeeAmount', {
                     setValueAs: (v) => (v === '' ? undefined : Number(v)),
                   })}

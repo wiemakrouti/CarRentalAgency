@@ -10,6 +10,7 @@ import { clientsRouter } from './routes/clients.routes.js';
 import { rentalsRouter } from './routes/rentals.routes.js';
 import { financesRouter } from './routes/finances.routes.js';
 import { remindersRouter } from './routes/reminders.routes.js';
+import { settingsRouter } from './routes/settings.routes.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { AppError } from './utils/app-error.js';
 
@@ -29,8 +30,9 @@ export function createApp() {
   api.use(rentalsRouter);
   api.use(financesRouter);
   api.use(remindersRouter);
-  // Remaining feature routers (maintenance, reports, settings, audit-logs)
-  // are mounted here as their phases ship.
+  api.use(settingsRouter);
+  // Remaining feature routers (maintenance, reports, audit-logs) are
+  // mounted here as their phases ship.
   app.use('/api/v1', api);
 
   app.use((_req, _res, next) => {

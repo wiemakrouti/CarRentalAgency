@@ -25,3 +25,4 @@ function createImageUpload(fieldName: string) {
 export const uploadCarImage = createImageUpload('image');
 export const uploadClientDocument = createImageUpload('document');
 export const uploadPaymentAttachment = createImageUpload('attachment');
+export const uploadAgencyLogo = createImageUpload('logo');

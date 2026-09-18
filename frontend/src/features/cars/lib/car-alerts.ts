@@ -66,6 +66,28 @@ export function getDocumentStatuses(car: Car): DocumentStatus[] {
   });
 }
 
+// Rolls the three per-document statuses into a single worst-first summary —
+// backs the table/grid's compact one-badge CarExpiryAlerts indicator, whose
+// per-document breakdown (via formatDocumentStatus) lives in its tooltip
+// instead of three separate badges. expired beats expiring beats not_set,
+// mirroring levelFor/LEVEL_PRIORITY's own "nothing to act on urgently" take
+// on a never-entered date — only reached once nothing is actually overdue.
+export function summarizeDocumentStatuses(documents: DocumentStatus[]): {
+  level: DocumentLevel;
+  label: string;
+} {
+  const expired = documents.filter((d) => d.level === 'expired').length;
+  if (expired > 0) return { level: 'expired', label: `${expired} expiré${expired > 1 ? 's' : ''}` };
+
+  const expiring = documents.filter((d) => d.level === 'expiring').length;
+  if (expiring > 0) return { level: 'expiring', label: `${expiring} à renouveler` };
+
+  const notSet = documents.filter((d) => d.level === 'not_set').length;
+  if (notSet > 0) return { level: 'not_set', label: `${notSet} non renseigné${notSet > 1 ? 's' : ''}` };
+
+  return { level: 'ok', label: 'À jour' };
+}
+
 export function formatDocumentStatus(doc: DocumentStatus): string {
   if (doc.level === 'not_set') return 'Date non renseignée';
   if (doc.level === 'ok') return 'À jour';

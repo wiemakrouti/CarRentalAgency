@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useFormatMoney } from '@/hooks/use-format-money';
 import { LoadingState } from '@/components/common/loading-state';
 import { ErrorState } from '@/components/common/error-state';
 import { useRentalsQuery } from '@/features/rentals/hooks/use-rentals';
@@ -59,9 +60,6 @@ function formatDate(iso: string): string {
   return apiDateToLocalDay(iso).toLocaleDateString('fr-TN');
 }
 
-function formatAmount(value: string | number): string {
-  return `${Number(value).toLocaleString('fr-TN')} DT`;
-}
 
 type ClientCalendarDialogProps = {
   client: Client | undefined;
@@ -87,6 +85,8 @@ export function ClientCalendarDialog({
 }: ClientCalendarDialogProps) {
   const [viewMonth, setViewMonth] = useState(() => new Date());
   const [selectedRental, setSelectedRental] = useState<Rental | undefined>(undefined);
+  const formatMoney = useFormatMoney();
+  const formatAmount = (value: string | number) => formatMoney(Number(value));
 
   const { data, isLoading, isError, refetch } = useRentalsQuery(
     // 100 is the API's hard max (paginationQuerySchema) — a client
@@ -387,6 +387,7 @@ export function ClientCalendarDialog({
 
 function AgendaItem({ rental, today }: { rental: Rental; today: Date }) {
   const status = getDisplayRentalStatusSummary(rental, today);
+  const formatMoney = useFormatMoney();
   return (
     <li className="rounded-xl border border-border p-3 text-sm">
       <div className="flex items-start justify-between gap-2">
@@ -402,7 +403,7 @@ function AgendaItem({ rental, today }: { rental: Rental; today: Date }) {
         <div className="flex shrink-0 flex-col items-end gap-1">
           <Badge variant={DISPLAY_RENTAL_STATUS_BADGE_VARIANT[status]}>{DISPLAY_RENTAL_STATUS_LABELS[status]}</Badge>
           <span className="text-xs font-medium text-muted-foreground">
-            {formatAmount(rental.totalAmount)}
+            {formatMoney(Number(rental.totalAmount))}
           </span>
         </div>
       </div>

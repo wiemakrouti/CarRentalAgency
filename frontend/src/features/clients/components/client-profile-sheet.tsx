@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useFormatMoney } from '@/hooks/use-format-money';
 
 import type { Client } from '../api/clients.api';
 import { useClientQuery, useClientStatsQuery } from '../hooks/use-clients';
@@ -36,10 +37,6 @@ import {
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('fr-TN');
-}
-
-function formatAmount(value: string | number): string {
-  return `${Number(value).toLocaleString('fr-TN')} DT`;
 }
 
 const LICENSE_BADGE_VARIANT = {
@@ -105,6 +102,8 @@ export function ClientProfileSheet({
 }: ClientProfileSheetProps) {
   const { data: client, isLoading } = useClientQuery(clientId ?? '');
   const { data: stats } = useClientStatsQuery(clientId);
+  const formatMoney = useFormatMoney();
+  const formatAmount = (value: string | number) => formatMoney(Number(value));
 
   const licenseAlert = client ? getLicenseAlertLevel(client) : null;
   const initials = client ? `${client.firstName.charAt(0)}${client.lastName.charAt(0)}`.toUpperCase() : '';

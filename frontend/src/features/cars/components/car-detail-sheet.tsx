@@ -24,6 +24,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiClientError } from '@/lib/api-client';
+import { useFormatMoney } from '@/hooks/use-format-money';
 import type { Car, ManualCarStatus } from '../api/cars.api';
 import { useCarQuery, useCarStatsQuery, useUpdateCarStatusMutation } from '../hooks/use-cars';
 import {
@@ -56,10 +57,6 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('fr-TN');
 }
 
-function formatAmount(value: string | number): string {
-  return `${Number(value).toLocaleString('fr-TN')} DT`;
-}
-
 type CarDetailSheetProps = {
   carId: string | undefined;
   open: boolean;
@@ -83,6 +80,8 @@ export function CarDetailSheet({
 }: CarDetailSheetProps) {
   const [rentedNoticeOpen, setRentedNoticeOpen] = useState(false);
   const [expenseFormOpen, setExpenseFormOpen] = useState(false);
+  const formatMoney = useFormatMoney();
+  const formatAmount = (value: string | number) => formatMoney(Number(value));
   const { data: car, isLoading } = useCarQuery(carId ?? '');
   const { data: stats } = useCarStatsQuery(carId);
   // Most recent first (the backend's own default order) — a compact side
@@ -97,6 +96,13 @@ export function CarDetailSheet({
 
   const primaryImage = car?.images.find((img) => img.isPrimary) ?? car?.images[0];
   const documentStatuses = car ? getDocumentStatuses(car) : [];
+  // Worst-first: expired beats expiring beats never-entered — undefined
+  // once every document is 'ok', which hides the section's single "Mettre
+  // à jour" button entirely (see below).
+  const worstDocument =
+    documentStatuses.find((d) => d.level === 'expired') ??
+    documentStatuses.find((d) => d.level === 'expiring') ??
+    documentStatuses.find((d) => d.level === 'not_set');
 
   function handleStatusChange(status: ManualCarStatus) {
     if (!carId) return;
@@ -229,9 +235,29 @@ export function CarDetailSheet({
             <Separator className="my-4" />
 
             <div className="space-y-3">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Documents
-              </p>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Documents
+                </p>
+                {/* One button for the whole section, not one per document —
+                    all three expiry fields sit together in the edit form
+                    (car-form-dialog.tsx), so fixing the worst one lands the
+                    admin right next to the other two as well. Worst-first:
+                    expired beats expiring beats never-entered, same
+                    priority car-alerts.ts's own summary uses; hidden
+                    entirely once nothing needs attention. */}
+                {worstDocument && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1 text-xs"
+                    onClick={() => onEdit(car, worstDocument.field)}
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    Mettre à jour
+                  </Button>
+                )}
+              </div>
               <ul className="space-y-2">
                 {documentStatuses.map((doc) => (
                   <li
@@ -244,22 +270,9 @@ export function CarDetailSheet({
                         {doc.date ? `Expire le ${formatDate(doc.date)}` : 'Date non renseignée'}
                       </p>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <Badge variant={DOCUMENT_BADGE_VARIANT[doc.level]}>
-                        {formatDocumentStatus(doc)}
-                      </Badge>
-                      {doc.level !== 'ok' && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 gap-1 text-xs"
-                          onClick={() => onEdit(car, doc.field)}
-                        >
-                          <RefreshCw className="h-3 w-3" />
-                          {doc.level === 'not_set' ? 'Renseigner' : 'Renouveler'}
-                        </Button>
-                      )}
-                    </div>
+                    <Badge variant={DOCUMENT_BADGE_VARIANT[doc.level]}>
+                      {formatDocumentStatus(doc)}
+                    </Badge>
                   </li>
                 ))}
               </ul>
@@ -272,16 +285,35 @@ export function CarDetailSheet({
                 Statistiques
               </p>
               {stats ? (
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                  <dt className="text-muted-foreground">Locations au total</dt>
-                  <dd>{stats.totalRentals}</dd>
-                  <dt className="text-muted-foreground">Locations terminées</dt>
-                  <dd>{stats.completedRentals}</dd>
-                  <dt className="text-muted-foreground">Revenu encaissé</dt>
-                  <dd>{formatAmount(stats.totalRevenue)}</dd>
-                  <dt className="text-muted-foreground">Dernière location</dt>
-                  <dd>{stats.lastRentalDate ? formatDate(stats.lastRentalDate) : '—'}</dd>
-                </dl>
+                <>
+                  {/* Same tile/highlight pattern as Caractéristiques above —
+                      that section was the only one in this sheet styled as
+                      a plain <dl>, the one visible inconsistency in an
+                      otherwise tile-based panel. */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-xl bg-muted p-3">
+                      <p className="text-[11px] font-medium text-muted-foreground">Locations au total</p>
+                      <p className="text-sm font-semibold text-foreground">{stats.totalRentals}</p>
+                    </div>
+                    <div className="rounded-xl bg-muted p-3">
+                      <p className="text-[11px] font-medium text-muted-foreground">Terminées</p>
+                      <p className="text-sm font-semibold text-foreground">{stats.completedRentals}</p>
+                    </div>
+                    <div className="col-span-2 rounded-xl bg-muted p-3">
+                      <p className="text-[11px] font-medium text-muted-foreground">Dernière location</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        {stats.lastRentalDate ? formatDate(stats.lastRentalDate) : '—'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between rounded-xl bg-gradient-to-br from-primary-600 to-primary-700 px-4 py-3.5 text-primary-foreground">
+                    <div>
+                      <p className="text-[11px] font-medium text-primary-100">Revenu encaissé</p>
+                      <p className="text-xl font-bold">{formatAmount(stats.totalRevenue)}</p>
+                    </div>
+                  </div>
+                </>
               ) : (
                 <Skeleton className="h-16 w-full" />
               )}

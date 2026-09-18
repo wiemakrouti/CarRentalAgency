@@ -1,5 +1,11 @@
 import 'dotenv/config';
-import { Prisma, PrismaClient, type ExpenseCategory, type PaymentType, type RentalStatus } from '@prisma/client';
+import {
+  Prisma,
+  PrismaClient,
+  type ExpenseCategory,
+  type PaymentType,
+  type RentalStatus,
+} from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 // Phase 0: seeds only what the app needs to boot (one admin user + the
@@ -361,9 +367,9 @@ const DEMO_CARS: Prisma.CarCreateManyInput[] = [
 // Shared by DEMO_CARS and CALENDAR_TEST_CARS below — both are seeded
 // findFirst-then-create by licensePlate (see the partial-unique-index note
 // at the top of this file), just against different lists.
-async function seedCarBatch(cars: Prisma.CarCreateManyInput[], label: string) {
+async function seedCarBatch(agencyId: string, cars: Prisma.CarCreateManyInput[], label: string) {
   const existing = await prisma.car.findMany({
-    where: { licensePlate: { in: cars.map((c) => c.licensePlate) } },
+    where: { agencyId, licensePlate: { in: cars.map((c) => c.licensePlate) } },
     select: { licensePlate: true },
   });
   const existingPlates = new Set(existing.map((c) => c.licensePlate));
@@ -377,7 +383,10 @@ async function seedCarBatch(cars: Prisma.CarCreateManyInput[], label: string) {
   // skipDuplicates as a second line of defense against the partial unique
   // indexes on licensePlate/vin (belt-and-suspenders on top of the filter
   // above, which already avoids the common case).
-  await prisma.car.createMany({ data: toCreate, skipDuplicates: true });
+  await prisma.car.createMany({
+    data: toCreate.map((car) => ({ ...car, agencyId })),
+    skipDuplicates: true,
+  });
 
   console.log(`${label} added (${toCreate.length}):`);
   for (const car of toCreate) {
@@ -387,8 +396,8 @@ async function seedCarBatch(cars: Prisma.CarCreateManyInput[], label: string) {
   }
 }
 
-function seedDemoCars() {
-  return seedCarBatch(DEMO_CARS, 'Demo cars');
+function seedDemoCars(agencyId: string) {
+  return seedCarBatch(agencyId, DEMO_CARS, 'Demo cars');
 }
 
 // --- Demo rentals (calendar test data) -------------------------------------
@@ -470,23 +479,26 @@ const DEMO_CLIENTS: Prisma.ClientCreateManyInput[] = [
   },
 ];
 
-async function seedDemoClients(): Promise<{ id: string; email: string | null }[]> {
+async function seedDemoClients(agencyId: string): Promise<{ id: string; email: string | null }[]> {
   const existing = await prisma.client.findMany({
-    where: { email: { in: DEMO_CLIENTS.map((c) => c.email as string) } },
+    where: { agencyId, email: { in: DEMO_CLIENTS.map((c) => c.email as string) } },
     select: { id: true, email: true },
   });
   const existingEmails = new Set(existing.map((c) => c.email));
   const toCreate = DEMO_CLIENTS.filter((c) => !existingEmails.has(c.email as string));
 
   if (toCreate.length > 0) {
-    await prisma.client.createMany({ data: toCreate, skipDuplicates: true });
+    await prisma.client.createMany({
+      data: toCreate.map((client) => ({ ...client, agencyId })),
+      skipDuplicates: true,
+    });
     console.log(`Demo clients added (${toCreate.length}).`);
   } else {
     console.log('Demo clients already present, skipping (0 new).');
   }
 
   return prisma.client.findMany({
-    where: { email: { in: DEMO_CLIENTS.map((c) => c.email as string) } },
+    where: { agencyId, email: { in: DEMO_CLIENTS.map((c) => c.email as string) } },
     select: { id: true, email: true },
   });
 }
@@ -676,13 +688,13 @@ function calcNights(pickup: Date, plannedReturn: Date): number {
   );
 }
 
-async function seedDemoRentals(adminUserId: string) {
+async function seedDemoRentals(agencyId: string, adminUserId: string) {
   const cars = await prisma.car.findMany({
-    where: { licensePlate: { in: RENTAL_SCENARIOS.map((s) => s.licensePlate) } },
+    where: { agencyId, licensePlate: { in: RENTAL_SCENARIOS.map((s) => s.licensePlate) } },
   });
   const carByPlate = new Map(cars.map((c) => [c.licensePlate, c]));
 
-  const clients = await seedDemoClients();
+  const clients = await seedDemoClients(agencyId);
   if (clients.length === 0) {
     console.log('No demo clients available, skipping demo rentals.');
     return;
@@ -742,6 +754,7 @@ async function seedDemoRentals(adminUserId: string) {
       const client = nextClient();
       rows.push({
         rentalNumber,
+        agencyId,
         carId: car.id,
         clientId: client.id,
         pickupDate: input.pickupDate,
@@ -1072,8 +1085,8 @@ const CALENDAR_TEST_CARS: Prisma.CarCreateManyInput[] = [
   },
 ];
 
-function seedCalendarTestCars() {
-  return seedCarBatch(CALENDAR_TEST_CARS, 'Calendar test cars');
+function seedCalendarTestCars(agencyId: string) {
+  return seedCarBatch(agencyId, CALENDAR_TEST_CARS, 'Calendar test cars');
 }
 
 // Every leg is anchored by a single signed offset from today (negative =
@@ -1171,12 +1184,12 @@ const CALENDAR_SCENARIOS: CalendarScenario[] = [
   },
 ];
 
-async function seedCalendarTestRentals(adminUserId: string) {
+async function seedCalendarTestRentals(agencyId: string, adminUserId: string) {
   const cars = await prisma.car.findMany({
-    where: { licensePlate: { in: CALENDAR_SCENARIOS.map((s) => s.licensePlate) } },
+    where: { agencyId, licensePlate: { in: CALENDAR_SCENARIOS.map((s) => s.licensePlate) } },
   });
   const carByPlate = new Map(cars.map((c) => [c.licensePlate, c]));
-  const clients = await seedDemoClients(); // idempotent — reuses the same 8 demo clients
+  const clients = await seedDemoClients(agencyId); // idempotent — reuses the same 8 demo clients
 
   const summary: {
     plate: string;
@@ -1275,6 +1288,7 @@ async function seedCalendarTestRentals(adminUserId: string) {
       const rental = await prisma.rental.create({
         data: {
           rentalNumber,
+          agencyId,
           carId: car.id,
           clientId: client.id,
           pickupDate,
@@ -1298,6 +1312,7 @@ async function seedCalendarTestRentals(adminUserId: string) {
       if (lateFeeAmount > 0) {
         await prisma.payment.create({
           data: {
+            agencyId,
             rentalId: rental.id,
             amount: lateFeeAmount,
             method: 'CASH',
@@ -1393,6 +1408,7 @@ async function seedCalendarTestRentals(adminUserId: string) {
 // that already has a payment, so it never doubles up.
 
 async function createPaymentIfMissing(
+  agencyId: string,
   rentalId: string,
   type: PaymentType,
   amount: number,
@@ -1406,6 +1422,7 @@ async function createPaymentIfMissing(
   if (existing) return false;
   await prisma.payment.create({
     data: {
+      agencyId,
       rentalId,
       type,
       amount,
@@ -1419,9 +1436,14 @@ async function createPaymentIfMissing(
   return true;
 }
 
-async function seedDemoPayments() {
+async function seedDemoPayments(agencyId: string) {
   const completedRentals = await prisma.rental.findMany({
-    where: { rentalNumber: { startsWith: 'LOC-SEED' }, status: 'COMPLETED', deletedAt: null },
+    where: {
+      agencyId,
+      rentalNumber: { startsWith: 'LOC-SEED' },
+      status: 'COMPLETED',
+      deletedAt: null,
+    },
     orderBy: { rentalNumber: 'asc' },
   });
 
@@ -1435,7 +1457,15 @@ async function seedDemoPayments() {
   // Every completed rental gets its rent recorded as encaissé — always the
   // largest revenue type in a real agency too.
   for (const rental of completedRentals) {
-    if (await createPaymentIfMissing(rental.id, 'RENTAL_PAYMENT', Number(rental.totalAmount), 'Paiement du loyer (seed).')) {
+    if (
+      await createPaymentIfMissing(
+        agencyId,
+        rental.id,
+        'RENTAL_PAYMENT',
+        Number(rental.totalAmount),
+        'Paiement du loyer (seed).',
+      )
+    ) {
       created += 1;
     }
   }
@@ -1457,13 +1487,15 @@ async function seedDemoPayments() {
       // ±30% jitter (deterministic, not random) so a type's payments aren't
       // all an identical, suspiciously round amount.
       const amount = Math.max(30, Math.round(perPayment * (0.7 + (0.6 * ((i * 37) % 10)) / 10)));
-      if (await createPaymentIfMissing(rental.id, type, amount, `${label} (seed).`)) {
+      if (await createPaymentIfMissing(agencyId, rental.id, type, amount, `${label} (seed).`)) {
         created += 1;
       }
     }
   }
 
-  console.log(`Demo payments added (${created} new) across ${completedRentals.length} completed seed rental(s).`);
+  console.log(
+    `Demo payments added (${created} new) across ${completedRentals.length} completed seed rental(s).`,
+  );
 }
 
 // --- Backdated revenue (a real "vs. période précédente" comparison) -------
@@ -1487,9 +1519,14 @@ async function seedDemoPayments() {
 // createPaymentIfMissing helper as seedDemoPayments — a rental that already
 // got an EXTENSION_PAYMENT from that cyclic assignment is simply skipped
 // here, not duplicated).
-async function seedBackdatedRevenue() {
+async function seedBackdatedRevenue(agencyId: string) {
   const completedRentals = await prisma.rental.findMany({
-    where: { rentalNumber: { startsWith: 'LOC-SEED' }, status: 'COMPLETED', deletedAt: null },
+    where: {
+      agencyId,
+      rentalNumber: { startsWith: 'LOC-SEED' },
+      status: 'COMPLETED',
+      deletedAt: null,
+    },
     // Descending — the opposite end of seedDemoPayments' own ascending
     // cyclic pick, so this naturally lands on rentals that don't already
     // have an EXTENSION_PAYMENT instead of colliding with them.
@@ -1509,7 +1546,16 @@ async function seedBackdatedRevenue() {
     const rental = completedRentals[i]!;
     const recordedAt = daysFromNow(-(11 + i)); // lands in the last days of last month
     const amount = Math.max(60, Math.round(Number(rental.totalAmount) * 0.15));
-    if (await createPaymentIfMissing(rental.id, 'EXTENSION_PAYMENT', amount, backdatedNote, recordedAt)) {
+    if (
+      await createPaymentIfMissing(
+        agencyId,
+        rental.id,
+        'EXTENSION_PAYMENT',
+        amount,
+        backdatedNote,
+        recordedAt,
+      )
+    ) {
       created += 1;
     }
   }
@@ -1526,6 +1572,7 @@ async function seedBackdatedRevenue() {
     if (!existingPending) {
       await prisma.payment.create({
         data: {
+          agencyId,
           rentalId: pendingRental.id,
           type: 'LATE_FEE',
           amount: 90,
@@ -1559,6 +1606,7 @@ async function seedBackdatedRevenue() {
 // that already exists, so it never doubles up.
 
 async function createExpenseIfMissing(
+  agencyId: string,
   carId: string,
   category: ExpenseCategory,
   amount: number,
@@ -1567,7 +1615,7 @@ async function createExpenseIfMissing(
 ): Promise<boolean> {
   const existing = await prisma.expense.findFirst({ where: { carId, category, description } });
   if (existing) return false;
-  await prisma.expense.create({ data: { carId, category, amount, description, date } });
+  await prisma.expense.create({ data: { agencyId, carId, category, amount, description, date } });
   return true;
 }
 
@@ -1587,16 +1635,22 @@ const REGISTRATION_TIER_BY_CATEGORY: Record<string, number> = {
   VAN: 80,
 };
 
-const OTHER_EXPENSE_EXTRAS: { plate: string; amount: number; label: string; offsetDays: number }[] = [
-  { plate: '206 TUN 5515', amount: 60, label: 'Nettoyage complet avant location', offsetDays: 4 },
-  { plate: '210 TUN 5519', amount: 90, label: 'Nettoyage complet avant location', offsetDays: 9 },
-  { plate: '211 TUN 5520', amount: 45, label: 'Frais de parking', offsetDays: 18 },
-  { plate: '208 TUN 5517', amount: 55, label: 'Nettoyage complet avant location', offsetDays: 40 },
-];
+const OTHER_EXPENSE_EXTRAS: { plate: string; amount: number; label: string; offsetDays: number }[] =
+  [
+    { plate: '206 TUN 5515', amount: 60, label: 'Nettoyage complet avant location', offsetDays: 4 },
+    { plate: '210 TUN 5519', amount: 90, label: 'Nettoyage complet avant location', offsetDays: 9 },
+    { plate: '211 TUN 5520', amount: 45, label: 'Frais de parking', offsetDays: 18 },
+    {
+      plate: '208 TUN 5517',
+      amount: 55,
+      label: 'Nettoyage complet avant location',
+      offsetDays: 40,
+    },
+  ];
 
-async function seedDemoExpenses() {
+async function seedDemoExpenses(agencyId: string) {
   const cars = await prisma.car.findMany({
-    where: { licensePlate: { in: DEMO_CARS.map((c) => c.licensePlate as string) } },
+    where: { agencyId, licensePlate: { in: DEMO_CARS.map((c) => c.licensePlate as string) } },
     orderBy: { licensePlate: 'asc' },
   });
 
@@ -1611,6 +1665,7 @@ async function seedDemoExpenses() {
     // Insurance — one renewal per car, tiered by category.
     const insuranceAmount = INSURANCE_TIER_BY_CATEGORY[car.category] ?? 200;
     const insuranceCreated = await createExpenseIfMissing(
+      agencyId,
       car.id,
       'INSURANCE',
       insuranceAmount,
@@ -1622,6 +1677,7 @@ async function seedDemoExpenses() {
     // Registration — one flat fee per car, tiered by category.
     const registrationAmount = REGISTRATION_TIER_BY_CATEGORY[car.category] ?? 70;
     const registrationCreated = await createExpenseIfMissing(
+      agencyId,
       car.id,
       'REGISTRATION',
       registrationAmount,
@@ -1633,6 +1689,7 @@ async function seedDemoExpenses() {
     if (car.fuelType === 'ELECTRIC') {
       // No dedicated ExpenseCategory for electricity yet — filed under OTHER.
       const rechargeCreated = await createExpenseIfMissing(
+        agencyId,
         car.id,
         'OTHER',
         Math.round(15 + Number(car.dailyRate) * 0.08),
@@ -1649,6 +1706,7 @@ async function seedDemoExpenses() {
         const jitter = 0.85 + (0.3 * ((index * 5 + i * 7) % 10)) / 10;
         const amount = Math.round(base * jitter);
         const fuelCreated = await createExpenseIfMissing(
+          agencyId,
           car.id,
           'FUEL',
           amount,
@@ -1663,6 +1721,7 @@ async function seedDemoExpenses() {
     if (car.mileage > 50000) {
       const repairAmount = 200 + Math.round(car.mileage / 300);
       const repairCreated = await createExpenseIfMissing(
+        agencyId,
         car.id,
         'REPAIR',
         repairAmount,
@@ -1677,6 +1736,7 @@ async function seedDemoExpenses() {
     const car = cars.find((c) => c.licensePlate === extra.plate);
     if (!car) continue;
     const extraCreated = await createExpenseIfMissing(
+      agencyId,
       car.id,
       'OTHER',
       extra.amount,
@@ -1698,6 +1758,9 @@ async function main() {
   const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? 'ChangeMe123!';
   const passwordHash = await bcrypt.hash(adminPassword, 10);
 
+  // Nested `agency: { create: {} }` only fires on the CREATE branch of the
+  // upsert — a rerun against an already-seeded admin reuses their existing
+  // agency rather than spawning a new one each time.
   const admin = await prisma.user.upsert({
     where: { email: adminEmail },
     update: {},
@@ -1706,32 +1769,33 @@ async function main() {
       passwordHash,
       fullName: 'Administrateur',
       role: 'ADMIN',
+      agency: { create: {} },
     },
   });
+  const agencyId = admin.agencyId;
   console.log(`Admin user ready: ${admin.email}`);
 
-  const existingSetting = await prisma.setting.findFirst();
+  const existingSetting = await prisma.setting.findFirst({ where: { agencyId } });
   if (!existingSetting) {
     await prisma.setting.create({
       data: {
+        agencyId,
         agencyName: 'Agence de Location de Voitures',
         currencyCode: 'TND',
-        contractPrimaryLanguage: 'fr',
-        contractSecondaryLanguage: 'ar',
       },
     });
-    console.log('Default agency settings created (TND, fr/ar).');
+    console.log('Default agency settings created (TND).');
   } else {
     console.log('Agency settings already present, skipping.');
   }
 
-  await seedDemoCars();
-  await seedDemoRentals(admin.id);
-  await seedCalendarTestCars();
-  await seedCalendarTestRentals(admin.id);
-  await seedDemoPayments();
-  await seedBackdatedRevenue();
-  await seedDemoExpenses();
+  await seedDemoCars(agencyId);
+  await seedDemoRentals(agencyId, admin.id);
+  await seedCalendarTestCars(agencyId);
+  await seedCalendarTestRentals(agencyId, admin.id);
+  await seedDemoPayments(agencyId);
+  await seedBackdatedRevenue(agencyId);
+  await seedDemoExpenses(agencyId);
 }
 
 main()

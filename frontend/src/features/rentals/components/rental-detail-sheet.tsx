@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { useFormatMoney } from '@/hooks/use-format-money';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -54,10 +55,6 @@ function formatDate(iso: string): string {
 
 function formatShortDate(iso: string): string {
   return new Date(iso).toLocaleDateString('fr-TN', { day: '2-digit', month: '2-digit' });
-}
-
-function formatAmount(value: string | number): string {
-  return `${Number(value).toLocaleString('fr-TN')} DT`;
 }
 
 // Whole calendar days between two dates — for a duration or a countdown
@@ -237,7 +234,7 @@ const KPI_VALUE_CLASSES: Record<KpiTone, string> = {
 // situation" logic don't drift apart.
 type ThirdKpi = { label: string; value: string; sub: string; tone: KpiTone; feeEstimate?: string };
 
-function buildThirdKpi(rental: Rental, now: Date): ThirdKpi | null {
+function buildThirdKpi(rental: Rental, now: Date, formatMoney: (amount: number) => string): ThirdKpi | null {
   const pickup = new Date(rental.pickupDate);
   const plannedReturn = new Date(rental.plannedReturnDate);
   const effectiveStatus = getEffectiveRentalStatus(rental, now);
@@ -269,7 +266,7 @@ function buildThirdKpi(rental: Rental, now: Date): ThirdKpi | null {
       value: `${lateDays} j`,
       sub: `Depuis le ${formatDate(rental.plannedReturnDate)}`,
       tone: 'crit',
-      feeEstimate: formatAmount(feeEstimate),
+      feeEstimate: formatMoney(feeEstimate),
     };
   }
 
@@ -305,6 +302,8 @@ type RentalDetailSheetProps = {
 // between "acting from the row" and "acting from the sheet".
 export function RentalDetailSheet({ rentalId, open, onOpenChange }: RentalDetailSheetProps) {
   const { data: rental, isLoading } = useRentalQuery(rentalId ?? '');
+  const formatMoney = useFormatMoney();
+  const formatAmount = (value: string | number) => formatMoney(Number(value));
   const [activateOpen, setActivateOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
@@ -331,7 +330,7 @@ export function RentalDetailSheet({ rentalId, open, onOpenChange }: RentalDetail
   // problem.
   const displayStatus = rental ? getDisplayRentalStatusSummary(rental, now) : null;
   const timeline = rental ? buildTimeline(rental, now) : null;
-  const thirdKpi = rental ? buildThirdKpi(rental, now) : null;
+  const thirdKpi = rental ? buildThirdKpi(rental, now, formatMoney) : null;
   const hasMileage = rental && (rental.mileageAtPickup !== null || rental.mileageAtReturn !== null);
   // A cancelled reservation never earns a rental fee — nothing to settle,
   // and any deposit already paid is its own concern (see CancelRentalDialog's

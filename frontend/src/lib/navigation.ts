@@ -1,14 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import {
-  BarChart3,
-  CarFront,
-  ClipboardList,
-  LayoutDashboard,
-  Settings,
-  Users,
-  Wallet,
-  Wrench,
-} from 'lucide-react';
+import { CarFront, ClipboardList, LayoutDashboard, Settings, Users, Wallet } from 'lucide-react';
 
 export type NavItem = {
   label: string;
@@ -24,7 +15,5 @@ export const navItems: NavItem[] = [
   { label: 'Gestion des clients', path: '/clients', icon: Users, group: 'Gestion' },
   { label: 'Gestion des locations', path: '/rentals', icon: ClipboardList, group: 'Gestion' },
   { label: 'Finances', path: '/finances', icon: Wallet, group: 'Gestion' },
-  { label: 'Maintenance', path: '/maintenance', icon: Wrench, group: 'Système' },
-  { label: 'Rapports', path: '/reports', icon: BarChart3, group: 'Système' },
   { label: 'Paramètres', path: '/settings', icon: Settings, group: 'Système' },
 ];

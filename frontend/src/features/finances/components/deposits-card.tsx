@@ -1,11 +1,8 @@
 import { ArrowRight, ShieldCheck } from 'lucide-react';
 
+import { useFormatMoney } from '@/hooks/use-format-money';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-
-function formatMoney(amount: number): string {
-  return `${amount.toLocaleString('fr-TN')} DT`;
-}
 
 type DepositsCardProps = {
   collected: number;
@@ -18,6 +15,7 @@ type DepositsCardProps = {
 // caution ever collected; the capsule splits it into Remboursées and
 // Encore retenu (collected − refunded = what's still with the clients).
 export function DepositsCard({ collected, refunded, onViewDetails }: DepositsCardProps) {
+  const formatMoney = useFormatMoney();
   const held = Math.max(collected - refunded, 0);
   const refundedPct = collected > 0 ? Math.min(refunded / collected, 1) * 100 : 0;
 

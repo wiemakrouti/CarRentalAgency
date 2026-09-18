@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { CarFront, Loader2 } from 'lucide-react';
 import { loginSchema, type LoginInput } from '@car-rental/shared';
 
 import { useAuth } from '@/providers/auth-provider';
+import { authApi } from '@/features/auth/api/auth.api';
 import { ApiClientError } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,6 +19,10 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [formError, setFormError] = useState<string | null>(null);
+  // Set only for EMAIL_NOT_VERIFIED — lets the form offer a direct "resend"
+  // action instead of just a dead-end error message.
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
+  const [resent, setResent] = useState(false);
 
   const {
     register,
@@ -29,13 +34,33 @@ export function LoginPage() {
 
   async function onSubmit(input: LoginInput) {
     setFormError(null);
+    setUnverifiedEmail(null);
+    setResent(false);
     try {
       await login(input);
       navigate(redirectTo, { replace: true });
     } catch (err) {
+      if (err instanceof ApiClientError && err.code === 'EMAIL_NOT_VERIFIED') {
+        setUnverifiedEmail(input.email);
+        setFormError(err.message);
+        return;
+      }
       setFormError(
-        err instanceof ApiClientError ? err.message : 'Une erreur est survenue. Veuillez réessayer.',
+        err instanceof ApiClientError
+          ? err.message
+          : 'Une erreur est survenue. Veuillez réessayer.',
       );
+    }
+  }
+
+  async function handleResend() {
+    if (!unverifiedEmail) return;
+    try {
+      await authApi.resendVerification({ email: unverifiedEmail });
+      setResent(true);
+    } catch {
+      // Best-effort, same non-enumeration shape as forgot-password —
+      // nothing meaningful to show on failure.
     }
   }
 
@@ -53,13 +78,26 @@ export function LoginPage() {
             <CarFront className="h-5 w-5" />
           </div>
           <CardTitle className="mt-2 text-xl">Connexion</CardTitle>
-          <CardDescription>Accédez à votre tableau de bord de gestion.</CardDescription>
+          <CardDescription>Pilotez votre agence de location en toute simplicité.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
             {formError && (
               <Alert variant="destructive">
-                <AlertDescription>{formError}</AlertDescription>
+                <AlertDescription>
+                  {formError}
+                  {unverifiedEmail && (
+                    <Button
+                      type="button"
+                      variant="link"
+                      className="ml-1 h-auto p-0 text-destructive underline"
+                      disabled={resent}
+                      onClick={handleResend}
+                    >
+                      {resent ? 'Email renvoyé' : "Renvoyer l'email"}
+                    </Button>
+                  )}
+                </AlertDescription>
               </Alert>
             )}
 
@@ -69,7 +107,7 @@ export function LoginPage() {
                 id="email"
                 type="email"
                 autoComplete="email"
-                placeholder="admin@agence.tn"
+                placeholder="ahmed.bensalah@gmail.com"
                 {...register('email')}
               />
               {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
@@ -83,7 +121,17 @@ export function LoginPage() {
                 autoComplete="current-password"
                 {...register('password')}
               />
-              {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
+              {errors.password && (
+                <p className="text-sm text-destructive">{errors.password.message}</p>
+              )}
+              <div className="text-right">
+                <Link
+                  to="/forgot-password"
+                  className="text-xs font-medium text-primary hover:underline"
+                >
+                  Mot de passe oublié ?
+                </Link>
+              </div>
             </div>
 
             <Button type="submit" className="w-full" disabled={isSubmitting}>
@@ -91,6 +139,13 @@ export function LoginPage() {
               Se connecter
             </Button>
           </form>
+
+          <p className="mt-4 text-center text-sm text-muted-foreground">
+            Nouvelle agence ?{' '}
+            <Link to="/register" className="font-medium text-primary hover:underline">
+              Créez votre espace
+            </Link>
+          </p>
         </CardContent>
       </Card>
     </div>

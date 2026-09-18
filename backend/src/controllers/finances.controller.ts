@@ -1,16 +1,25 @@
 import type { Request, Response } from 'express';
-import type { CreateExpenseInput, CreatePaymentInput, UpdateExpenseInput, UpdatePaymentInput } from '@car-rental/shared';
+import type {
+  CreateExpenseInput,
+  CreatePaymentInput,
+  UpdateExpenseInput,
+  UpdatePaymentInput,
+} from '@car-rental/shared';
 import { AppError } from '../utils/app-error.js';
 import { PaymentsService } from '../services/payments.service.js';
 import { ExpensesService } from '../services/expenses.service.js';
 import { FinanceSummaryService } from '../services/finance-summary.service.js';
-import type { DepositListQuery, ExpenseListQuery, PaymentListQuery } from '../validators/finance.validator.js';
+import type {
+  DepositListQuery,
+  ExpenseListQuery,
+  PaymentListQuery,
+} from '../validators/finance.validator.js';
 import type { FinanceSummaryQuery } from '@car-rental/shared';
 
 export const FinancesController = {
   async listPayments(req: Request, res: Response) {
     const query = req.query as unknown as PaymentListQuery;
-    const result = await PaymentsService.list(query);
+    const result = await PaymentsService.list(req.user!.agencyId, query);
     res.status(200).json({
       success: true,
       data: result.items,
@@ -19,29 +28,45 @@ export const FinancesController = {
   },
 
   async getPaymentById(req: Request, res: Response) {
-    const payment = await PaymentsService.getById(req.params.id!);
+    const payment = await PaymentsService.getById(req.user!.agencyId, req.params.id!);
     res.status(200).json({ success: true, data: payment });
   },
 
   async createPayment(req: Request, res: Response) {
     const input = req.body as CreatePaymentInput;
-    const payment = await PaymentsService.create(input, req.user!.id, req.ip);
+    const payment = await PaymentsService.create(req.user!.agencyId, input, req.user!.id, req.ip);
     res.status(201).json({ success: true, data: payment });
   },
 
   async updatePayment(req: Request, res: Response) {
     const input = req.body as UpdatePaymentInput;
-    const payment = await PaymentsService.update(req.params.id!, input, req.user!.id, req.ip);
+    const payment = await PaymentsService.update(
+      req.user!.agencyId,
+      req.params.id!,
+      input,
+      req.user!.id,
+      req.ip,
+    );
     res.status(200).json({ success: true, data: payment });
   },
 
   async archivePayment(req: Request, res: Response) {
-    const payment = await PaymentsService.archive(req.params.id!, req.user!.id, req.ip);
+    const payment = await PaymentsService.archive(
+      req.user!.agencyId,
+      req.params.id!,
+      req.user!.id,
+      req.ip,
+    );
     res.status(200).json({ success: true, data: payment });
   },
 
   async restorePayment(req: Request, res: Response) {
-    const payment = await PaymentsService.restore(req.params.id!, req.user!.id, req.ip);
+    const payment = await PaymentsService.restore(
+      req.user!.agencyId,
+      req.params.id!,
+      req.user!.id,
+      req.ip,
+    );
     res.status(200).json({ success: true, data: payment });
   },
 
@@ -49,18 +74,30 @@ export const FinancesController = {
     if (!req.file) {
       throw new AppError(400, 'ATTACHMENT_REQUIRED', 'Un fichier est requis.');
     }
-    const attachment = await PaymentsService.addAttachment(req.params.id!, req.file, req.user!.id, req.ip);
+    const attachment = await PaymentsService.addAttachment(
+      req.user!.agencyId,
+      req.params.id!,
+      req.file,
+      req.user!.id,
+      req.ip,
+    );
     res.status(201).json({ success: true, data: attachment });
   },
 
   async deletePaymentAttachment(req: Request, res: Response) {
-    await PaymentsService.removeAttachment(req.params.id!, req.params.attachmentId!, req.user!.id, req.ip);
+    await PaymentsService.removeAttachment(
+      req.user!.agencyId,
+      req.params.id!,
+      req.params.attachmentId!,
+      req.user!.id,
+      req.ip,
+    );
     res.status(200).json({ success: true, data: { deleted: true } });
   },
 
   async listExpenses(req: Request, res: Response) {
     const query = req.query as unknown as ExpenseListQuery;
-    const result = await ExpensesService.list(query);
+    const result = await ExpensesService.list(req.user!.agencyId, query);
     res.status(200).json({
       success: true,
       data: result.items,
@@ -69,41 +106,57 @@ export const FinancesController = {
   },
 
   async getExpenseById(req: Request, res: Response) {
-    const expense = await ExpensesService.getById(req.params.id!);
+    const expense = await ExpensesService.getById(req.user!.agencyId, req.params.id!);
     res.status(200).json({ success: true, data: expense });
   },
 
   async createExpense(req: Request, res: Response) {
     const input = req.body as CreateExpenseInput;
-    const expense = await ExpensesService.create(input, req.user!.id, req.ip);
+    const expense = await ExpensesService.create(req.user!.agencyId, input, req.user!.id, req.ip);
     res.status(201).json({ success: true, data: expense });
   },
 
   async updateExpense(req: Request, res: Response) {
     const input = req.body as UpdateExpenseInput;
-    const expense = await ExpensesService.update(req.params.id!, input, req.user!.id, req.ip);
+    const expense = await ExpensesService.update(
+      req.user!.agencyId,
+      req.params.id!,
+      input,
+      req.user!.id,
+      req.ip,
+    );
     res.status(200).json({ success: true, data: expense });
   },
 
   async archiveExpense(req: Request, res: Response) {
-    const expense = await ExpensesService.archive(req.params.id!, req.user!.id, req.ip);
+    const expense = await ExpensesService.archive(
+      req.user!.agencyId,
+      req.params.id!,
+      req.user!.id,
+      req.ip,
+    );
     res.status(200).json({ success: true, data: expense });
   },
 
   async restoreExpense(req: Request, res: Response) {
-    const expense = await ExpensesService.restore(req.params.id!, req.user!.id, req.ip);
+    const expense = await ExpensesService.restore(
+      req.user!.agencyId,
+      req.params.id!,
+      req.user!.id,
+      req.ip,
+    );
     res.status(200).json({ success: true, data: expense });
   },
 
   async getSummary(req: Request, res: Response) {
     const query = req.query as unknown as FinanceSummaryQuery;
-    const summary = await FinanceSummaryService.getSummary(query);
+    const summary = await FinanceSummaryService.getSummary(req.user!.agencyId, query);
     res.status(200).json({ success: true, data: summary });
   },
 
   async listDeposits(req: Request, res: Response) {
     const query = req.query as unknown as DepositListQuery;
-    const result = await FinanceSummaryService.listDeposits(query);
+    const result = await FinanceSummaryService.listDeposits(req.user!.agencyId, query);
     res.status(200).json({
       success: true,
       data: result.items,

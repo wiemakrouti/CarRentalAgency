@@ -1,6 +1,10 @@
 import { Prisma } from '@prisma/client';
 import type { Car } from '@prisma/client';
-import { MANUALLY_SETTABLE_CAR_STATUSES, type CreateCarInput, type UpdateCarInput } from '@car-rental/shared';
+import {
+  MANUALLY_SETTABLE_CAR_STATUSES,
+  type CreateCarInput,
+  type UpdateCarInput,
+} from '@car-rental/shared';
 import { prisma } from '../lib/prisma-client.js';
 import { AppError } from '../utils/app-error.js';
 import { toCsv } from '../utils/csv.js';
@@ -70,7 +74,10 @@ const FOREIGN_KEY_CONSTRAINT_VIOLATION = 'P2003';
 // same friendly CAR_HAS_HISTORY message assertNoHistory already gives the
 // non-racing case, instead of a confusing 500.
 function toHasHistoryError(err: unknown): never {
-  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === FOREIGN_KEY_CONSTRAINT_VIOLATION) {
+  if (
+    err instanceof Prisma.PrismaClientKnownRequestError &&
+    err.code === FOREIGN_KEY_CONSTRAINT_VIOLATION
+  ) {
     throw new AppError(409, 'CAR_HAS_HISTORY', HAS_HISTORY_MESSAGE);
   }
   throw err;
@@ -91,23 +98,23 @@ function toDuplicateLicensePlateError(err: unknown): never {
 }
 
 export const CarsService = {
-  async list(query: CarListQuery) {
-    const { items, total } = await CarsRepository.findMany(query);
+  async list(agencyId: string, query: CarListQuery) {
+    const { items, total } = await CarsRepository.findMany(agencyId, query);
     return { items, total, page: query.page, pageSize: query.pageSize };
   },
 
-  async getById(id: string) {
-    const car = await CarsRepository.findById(id);
+  async getById(agencyId: string, id: string) {
+    const car = await CarsRepository.findById(agencyId, id);
     if (!car) {
       throw new AppError(404, 'CAR_NOT_FOUND', 'Voiture introuvable.');
     }
     return car;
   },
 
-  async create(input: CreateCarInput, userId: string, ipAddress?: string) {
+  async create(agencyId: string, input: CreateCarInput, userId: string, ipAddress?: string) {
     try {
       return await prisma.$transaction(async (tx) => {
-        const car = await CarsRepository.create(input, tx);
+        const car = await CarsRepository.create(agencyId, input, tx);
         await AuditService.record(tx, {
           userId,
           action: 'CREATE',
@@ -123,8 +130,14 @@ export const CarsService = {
     }
   },
 
-  async update(id: string, input: UpdateCarInput, userId: string, ipAddress?: string) {
-    const existing = await CarsService.getById(id);
+  async update(
+    agencyId: string,
+    id: string,
+    input: UpdateCarInput,
+    userId: string,
+    ipAddress?: string,
+  ) {
+    const existing = await CarsService.getById(agencyId, id);
     // Fast-fail outside the transaction, purely for a snappy error on the
     // common (non-racing) path. Not what actually prevents a status change
     // from landing on a car that just became RENTED — see the guarded
@@ -160,7 +173,7 @@ export const CarsService = {
               'Cette voiture est en cours de location. Retournez la location pour changer son statut.',
             );
           }
-          const refetched = await CarsRepository.findById(id, tx);
+          const refetched = await CarsRepository.findById(agencyId, id, tx);
           if (!refetched) {
             // Can't actually happen — updateStatusGuarded just reported a
             // successful update on this same id, inside this same
@@ -192,14 +205,14 @@ export const CarsService = {
   // show the right content (destructive confirm vs. explanatory notice)
   // before the admin ever clicks the button, instead of only finding out
   // after submitting that CAR_HAS_HISTORY was going to reject it.
-  async checkDeletable(id: string) {
-    await CarsService.getById(id);
+  async checkDeletable(agencyId: string, id: string) {
+    await CarsService.getById(agencyId, id);
     const blocked = await hasHistory(id);
     return { canDelete: !blocked, reason: blocked ? HAS_HISTORY_MESSAGE : null };
   },
 
-  async checkBulkDeletable(ids: string[]) {
-    await Promise.all(ids.map((id) => CarsService.getById(id)));
+  async checkBulkDeletable(agencyId: string, ids: string[]) {
+    await Promise.all(ids.map((id) => CarsService.getById(agencyId, id)));
     const results = await Promise.all(ids.map((id) => hasHistory(id)));
     const blockedCount = results.filter(Boolean).length;
     return {
@@ -218,8 +231,8 @@ export const CarsService = {
   // on purpose. CarStatus (e.g. OUT_OF_SERVICE) is how an admin takes a car
   // out of rotation without erasing it; the frontend surfaces
   // CAR_HAS_HISTORY as an explanatory alert rather than a silent failure.
-  async delete(id: string, userId: string, ipAddress?: string) {
-    const car = await CarsService.getById(id);
+  async delete(agencyId: string, id: string, userId: string, ipAddress?: string) {
+    const car = await CarsService.getById(agencyId, id);
     await assertNoHistory(id);
 
     try {
@@ -253,8 +266,8 @@ export const CarsService = {
     return car;
   },
 
-  async bulkDelete(ids: string[], userId: string, ipAddress?: string) {
-    const cars = await Promise.all(ids.map((id) => CarsService.getById(id)));
+  async bulkDelete(agencyId: string, ids: string[], userId: string, ipAddress?: string) {
+    const cars = await Promise.all(ids.map((id) => CarsService.getById(agencyId, id)));
     await Promise.all(ids.map((id) => assertNoHistory(id)));
 
     try {
@@ -295,13 +308,14 @@ export const CarsService = {
   // updating a single car — a partial bulk failure would leave the admin
   // unsure which of their selection actually changed.
   async bulkUpdateStatus(
+    agencyId: string,
     ids: string[],
     status: UpdateCarInput['status'],
     userId: string,
     ipAddress?: string,
   ) {
     return prisma.$transaction(async (tx) => {
-      const existing = await tx.car.findMany({ where: { id: { in: ids } } });
+      const existing = await tx.car.findMany({ where: { id: { in: ids }, agencyId } });
       if (existing.length !== ids.length) {
         throw new AppError(404, 'CAR_NOT_FOUND', 'Une ou plusieurs voitures sont introuvables.');
       }
@@ -330,17 +344,17 @@ export const CarsService = {
     });
   },
 
-  getAvailable(query: AvailableQuery) {
-    return CarsRepository.findAvailable(query);
+  getAvailable(agencyId: string, query: AvailableQuery) {
+    return CarsRepository.findAvailable(agencyId, query);
   },
 
-  async getStats(id: string) {
-    await CarsService.getById(id);
+  async getStats(agencyId: string, id: string) {
+    await CarsService.getById(agencyId, id);
     return CarsRepository.getStats(id);
   },
 
-  async exportCsv(query: CarExportQuery): Promise<string> {
-    const cars = await CarsRepository.findAllForExport(query);
+  async exportCsv(agencyId: string, query: CarExportQuery): Promise<string> {
+    const cars = await CarsRepository.findAllForExport(agencyId, query);
     return toCsv<Car>(cars, [
       { header: 'Immatriculation', value: (c) => c.licensePlate },
       { header: 'VIN', value: (c) => c.vin ?? '' },
@@ -369,8 +383,8 @@ export const CarsService = {
     ]);
   },
 
-  async exportXlsx(query: CarExportQuery): Promise<Buffer> {
-    const cars = await CarsRepository.findAllForExport(query);
+  async exportXlsx(agencyId: string, query: CarExportQuery): Promise<Buffer> {
+    const cars = await CarsRepository.findAllForExport(agencyId, query);
     return toXlsxBuffer<Car>('Voitures', cars, [
       { header: 'Immatriculation', value: (c) => c.licensePlate, width: 16 },
       { header: 'VIN', value: (c) => c.vin, width: 20 },
@@ -428,6 +442,7 @@ export const CarsService = {
   },
 
   async addImage(
+    agencyId: string,
     carId: string,
     file: { buffer: Buffer },
     isPrimary: boolean,
@@ -442,7 +457,7 @@ export const CarsService = {
       );
     }
 
-    await CarsService.getById(carId);
+    await CarsService.getById(agencyId, carId);
 
     // Must upload before writing the row: the row needs the resulting url/publicId.
     // An upload that succeeds but is then never attached to a car (transaction
@@ -467,7 +482,14 @@ export const CarsService = {
     });
   },
 
-  async removeImage(carId: string, imageId: string, userId: string, ipAddress?: string) {
+  async removeImage(
+    agencyId: string,
+    carId: string,
+    imageId: string,
+    userId: string,
+    ipAddress?: string,
+  ) {
+    await CarsService.getById(agencyId, carId);
     const image = await CarsRepository.findImageById(imageId);
     if (!image || image.carId !== carId) {
       throw new AppError(404, 'IMAGE_NOT_FOUND', 'Image introuvable.');
@@ -496,7 +518,14 @@ export const CarsService = {
     }
   },
 
-  async setPrimaryImage(carId: string, imageId: string, userId: string, ipAddress?: string) {
+  async setPrimaryImage(
+    agencyId: string,
+    carId: string,
+    imageId: string,
+    userId: string,
+    ipAddress?: string,
+  ) {
+    await CarsService.getById(agencyId, carId);
     const image = await CarsRepository.findImageById(imageId);
     if (!image || image.carId !== carId) {
       throw new AppError(404, 'IMAGE_NOT_FOUND', 'Image introuvable.');

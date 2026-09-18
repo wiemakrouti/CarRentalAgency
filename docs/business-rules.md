@@ -10,10 +10,6 @@ All code (folders, files, DB tables/columns, API routes, variables, classes) is 
 
 **TND** (Tunisian Dinar), 3 decimal places (millimes) — `Setting.currencyCode`, default `"TND"`. Money fields use `Decimal(10,3)`.
 
-## Contract languages
-
-**French (primary) + Arabic (secondary)**, bilingual PDF contracts. Arabic block rendered RTL. `Setting.contractPrimaryLanguage = "fr"`, `Setting.contractSecondaryLanguage = "ar"`.
-
 ## Late fee policy
 
 `rental.dailyRate × daysLate`, computed automatically server-side when a rental is returned late (`POST /rentals/:id/return`). Uses the rental's own snapshotted `dailyRate`, not a separate configurable rate. Written as an automatic `Payment(type: LATE_FEE)`.

@@ -1,5 +1,10 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { REVENUE_PAYMENT_TYPES, type ClientDocumentType, type CreateClientInput, type UpdateClientInput } from '@car-rental/shared';
+import {
+  REVENUE_PAYMENT_TYPES,
+  type ClientDocumentType,
+  type CreateClientInput,
+  type UpdateClientInput,
+} from '@car-rental/shared';
 import { prisma } from '../lib/prisma-client.js';
 import { endOfDayExclusive } from '../lib/date-utils.js';
 import type { ClientExportQuery, ClientListQuery } from '../validators/client.validator.js';
@@ -16,8 +21,8 @@ type ClientFilterQuery = ClientExportQuery;
 // other a display computation, not worth sharing across the API boundary.
 const LICENSE_EXPIRY_WARNING_DAYS = 30;
 
-function buildWhere(query: ClientFilterQuery): Prisma.ClientWhereInput {
-  const where: Prisma.ClientWhereInput = {};
+function buildWhere(agencyId: string, query: ClientFilterQuery): Prisma.ClientWhereInput {
+  const where: Prisma.ClientWhereInput = { agencyId };
 
   if (query.search) {
     where.OR = [
@@ -87,7 +92,9 @@ function buildOrderBy(query: ClientFilterQuery): Prisma.ClientOrderByWithRelatio
 async function attachReliabilityRates<T extends { id: string }>(
   clients: T[],
   db: Db,
-): Promise<(T & { reliabilityRate: number | null; completedRentals: number; cancelledRentals: number })[]> {
+): Promise<
+  (T & { reliabilityRate: number | null; completedRentals: number; cancelledRentals: number })[]
+> {
   if (clients.length === 0) return [];
 
   const counts = await db.rental.groupBy({
@@ -121,8 +128,8 @@ async function attachReliabilityRates<T extends { id: string }>(
 }
 
 export const ClientsRepository = {
-  async findMany(query: ClientListQuery, db: Db = prisma) {
-    const where = buildWhere(query);
+  async findMany(agencyId: string, query: ClientListQuery, db: Db = prisma) {
+    const where = buildWhere(agencyId, query);
     const [items, total] = await Promise.all([
       db.client.findMany({
         where,
@@ -136,13 +143,13 @@ export const ClientsRepository = {
     return { items: await attachReliabilityRates(items, db), total };
   },
 
-  findAllForExport(query: ClientExportQuery, db: Db = prisma) {
-    return db.client.findMany({ where: buildWhere(query), orderBy: buildOrderBy(query) });
+  findAllForExport(agencyId: string, query: ClientExportQuery, db: Db = prisma) {
+    return db.client.findMany({ where: buildWhere(agencyId, query), orderBy: buildOrderBy(query) });
   },
 
-  findById(id: string, db: Db = prisma) {
-    return db.client.findUnique({
-      where: { id },
+  findById(agencyId: string, id: string, db: Db = prisma) {
+    return db.client.findFirst({
+      where: { id, agencyId },
       include: { documents: true },
     });
   },
@@ -150,15 +157,15 @@ export const ClientsRepository = {
   // Non-blocking duplicate-phone check (see ClientsService.checkPhoneDuplicate)
   // — exact match on the stored string, same as the email uniqueness
   // constraint, no digit normalization in this v1.
-  findByPhone(phone: string, excludeId: string | undefined, db: Db = prisma) {
+  findByPhone(agencyId: string, phone: string, excludeId: string | undefined, db: Db = prisma) {
     return db.client.findMany({
-      where: { phone, id: excludeId ? { not: excludeId } : undefined },
+      where: { agencyId, phone, id: excludeId ? { not: excludeId } : undefined },
       select: { id: true, firstName: true, lastName: true, phone: true },
     });
   },
 
-  create(data: CreateClientInput, db: Db = prisma) {
-    return db.client.create({ data, include: { documents: true } });
+  create(agencyId: string, data: CreateClientInput, db: Db = prisma) {
+    return db.client.create({ data: { ...data, agencyId }, include: { documents: true } });
   },
 
   update(id: string, data: UpdateClientInput, db: Db = prisma) {
@@ -240,8 +247,10 @@ export const ClientsRepository = {
       (r) => r.actualReturnDate && r.actualReturnDate <= r.plannedReturnDate,
     ).length;
 
-    const completedRentalsCount = rentalCounts.find((r) => r.status === 'COMPLETED')?._count._all ?? 0;
-    const cancelledRentalsCount = rentalCounts.find((r) => r.status === 'CANCELLED')?._count._all ?? 0;
+    const completedRentalsCount =
+      rentalCounts.find((r) => r.status === 'COMPLETED')?._count._all ?? 0;
+    const cancelledRentalsCount =
+      rentalCounts.find((r) => r.status === 'CANCELLED')?._count._all ?? 0;
     // Only counts rentals with a known outcome — a still-RESERVED or ACTIVE
     // one hasn't been honored or cancelled yet, so it's excluded from both
     // sides rather than silently counted as "honored" by omission.

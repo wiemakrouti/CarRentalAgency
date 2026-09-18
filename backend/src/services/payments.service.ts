@@ -1,7 +1,11 @@
 import type { CreatePaymentInput, UpdatePaymentInput } from '@car-rental/shared';
 import { prisma } from '../lib/prisma-client.js';
 import { AppError } from '../utils/app-error.js';
-import { deleteCloudinaryImage, isCloudinaryConfigured, uploadImageBuffer } from '../lib/cloudinary-client.js';
+import {
+  deleteCloudinaryImage,
+  isCloudinaryConfigured,
+  uploadImageBuffer,
+} from '../lib/cloudinary-client.js';
 import { PaymentsRepository } from '../repositories/payments.repository.js';
 import { RentalsRepository } from '../repositories/rentals.repository.js';
 import { RentalsService } from './rentals.service.js';
@@ -9,13 +13,13 @@ import { AuditService } from './audit.service.js';
 import type { PaymentListQuery } from '../validators/finance.validator.js';
 
 export const PaymentsService = {
-  async list(query: PaymentListQuery) {
-    const { items, total } = await PaymentsRepository.findMany(query);
+  async list(agencyId: string, query: PaymentListQuery) {
+    const { items, total } = await PaymentsRepository.findMany(agencyId, query);
     return { items, total, page: query.page, pageSize: query.pageSize };
   },
 
-  async getById(id: string, options?: { includeArchived?: boolean }) {
-    const payment = await PaymentsRepository.findById(id, options);
+  async getById(agencyId: string, id: string, options?: { includeArchived?: boolean }) {
+    const payment = await PaymentsRepository.findById(agencyId, id, options);
     if (!payment) {
       throw new AppError(404, 'PAYMENT_NOT_FOUND', 'Paiement introuvable.');
     }
@@ -25,11 +29,12 @@ export const PaymentsService = {
   // Manual entry always records money already received — `status` isn't
   // client-settable here (see `update` for correcting/settling the PENDING
   // rows Rentals auto-generates for late fees/damage/extensions).
-  async create(input: CreatePaymentInput, userId: string, ipAddress?: string) {
-    await RentalsService.getById(input.rentalId);
+  async create(agencyId: string, input: CreatePaymentInput, userId: string, ipAddress?: string) {
+    await RentalsService.getById(agencyId, input.rentalId);
 
     return prisma.$transaction(async (tx) => {
       const payment = await PaymentsRepository.create(
+        agencyId,
         {
           rentalId: input.rentalId,
           amount: input.amount,
@@ -64,8 +69,14 @@ export const PaymentsService = {
 
   // Correct/settle a payment: fix amount/method, mark PENDING -> COMPLETED
   // once collected, etc. `type` is immutable (see finance.schema.ts).
-  async update(id: string, input: UpdatePaymentInput, userId: string, ipAddress?: string) {
-    const existing = await PaymentsService.getById(id);
+  async update(
+    agencyId: string,
+    id: string,
+    input: UpdatePaymentInput,
+    userId: string,
+    ipAddress?: string,
+  ) {
+    const existing = await PaymentsService.getById(agencyId, id);
     return prisma.$transaction(async (tx) => {
       const updated = await PaymentsRepository.update(id, input, tx);
       await AuditService.record(tx, {
@@ -81,8 +92,8 @@ export const PaymentsService = {
     });
   },
 
-  async archive(id: string, userId: string, ipAddress?: string) {
-    await PaymentsService.getById(id);
+  async archive(agencyId: string, id: string, userId: string, ipAddress?: string) {
+    await PaymentsService.getById(agencyId, id);
     return prisma.$transaction(async (tx) => {
       const archived = await PaymentsRepository.archiveById(id, tx);
       await AuditService.record(tx, {
@@ -96,8 +107,8 @@ export const PaymentsService = {
     });
   },
 
-  async restore(id: string, userId: string, ipAddress?: string) {
-    await PaymentsService.getById(id, { includeArchived: true });
+  async restore(agencyId: string, id: string, userId: string, ipAddress?: string) {
+    await PaymentsService.getById(agencyId, id, { includeArchived: true });
     return prisma.$transaction(async (tx) => {
       const restored = await PaymentsRepository.restoreById(id, tx);
       await AuditService.record(tx, {
@@ -111,12 +122,22 @@ export const PaymentsService = {
     });
   },
 
-  async addAttachment(paymentId: string, file: { buffer: Buffer }, userId: string, ipAddress?: string) {
+  async addAttachment(
+    agencyId: string,
+    paymentId: string,
+    file: { buffer: Buffer },
+    userId: string,
+    ipAddress?: string,
+  ) {
     if (!isCloudinaryConfigured()) {
-      throw new AppError(503, 'IMAGE_STORAGE_NOT_CONFIGURED', "Le stockage d'images n'est pas configuré.");
+      throw new AppError(
+        503,
+        'IMAGE_STORAGE_NOT_CONFIGURED',
+        "Le stockage d'images n'est pas configuré.",
+      );
     }
 
-    await PaymentsService.getById(paymentId);
+    await PaymentsService.getById(agencyId, paymentId);
 
     const uploaded = await uploadImageBuffer(file.buffer, `payments/${paymentId}`);
 
@@ -134,7 +155,14 @@ export const PaymentsService = {
     });
   },
 
-  async removeAttachment(paymentId: string, attachmentId: string, userId: string, ipAddress?: string) {
+  async removeAttachment(
+    agencyId: string,
+    paymentId: string,
+    attachmentId: string,
+    userId: string,
+    ipAddress?: string,
+  ) {
+    await PaymentsService.getById(agencyId, paymentId);
     const attachment = await PaymentsRepository.findAttachmentById(attachmentId);
     if (!attachment || attachment.paymentId !== paymentId) {
       throw new AppError(404, 'ATTACHMENT_NOT_FOUND', 'Pièce jointe introuvable.');

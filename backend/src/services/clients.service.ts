@@ -5,7 +5,11 @@ import { prisma } from '../lib/prisma-client.js';
 import { AppError } from '../utils/app-error.js';
 import { toCsv } from '../utils/csv.js';
 import { toXlsxBuffer } from '../utils/xlsx.js';
-import { deleteCloudinaryImage, isCloudinaryConfigured, uploadImageBuffer } from '../lib/cloudinary-client.js';
+import {
+  deleteCloudinaryImage,
+  isCloudinaryConfigured,
+  uploadImageBuffer,
+} from '../lib/cloudinary-client.js';
 import { ClientsRepository } from '../repositories/clients.repository.js';
 import { AuditService } from './audit.service.js';
 import type { ClientExportQuery, ClientListQuery } from '../validators/client.validator.js';
@@ -14,7 +18,10 @@ const UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
 const FOREIGN_KEY_CONSTRAINT_VIOLATION = 'P2003';
 
 function toDuplicateEmailError(err: unknown): never {
-  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === UNIQUE_CONSTRAINT_VIOLATION) {
+  if (
+    err instanceof Prisma.PrismaClientKnownRequestError &&
+    err.code === UNIQUE_CONSTRAINT_VIOLATION
+  ) {
     throw new AppError(409, 'DUPLICATE_EMAIL', 'Un client avec cette adresse email existe déjà.');
   }
   throw err;
@@ -26,7 +33,10 @@ function toDuplicateEmailError(err: unknown): never {
 // no onDelete cascade, so Postgres itself refuses the delete with a foreign
 // key violation if that happens — same fix as CarsService.toHasHistoryError.
 function toHasHistoryError(err: unknown): never {
-  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === FOREIGN_KEY_CONSTRAINT_VIOLATION) {
+  if (
+    err instanceof Prisma.PrismaClientKnownRequestError &&
+    err.code === FOREIGN_KEY_CONSTRAINT_VIOLATION
+  ) {
     throw new AppError(409, 'CLIENT_HAS_HISTORY', CLIENT_HAS_HISTORY_MESSAGE);
   }
   throw err;
@@ -57,23 +67,23 @@ function formatCsvDate(date: Date | null): string {
 }
 
 export const ClientsService = {
-  async list(query: ClientListQuery) {
-    const { items, total } = await ClientsRepository.findMany(query);
+  async list(agencyId: string, query: ClientListQuery) {
+    const { items, total } = await ClientsRepository.findMany(agencyId, query);
     return { items, total, page: query.page, pageSize: query.pageSize };
   },
 
-  async getById(id: string) {
-    const client = await ClientsRepository.findById(id);
+  async getById(agencyId: string, id: string) {
+    const client = await ClientsRepository.findById(agencyId, id);
     if (!client) {
       throw new AppError(404, 'CLIENT_NOT_FOUND', 'Client introuvable.');
     }
     return client;
   },
 
-  async create(input: CreateClientInput, userId: string, ipAddress?: string) {
+  async create(agencyId: string, input: CreateClientInput, userId: string, ipAddress?: string) {
     try {
       return await prisma.$transaction(async (tx) => {
-        const client = await ClientsRepository.create(input, tx);
+        const client = await ClientsRepository.create(agencyId, input, tx);
         await AuditService.record(tx, {
           userId,
           action: 'CREATE',
@@ -89,8 +99,14 @@ export const ClientsService = {
     }
   },
 
-  async update(id: string, input: UpdateClientInput, userId: string, ipAddress?: string) {
-    const existing = await ClientsService.getById(id);
+  async update(
+    agencyId: string,
+    id: string,
+    input: UpdateClientInput,
+    userId: string,
+    ipAddress?: string,
+  ) {
+    const existing = await ClientsService.getById(agencyId, id);
     try {
       return await prisma.$transaction(async (tx) => {
         const updated = await ClientsRepository.update(id, input, tx);
@@ -114,14 +130,14 @@ export const ClientsService = {
   // show the right content (destructive confirm vs. explanatory notice)
   // before the admin ever clicks the button — same pattern as
   // CarsService.checkDeletable.
-  async checkDeletable(id: string) {
-    await ClientsService.getById(id);
+  async checkDeletable(agencyId: string, id: string) {
+    await ClientsService.getById(agencyId, id);
     const blocked = await hasHistory(id);
     return { canDelete: !blocked, reason: blocked ? CLIENT_HAS_HISTORY_MESSAGE : null };
   },
 
-  async delete(id: string, userId: string, ipAddress?: string) {
-    const client = await ClientsService.getById(id);
+  async delete(agencyId: string, id: string, userId: string, ipAddress?: string) {
+    const client = await ClientsService.getById(agencyId, id);
     await assertNoHistory(id);
 
     try {
@@ -156,6 +172,7 @@ export const ClientsService = {
   },
 
   async addDocument(
+    agencyId: string,
     clientId: string,
     file: { buffer: Buffer },
     type: ClientDocumentType,
@@ -163,10 +180,14 @@ export const ClientsService = {
     ipAddress?: string,
   ) {
     if (!isCloudinaryConfigured()) {
-      throw new AppError(503, 'IMAGE_STORAGE_NOT_CONFIGURED', "Le stockage d'images n'est pas configuré.");
+      throw new AppError(
+        503,
+        'IMAGE_STORAGE_NOT_CONFIGURED',
+        "Le stockage d'images n'est pas configuré.",
+      );
     }
 
-    await ClientsService.getById(clientId);
+    await ClientsService.getById(agencyId, clientId);
 
     const uploaded = await uploadImageBuffer(file.buffer, `clients/${clientId}`);
 
@@ -188,7 +209,14 @@ export const ClientsService = {
     });
   },
 
-  async removeDocument(clientId: string, documentId: string, userId: string, ipAddress?: string) {
+  async removeDocument(
+    agencyId: string,
+    clientId: string,
+    documentId: string,
+    userId: string,
+    ipAddress?: string,
+  ) {
+    await ClientsService.getById(agencyId, clientId);
     const document = await ClientsRepository.findDocumentById(documentId);
     if (!document || document.clientId !== clientId) {
       throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document introuvable.');
@@ -213,21 +241,21 @@ export const ClientsService = {
     }
   },
 
-  async getStats(id: string) {
-    await ClientsService.getById(id);
+  async getStats(agencyId: string, id: string) {
+    await ClientsService.getById(agencyId, id);
     return ClientsRepository.getStats(id);
   },
 
   // Non-blocking — the form dialog shows this as a warning, never a hard
   // stop, since two clients (e.g. family members) can legitimately share a
   // phone number. See client-form-dialog.tsx.
-  async checkPhoneDuplicate(phone: string, excludeId?: string) {
-    const matches = await ClientsRepository.findByPhone(phone, excludeId);
+  async checkPhoneDuplicate(agencyId: string, phone: string, excludeId?: string) {
+    const matches = await ClientsRepository.findByPhone(agencyId, phone, excludeId);
     return matches;
   },
 
-  async exportCsv(query: ClientExportQuery): Promise<string> {
-    const clients = await ClientsRepository.findAllForExport(query);
+  async exportCsv(agencyId: string, query: ClientExportQuery): Promise<string> {
+    const clients = await ClientsRepository.findAllForExport(agencyId, query);
     return toCsv<Client>(clients, [
       { header: 'Nom', value: (c) => c.lastName },
       { header: 'Prénom', value: (c) => c.firstName },
@@ -244,8 +272,8 @@ export const ClientsService = {
     ]);
   },
 
-  async exportXlsx(query: ClientExportQuery): Promise<Buffer> {
-    const clients = await ClientsRepository.findAllForExport(query);
+  async exportXlsx(agencyId: string, query: ClientExportQuery): Promise<Buffer> {
+    const clients = await ClientsRepository.findAllForExport(agencyId, query);
     return toXlsxBuffer<Client>('Clients', clients, [
       { header: 'Nom', value: (c) => c.lastName, width: 16 },
       { header: 'Prénom', value: (c) => c.firstName, width: 16 },

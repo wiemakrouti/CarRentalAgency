@@ -118,49 +118,58 @@ export function OccupancyHeatmap({ days, totalCars }: OccupancyHeatmapProps) {
   const maxCount = Math.max(...days.map((d) => d.count));
 
   return (
-    <div className="flex h-full flex-col">
-      <div
-        className="mx-auto grid w-fit gap-1"
-        style={{
-          gridTemplateColumns: `${LABEL_COLUMN_PX}px repeat(${weeks.length}, ${CELL_PX}px)`,
-          gridTemplateRows: `auto repeat(7, ${CELL_PX}px)`,
-        }}
-      >
-        <div />
-        {weeks.map((_, weekIndex) => (
-          <div key={weekIndex} className="text-[11px] leading-none text-muted-foreground">
-            {marks.get(weekIndex) ?? ''}
-          </div>
-        ))}
+    <div className="flex h-full min-w-0 flex-col">
+      {/* min-w-0 on the flex column above lets this scroller actually
+          shrink below the grid's fixed content width instead of forcing
+          the Card (and the dashboard's 2-col grid track containing it)
+          wider than the viewport — the ~13 week-columns at a fixed CELL_PX
+          each need ~450px+ no matter the screen, so on a narrow viewport
+          the calendar scrolls horizontally in its own box rather than
+          pushing the whole page into a horizontal scroll. */}
+      <div className="overflow-x-auto">
+        <div
+          className="mx-auto grid w-fit gap-1"
+          style={{
+            gridTemplateColumns: `${LABEL_COLUMN_PX}px repeat(${weeks.length}, ${CELL_PX}px)`,
+            gridTemplateRows: `auto repeat(7, ${CELL_PX}px)`,
+          }}
+        >
+          <div />
+          {weeks.map((_, weekIndex) => (
+            <div key={weekIndex} className="text-[11px] leading-none text-muted-foreground">
+              {marks.get(weekIndex) ?? ''}
+            </div>
+          ))}
 
-        {WEEKDAY_LABELS.map((label, dayIndex) => (
-          <Fragment key={dayIndex}>
-            <span className="flex items-center justify-end pr-1 text-[10.5px] leading-none text-muted-foreground">
-              {label}
-            </span>
-            {weeks.map((week, weekIndex) => {
-              const day = week[dayIndex];
-              if (!day) return <div key={weekIndex} className="h-full w-full" />;
-              return (
-                <Tooltip key={weekIndex}>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      className={cn(
-                        'h-full w-full rounded-[4px] transition-[filter] hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring',
-                        BUCKET_CLASSNAME[bucketFor(day.count, maxCount)],
-                      )}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {formatDayLabel(parseDateOnly(day.date))} — {day.count} voiture{day.count > 1 ? 's' : ''} en
-                    location{totalCars > 0 ? ` sur ${totalCars}` : ''}
-                  </TooltipContent>
-                </Tooltip>
-              );
-            })}
-          </Fragment>
-        ))}
+          {WEEKDAY_LABELS.map((label, dayIndex) => (
+            <Fragment key={dayIndex}>
+              <span className="flex items-center justify-end pr-1 text-[10.5px] leading-none text-muted-foreground">
+                {label}
+              </span>
+              {weeks.map((week, weekIndex) => {
+                const day = week[dayIndex];
+                if (!day) return <div key={weekIndex} className="h-full w-full" />;
+                return (
+                  <Tooltip key={weekIndex}>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className={cn(
+                          'h-full w-full rounded-[4px] transition-[filter] hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring',
+                          BUCKET_CLASSNAME[bucketFor(day.count, maxCount)],
+                        )}
+                      />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {formatDayLabel(parseDateOnly(day.date))} — {day.count} voiture{day.count > 1 ? 's' : ''} en
+                      location{totalCars > 0 ? ` sur ${totalCars}` : ''}
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              })}
+            </Fragment>
+          ))}
+        </div>
       </div>
 
       <div className="mt-auto flex shrink-0 items-center justify-end gap-1.5 pt-2 text-[11px] text-muted-foreground">

@@ -3,6 +3,7 @@ import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts';
 import { REVENUE_PAYMENT_TYPES, EXPENSE_CATEGORIES, type ExpenseCategory, type RevenuePaymentType } from '@car-rental/shared';
 import { Clock, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 
+import { useFormatMoney } from '@/hooks/use-format-money';
 import { KpiCard } from '@/components/common/kpi-card';
 import { LoadingState } from '@/components/common/loading-state';
 import { ErrorState } from '@/components/common/error-state';
@@ -14,10 +15,6 @@ import { cn } from '@/lib/utils';
 import { useFinanceSummaryQuery } from '../hooks/use-finance-summary';
 import { EXPENSE_CATEGORY_LABELS, PAYMENT_TYPE_LABELS } from '../lib/finance-labels';
 import { DepositsCard } from './deposits-card';
-
-function formatMoney(amount: number): string {
-  return `${amount.toLocaleString('fr-TN')} DT`;
-}
 
 function chartColor(index: number): string {
   return `hsl(var(--chart-${(index % 5) + 1}))`;
@@ -96,6 +93,7 @@ function BreakdownCard<Key extends string>({
   columnLabel: string;
   rows: BreakdownRow<Key>[];
 }) {
+  const formatMoney = useFormatMoney();
   const total = rows.reduce((sum, row) => sum + row.amount, 0);
   const chartData = rows.filter((row) => row.amount > 0);
   // Colors are assigned by position in the full `rows` list, not in the
@@ -197,6 +195,7 @@ type FinanceSummaryTabProps = {
 };
 
 export function FinanceSummaryTab({ onViewDeposits }: FinanceSummaryTabProps) {
+  const formatMoney = useFormatMoney();
   // No "Toutes les dates" option here — unlike the Paiements/Dépenses
   // ledgers, a summary is only ever meaningful over a bounded window.
   const [range, setRange] = useState<DateRange>(computeDateRangePreset('this_month'));

@@ -34,6 +34,30 @@ export const RefreshTokenRepository = {
     });
   },
 
+  // Powers "Déconnecter les autres appareils" — every active session except
+  // the one presenting `exceptTokenHash` (the browser tab the admin is
+  // sitting in right now).
+  revokeAllActiveForUserExcept(userId: string, exceptTokenHash: string, db: Db = prisma) {
+    return db.refreshToken.updateMany({
+      where: { userId, revokedAt: null, tokenHash: { not: exceptTokenHash } },
+      data: { revokedAt: new Date() },
+    });
+  },
+
+  findById(id: string, db: Db = prisma) {
+    return db.refreshToken.findUnique({ where: { id } });
+  },
+
+  // The Profil page's session list — active (not revoked, not yet expired)
+  // sessions only; a revoked or expired row is history, not something the
+  // admin can act on, so it's filtered out here rather than in the UI.
+  findActiveByUser(userId: string, db: Db = prisma) {
+    return db.refreshToken.findMany({
+      where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: 'desc' },
+    });
+  },
+
   deleteById(id: string, db: Db = prisma) {
     return db.refreshToken.delete({ where: { id } });
   },

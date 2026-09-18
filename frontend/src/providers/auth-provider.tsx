@@ -2,7 +2,13 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { LoginInput } from '@car-rental/shared';
 import { authApi, type AuthUser } from '@/features/auth/api/auth.api';
-import { getAccessToken, onSessionExpired, refreshAccessToken, setAccessToken } from '@/lib/auth-session';
+import { queryClient } from '@/lib/query-client';
+import {
+  getAccessToken,
+  onSessionExpired,
+  refreshAccessToken,
+  setAccessToken,
+} from '@/lib/auth-session';
 
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 
@@ -11,6 +17,10 @@ type AuthContextValue = {
   status: AuthStatus;
   login: (input: LoginInput) => Promise<void>;
   logout: () => Promise<void>;
+  // Lets a successful profile edit (ProfilePage) refresh the name/email
+  // shown in the topbar immediately, without re-fetching /auth/me — the
+  // PATCH response already carries the full, up-to-date user.
+  updateUser: (user: AuthUser) => void;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -52,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     return onSessionExpired(() => {
+      queryClient.clear();
       setAccessToken(null);
       setUser(null);
       setStatus('unauthenticated');
@@ -60,6 +71,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function login(input: LoginInput) {
     const result = await authApi.login(input);
+    // Every cached query (Settings, Cars, Clients, ...) is scoped to whoever
+    // was previously signed in in this tab — a different account, possibly a
+    // different agency entirely, must never render from that stale cache
+    // even for a moment before its own queries refetch.
+    queryClient.clear();
     setAccessToken(result.accessToken);
     setUser(result.user);
     setStatus('authenticated');
@@ -71,13 +87,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await authApi.logout();
       }
     } finally {
+      queryClient.clear();
       setAccessToken(null);
       setUser(null);
       setStatus('unauthenticated');
     }
   }
 
-  return <AuthContext.Provider value={{ user, status, login, logout }}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ user, status, login, logout, updateUser: setUser }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {

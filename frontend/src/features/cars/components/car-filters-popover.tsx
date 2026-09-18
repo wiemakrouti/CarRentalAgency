@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Filter } from 'lucide-react';
-import { CAR_CATEGORIES, CAR_STATUSES, TRANSMISSIONS } from '@car-rental/shared';
+import { CAR_CATEGORIES, CAR_STATUSES, CURRENCY_OPTIONS, TRANSMISSIONS } from '@car-rental/shared';
 
+import { useSettings } from '@/providers/settings-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -37,16 +38,18 @@ type CarFiltersPopoverProps = {
   activeCount: number;
 };
 
-const RANGE_FIELDS: {
+function buildRangeFields(currencySymbol: string): {
   min: keyof CarFilters;
   max: keyof CarFilters;
   label: string;
   unit: string;
-}[] = [
-  { min: 'minDailyRate', max: 'maxDailyRate', label: 'Tarif / jour', unit: 'DT' },
-  { min: 'minYear', max: 'maxYear', label: 'Année', unit: '' },
-  { min: 'minMileage', max: 'maxMileage', label: 'Kilométrage', unit: 'km' },
-];
+}[] {
+  return [
+    { min: 'minDailyRate', max: 'maxDailyRate', label: 'Tarif / jour', unit: currencySymbol },
+    { min: 'minYear', max: 'maxYear', label: 'Année', unit: '' },
+    { min: 'minMileage', max: 'maxMileage', label: 'Kilométrage', unit: 'km' },
+  ];
+}
 
 // Draft state lives locally so nothing refetches until "Appliquer" is
 // clicked — same intent as the search box's debounce, but explicit rather
@@ -55,6 +58,9 @@ const RANGE_FIELDS: {
 export function CarFiltersPopover({ value, onApply, activeCount }: CarFiltersPopoverProps) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<CarFilters>(value);
+  const { settings } = useSettings();
+  const currencySymbol = CURRENCY_OPTIONS.find((o) => o.code === settings?.currencyCode)?.symbol ?? 'DT';
+  const rangeFields = buildRangeFields(currencySymbol);
 
   function handleOpenChange(next: boolean) {
     if (next) setDraft(value);
@@ -151,7 +157,7 @@ export function CarFiltersPopover({ value, onApply, activeCount }: CarFiltersPop
 
         <Separator />
 
-        {RANGE_FIELDS.map(({ min, max, label, unit }) => (
+        {rangeFields.map(({ min, max, label, unit }) => (
           <div key={min} className="space-y-2">
             <Label>
               {label} {unit && `(${unit})`}

@@ -2,8 +2,6 @@ import { createBrowserRouter, type RouteObject } from 'react-router-dom';
 
 import { AppShell } from '@/components/layout/app-shell';
 import { ProtectedRoute } from '@/components/layout/protected-route';
-import { MaintenancePage } from '@/features/maintenance/pages/MaintenancePage';
-import { ReportsPage } from '@/features/reports/pages/ReportsPage';
 import { SettingsPage } from '@/features/settings/pages/SettingsPage';
 
 const devRoutes: RouteObject[] = import.meta.env.DEV
@@ -24,6 +22,34 @@ export const router = createBrowserRouter([
     lazy: async () => {
       const { LoginPage } = await import('@/features/auth/pages/LoginPage');
       return { Component: LoginPage };
+    },
+  },
+  {
+    path: '/register',
+    lazy: async () => {
+      const { RegisterPage } = await import('@/features/auth/pages/RegisterPage');
+      return { Component: RegisterPage };
+    },
+  },
+  {
+    path: '/forgot-password',
+    lazy: async () => {
+      const { ForgotPasswordPage } = await import('@/features/auth/pages/ForgotPasswordPage');
+      return { Component: ForgotPasswordPage };
+    },
+  },
+  {
+    path: '/reset-password',
+    lazy: async () => {
+      const { ResetPasswordPage } = await import('@/features/auth/pages/ResetPasswordPage');
+      return { Component: ResetPasswordPage };
+    },
+  },
+  {
+    path: '/verify-email',
+    lazy: async () => {
+      const { VerifyEmailPage } = await import('@/features/auth/pages/VerifyEmailPage');
+      return { Component: VerifyEmailPage };
     },
   },
   {
@@ -73,9 +99,15 @@ export const router = createBrowserRouter([
               return { Component: FinancesPage };
             },
           },
-          { path: 'maintenance', handle: { breadcrumb: 'Maintenance' }, element: <MaintenancePage /> },
-          { path: 'reports', handle: { breadcrumb: 'Rapports' }, element: <ReportsPage /> },
           { path: 'settings', handle: { breadcrumb: 'Paramètres' }, element: <SettingsPage /> },
+          {
+            path: 'profile',
+            handle: { breadcrumb: 'Profil' },
+            lazy: async () => {
+              const { ProfilePage } = await import('@/features/profile/pages/ProfilePage');
+              return { Component: ProfilePage };
+            },
+          },
         ],
       },
     ],

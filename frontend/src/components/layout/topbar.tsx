@@ -112,8 +112,12 @@ export function Topbar({ onOpenCommandPalette }: TopbarProps) {
           <DropdownMenuContent align="end">
             <DropdownMenuLabel className="truncate">{user?.fullName ?? 'Compte'}</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Profil</DropdownMenuItem>
-            <DropdownMenuItem>Paramètres</DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to="/profile">Profil</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to="/settings">Paramètres</Link>
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout} className="text-destructive">
               <LogOut className="h-4 w-4" />

@@ -24,15 +24,14 @@ Ask for clarification whenever a requirement is ambiguous.
 
 # Project Context
 
-This project is a web-based dashboard for managing a single car rental agency.
+This project is a multi-tenant SaaS dashboard for managing car rental agencies.
 
-It is NOT a SaaS application.
+The product is sold to multiple agencies, each isolated from the others: every agency registers
+its own account (agency name + admin credentials) via the public registration form, and every
+business record (cars, clients, rentals, payments, expenses, settings) is scoped to exactly one
+agency (`agencyId`). No agency can ever see or affect another agency's data.
 
-There is only one administrator.
-
-No employee management is required.
-
-The application will be used internally.
+Within a single agency, there is only one administrator. No employee management is required.
 
 ---
 

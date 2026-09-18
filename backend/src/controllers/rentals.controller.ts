@@ -12,7 +12,7 @@ import type { RentalListQuery, RentalOccupancyQuery } from '../validators/rental
 export const RentalsController = {
   async list(req: Request, res: Response) {
     const query = req.query as unknown as RentalListQuery;
-    const result = await RentalsService.list(query);
+    const result = await RentalsService.list(req.user!.agencyId, query);
     res.status(200).json({
       success: true,
       data: result.items,
@@ -20,49 +20,73 @@ export const RentalsController = {
     });
   },
 
-  async getSummary(_req: Request, res: Response) {
-    const summary = await RentalsService.getSummary();
+  async getSummary(req: Request, res: Response) {
+    const summary = await RentalsService.getSummary(req.user!.agencyId);
     res.status(200).json({ success: true, data: summary });
   },
 
   async getOccupancy(req: Request, res: Response) {
     const query = req.query as unknown as RentalOccupancyQuery;
-    const days = await RentalsService.getOccupancy(query);
+    const days = await RentalsService.getOccupancy(req.user!.agencyId, query);
     res.status(200).json({ success: true, data: days });
   },
 
   async getById(req: Request, res: Response) {
-    const rental = await RentalsService.getById(req.params.id!);
+    const rental = await RentalsService.getById(req.user!.agencyId, req.params.id!);
     res.status(200).json({ success: true, data: rental });
   },
 
   async create(req: Request, res: Response) {
     const input = req.body as CreateRentalInput;
-    const rental = await RentalsService.create(input, req.user!.id, req.ip);
+    const rental = await RentalsService.create(req.user!.agencyId, input, req.user!.id, req.ip);
     res.status(201).json({ success: true, data: rental });
   },
 
   async activate(req: Request, res: Response) {
     const input = req.body as ActivateRentalInput;
-    const rental = await RentalsService.activate(req.params.id!, input, req.user!.id, req.ip);
+    const rental = await RentalsService.activate(
+      req.user!.agencyId,
+      req.params.id!,
+      input,
+      req.user!.id,
+      req.ip,
+    );
     res.status(200).json({ success: true, data: rental });
   },
 
   async returnRental(req: Request, res: Response) {
     const input = req.body as ReturnRentalInput;
-    const rental = await RentalsService.returnRental(req.params.id!, input, req.user!.id, req.ip);
+    const rental = await RentalsService.returnRental(
+      req.user!.agencyId,
+      req.params.id!,
+      input,
+      req.user!.id,
+      req.ip,
+    );
     res.status(200).json({ success: true, data: rental });
   },
 
   async extend(req: Request, res: Response) {
     const input = req.body as ExtendRentalInput;
-    const rental = await RentalsService.extend(req.params.id!, input, req.user!.id, req.ip);
+    const rental = await RentalsService.extend(
+      req.user!.agencyId,
+      req.params.id!,
+      input,
+      req.user!.id,
+      req.ip,
+    );
     res.status(200).json({ success: true, data: rental });
   },
 
   async cancel(req: Request, res: Response) {
     const input = req.body as CancelRentalInput;
-    const rental = await RentalsService.cancel(req.params.id!, input, req.user!.id, req.ip);
+    const rental = await RentalsService.cancel(
+      req.user!.agencyId,
+      req.params.id!,
+      input,
+      req.user!.id,
+      req.ip,
+    );
     res.status(200).json({ success: true, data: rental });
   },
 };

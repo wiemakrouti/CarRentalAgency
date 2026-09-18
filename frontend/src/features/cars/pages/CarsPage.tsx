@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
+import { useFormatMoney } from '@/hooks/use-format-money';
 import { useSearchParams } from 'react-router-dom';
 import { flexRender, getCoreRowModel, useReactTable, createColumnHelper } from '@tanstack/react-table';
 import {
@@ -76,7 +77,12 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('fr-TN');
 }
 
-function buildColumns(onEdit: (car: Car) => void, onViewDetails: (car: Car) => void, onOpenCalendar: (car: Car) => void) {
+function buildColumns(
+  onEdit: (car: Car) => void,
+  onViewDetails: (car: Car) => void,
+  onOpenCalendar: (car: Car) => void,
+  formatMoney: (amount: number) => string,
+) {
   return [
     columnHelper.display({
       id: 'thumbnail',
@@ -118,7 +124,7 @@ function buildColumns(onEdit: (car: Car) => void, onViewDetails: (car: Car) => v
     }),
     columnHelper.accessor('dailyRate', {
       header: 'Tarif / jour',
-      cell: ({ getValue }) => `${Number(getValue()).toLocaleString('fr-TN')} DT`,
+      cell: ({ getValue }) => formatMoney(Number(getValue())),
     }),
     columnHelper.display({
       id: 'alerts',
@@ -322,10 +328,11 @@ export function CarsPage() {
     },
   });
 
+  const formatMoney = useFormatMoney();
   const columns = useMemo(
-    () => buildColumns(openEditForm, openDetail, openCalendar),
+    () => buildColumns(openEditForm, openDetail, openCalendar, formatMoney),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+    [formatMoney],
   );
 
   const table = useReactTable({

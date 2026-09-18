@@ -25,19 +25,24 @@ function zeroFill<Key extends string, Row extends { amount: number }>(
 }
 
 export const FinanceSummaryService = {
-  async getSummary(query: FinanceSummaryQuery) {
+  async getSummary(agencyId: string, query: FinanceSummaryQuery) {
     const range = { from: query.from, to: query.to };
 
-    const [revenueByTypeRows, pendingByTypeRows, expensesByCategoryRows, expensesTotal, depositFlows] =
-      await Promise.all([
-        PaymentsRepository.sumByTypeForStatus('COMPLETED', range),
-        PaymentsRepository.sumByTypeForStatus('PENDING', range),
-        ExpensesRepository.sumByCategory(range),
-        ExpensesRepository.sumTotal(range),
-        // All-time on purpose — the Résumé's Cautions card ignores `range`,
-        // so this reads the whole history rather than the period.
-        PaymentsRepository.sumDepositFlows(),
-      ]);
+    const [
+      revenueByTypeRows,
+      pendingByTypeRows,
+      expensesByCategoryRows,
+      expensesTotal,
+      depositFlows,
+    ] = await Promise.all([
+      PaymentsRepository.sumByTypeForStatus(agencyId, 'COMPLETED', range),
+      PaymentsRepository.sumByTypeForStatus(agencyId, 'PENDING', range),
+      ExpensesRepository.sumByCategory(agencyId, range),
+      ExpensesRepository.sumTotal(agencyId, range),
+      // All-time on purpose — the Résumé's Cautions card ignores `range`,
+      // so this reads the whole history rather than the period.
+      PaymentsRepository.sumDepositFlows(agencyId),
+    ]);
 
     // DEPOSIT/DEPOSIT_REFUND are excluded from "Revenus" — a caution is a
     // refundable hold, not agency income (mirrors rental-balance.ts's own
@@ -51,16 +56,25 @@ export const FinanceSummaryService = {
       REVENUE_PAYMENT_TYPES,
       revenueByTypeRows
         .filter((row) => isRevenueType(row.type))
-        .map((row) => ({ type: row.type as RevenuePaymentType, amount: Number(row._sum.amount ?? 0) })),
+        .map((row) => ({
+          type: row.type as RevenuePaymentType,
+          amount: Number(row._sum.amount ?? 0),
+        })),
       (row) => row.type,
     );
     const expensesByCategory = zeroFill(
       EXPENSE_CATEGORIES,
-      expensesByCategoryRows.map((row) => ({ category: row.category, amount: Number(row._sum.amount ?? 0) })),
+      expensesByCategoryRows.map((row) => ({
+        category: row.category,
+        amount: Number(row._sum.amount ?? 0),
+      })),
       (row) => row.category as ExpenseCategory,
     );
 
-    const revenueTotal = Object.values<number>(revenueByType).reduce((sum, amount) => sum + amount, 0);
+    const revenueTotal = Object.values<number>(revenueByType).reduce(
+      (sum, amount) => sum + amount,
+      0,
+    );
     const expensesTotalNumber = Number(expensesTotal);
     // Same exclusion for "Paiements en attente" — a deposit is never left
     // PENDING in practice (always recorded COMPLETED at collection), but
@@ -87,10 +101,13 @@ export const FinanceSummaryService = {
   // flag on the rental, not on each payment, so the collected amount is
   // their sum. Covers every caution ever collected, refunded or not —
   // `refundedAt` is null for the ones still outstanding.
-  async listDeposits(query: DepositListQuery) {
-    const { items: payments, total } = await PaymentsRepository.findDepositsPage(query);
+  async listDeposits(agencyId: string, query: DepositListQuery) {
+    const { items: payments, total } = await PaymentsRepository.findDepositsPage(agencyId, query);
 
-    const byRental = new Map<string, Omit<(typeof payments)[number], 'amount'> & { amount: number }>();
+    const byRental = new Map<
+      string,
+      Omit<(typeof payments)[number], 'amount'> & { amount: number }
+    >();
     for (const payment of payments) {
       const existing = byRental.get(payment.rentalId);
       if (existing) {
@@ -100,14 +117,20 @@ export const FinanceSummaryService = {
       }
     }
 
-    const refunds = await PaymentsRepository.findDepositRefunds(Array.from(byRental.keys()));
+    const refunds = await PaymentsRepository.findDepositRefunds(
+      agencyId,
+      Array.from(byRental.keys()),
+    );
     const refundedAtByRental = new Map(refunds.map((refund) => [refund.rentalId, refund.paidAt]));
 
     const items = Array.from(byRental.values()).map((payment) => ({
       rentalId: payment.rentalId,
       rentalNumber: payment.rental.rentalNumber,
       car: { brand: payment.rental.car.brand, model: payment.rental.car.model },
-      client: { firstName: payment.rental.client.firstName, lastName: payment.rental.client.lastName },
+      client: {
+        firstName: payment.rental.client.firstName,
+        lastName: payment.rental.client.lastName,
+      },
       amount: payment.amount,
       collectedAt: payment.paidAt,
       refundedAt: refundedAtByRental.get(payment.rentalId) ?? null,
