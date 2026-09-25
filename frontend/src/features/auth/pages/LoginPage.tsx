@@ -7,12 +7,13 @@ import { loginSchema, type LoginInput } from '@car-rental/shared';
 
 import { useAuth } from '@/providers/auth-provider';
 import { authApi } from '@/features/auth/api/auth.api';
+import { AuthLayout } from '@/features/auth/components/auth-layout';
 import { ApiClientError } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export function LoginPage() {
   const { login } = useAuth();
@@ -65,14 +66,8 @@ export function LoginPage() {
   }
 
   return (
-    <div
-      className="flex min-h-screen items-center justify-center p-4"
-      style={{
-        background:
-          'radial-gradient(ellipse 800px 500px at 50% -10%, hsl(var(--primary-50)), transparent), hsl(var(--background))',
-      }}
-    >
-      <Card className="w-full max-w-sm shadow-elevation">
+    <AuthLayout>
+      <div className="w-full max-w-sm">
         <CardHeader className="items-center text-center">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-primary-400 to-primary-700 text-primary-foreground shadow-sm">
             <CarFront className="h-5 w-5" />
@@ -147,8 +142,8 @@ export function LoginPage() {
             </Link>
           </p>
         </CardContent>
-      </Card>
-    </div>
+      </div>
+    </AuthLayout>
   );
 }
 

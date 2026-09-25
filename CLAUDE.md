@@ -24,12 +24,17 @@ Ask for clarification whenever a requirement is ambiguous.
 
 # Project Context
 
-This project is a multi-tenant SaaS dashboard for managing car rental agencies.
+This project is a dashboard for managing car rental agencies, built on a multi-tenant-capable
+codebase but deployed as **one dedicated instance per client agency**.
 
-The product is sold to multiple agencies, each isolated from the others: every agency registers
-its own account (agency name + admin credentials) via the public registration form, and every
-business record (cars, clients, rentals, payments, expenses, settings) is scoped to exactly one
-agency (`agencyId`). No agency can ever see or affect another agency's data.
+Architecturally, every business record (cars, clients, rentals, payments, expenses, settings) is
+still scoped to exactly one agency (`agencyId`), and agencies register their own account (agency
+name + admin credentials) via the public registration form. That isolation logic is kept because
+it costs nothing to keep, not because multiple agencies ever actually share one running instance:
+in practice, each agency gets its own separate deployment (own hosting account, own domain, own
+database), registers itself as the sole agency on that instance, and pays for its own
+infrastructure. Never assume a shared/central deployment serving many agencies at once — that is
+not the business model, even though the code would technically support it.
 
 Within a single agency, there is only one administrator. No employee management is required.
 

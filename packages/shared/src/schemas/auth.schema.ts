@@ -36,16 +36,8 @@ export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 // signing up is a normal, repeatable action like any SaaS registration form.
 export const registerSchema = z
   .object({
-    agencyName: z
-      .string()
-      .trim()
-      .min(2, "Le nom de l'agence doit contenir au moins 2 caractères")
-      .max(100),
-    fullName: z
-      .string()
-      .trim()
-      .min(2, 'Le nom complet doit contenir au moins 2 caractères')
-      .max(100),
+    agencyName: z.string().trim().min(2, "Le nom de l'agence est requis").max(100),
+    fullName: z.string().trim().min(2, 'Le nom complet est requis').max(100),
     email: z.string().trim().toLowerCase().email('Adresse email invalide'),
     password: z.string().min(8, 'Le mot de passe doit contenir au moins 8 caractères'),
     confirmPassword: z.string().min(1, 'La confirmation est requise'),
