@@ -12,6 +12,16 @@ RUN npm run build --workspace=@car-rental/shared
 
 COPY frontend frontend
 
+# Vite inlines import.meta.env.VITE_* at build time, and .dockerignore
+# excludes every .env file from the build context (so a real frontend/.env
+# never leaks into the image) — this build arg is the only way to get a
+# real API URL into the compiled bundle for a production build. Writing it
+# to .env.production (Vite's own production-mode env file) rather than
+# exporting it as a shell var, since that's the one mechanism guaranteed to
+# work regardless of how `vite build` resolves its env.
+ARG VITE_API_URL
+RUN if [ -n "$VITE_API_URL" ]; then echo "VITE_API_URL=$VITE_API_URL" > frontend/.env.production; fi
+
 WORKDIR /app/frontend
 RUN npm run build
 
