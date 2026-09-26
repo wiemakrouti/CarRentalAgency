@@ -31,6 +31,15 @@ export const MANUALLY_SETTABLE_CAR_STATUSES = [
   'OUT_OF_SERVICE',
 ] as const;
 
+// OUT_OF_SERVICE means the car was sold/retired for good — unlike the other
+// two manually-settable statuses, there's no going back from it, so it's a
+// valid *target* status (MANUALLY_SETTABLE_CAR_STATUSES above) but never a
+// valid *current* status for another manual change (see CarsService.update's
+// guard). RENTED is excluded here too, but for the unrelated reason that
+// it's never manually settable at all — see MANUALLY_SETTABLE_CAR_STATUSES's
+// own comment.
+export const CAR_STATUSES_ALLOWING_MANUAL_CHANGE = ['AVAILABLE', 'MAINTENANCE'] as const;
+
 export const CLIENT_DOCUMENT_TYPES = ['ID_CARD', 'DRIVING_LICENSE', 'PASSPORT', 'OTHER'] as const;
 export type ClientDocumentType = (typeof CLIENT_DOCUMENT_TYPES)[number];
 

@@ -55,10 +55,19 @@ export function apiDateToLocalDay(value: string): Date {
 // 25th. Deliberately not actualReturnDate: a late COMPLETED return would
 // otherwise extend the marked range past what was actually booked, and the
 // calendar's job is to show the *schedule*, not the after-the-fact outcome.
-export function rentalCoversDate(rental: Rental, date: Date) {
+//
+// Still-ACTIVE is the one exception: a rental that's gone past its planned
+// return date without being returned yet keeps occupying the car every day
+// that follows, through today — extending the range that far (instead of
+// stopping dead at plannedReturnDate) is what lets those actually-late days
+// get a cell at all, rather than reading as free/available the moment the
+// due date passes. A day within [pickupDate, plannedReturnDate] is a no-op
+// here either way, so this never changes an on-time rental's own range.
+export function rentalCoversDate(rental: Rental, date: Date, now: Date = new Date()) {
   const day = toLocalDayOnly(date).getTime();
   const start = apiDateToLocalDay(rental.pickupDate).getTime();
-  const end = apiDateToLocalDay(rental.plannedReturnDate).getTime();
+  const plannedEnd = apiDateToLocalDay(rental.plannedReturnDate).getTime();
+  const end = rental.status === 'ACTIVE' ? Math.max(plannedEnd, toLocalDayOnly(now).getTime()) : plannedEnd;
   return day >= start && day <= end;
 }
 
@@ -163,18 +172,37 @@ export function getDisplayRentalStatus(
   // stays RESERVED. Same calendar-day comparison as getEffectiveRentalStatus
   // above — a pickup scheduled for today isn't missed until today is over.
   if (status === 'RESERVED' && apiDateToLocalDay(rental.pickupDate) < toLocalDayOnly(now)) return 'PICKUP_OVERDUE';
-  if (status !== 'ACTIVE' || rental.extensions.length === 0) return status;
+  if (status !== 'ACTIVE' && status !== 'OVERDUE') return status;
+
+  const day = toLocalDayOnly(date).getTime();
+  // OVERDUE now only marks the days actually past the (possibly already
+  // extended) planned return date — through today, since rentalCoversDate
+  // extends a still-ACTIVE rental's covered range that far. The
+  // originally-booked span before that boundary reads exactly as it would
+  // if the rental weren't late yet (plain ACTIVE, or EXTENDED for its own
+  // extended days) — otherwise a rental that's merely running late would
+  // retroactively recolor days that were never actually a problem, while
+  // the actually-late days past the due date stayed uncovered/uncolored.
+  const plannedReturnDay = apiDateToLocalDay(rental.plannedReturnDate).getTime();
+  if (status === 'OVERDUE' && day > plannedReturnDay) return 'OVERDUE';
+
+  if (rental.extensions.length === 0) return 'ACTIVE';
   const boundary = originalPlannedReturnDay(rental);
-  return toLocalDayOnly(date).getTime() > boundary.getTime() ? 'EXTENDED' : status;
+  return day > boundary.getTime() ? 'EXTENDED' : 'ACTIVE';
 }
 
 // Convenience for contexts with no specific calendar day in hand — an
-// agenda/list row summarizing the whole rental, say — evaluated as of the
-// rental's own (current) plannedReturnDate, so an ACTIVE rental still within
-// its extended days reads as EXTENDED there too, matching what its cells
-// show on the grid; a COMPLETED one always reads as plain COMPLETED.
+// agenda/list row summarizing the whole rental, say — evaluated as of
+// *today*, not the plannedReturnDate: now that OVERDUE only marks days
+// strictly past plannedReturnDate (see getDisplayRentalStatus above),
+// evaluating at plannedReturnDate itself would never actually see the
+// overdue condition (that day is the boundary, never past it), permanently
+// misreading a late rental as plain ACTIVE. Evaluating at `now` still gives
+// an ACTIVE-with-extension rental EXTENDED here for as long as today falls
+// within its extended-but-not-yet-due window, matching what its cells show
+// on the grid; a COMPLETED one always reads as plain COMPLETED regardless.
 export function getDisplayRentalStatusSummary(rental: Rental, now: Date = new Date()): DisplayRentalStatus {
-  return getDisplayRentalStatus(rental, apiDateToLocalDay(rental.plannedReturnDate), now);
+  return getDisplayRentalStatus(rental, now, now);
 }
 
 // Same idea as RENTAL_STATUS_CALENDAR_CLASSES/RENTAL_STATUS_DOT_CLASSES
@@ -204,7 +232,7 @@ export function findRentalForDate(
   date: Date,
   now: Date = new Date(),
 ): Rental | undefined {
-  const covering = rentals.filter((r) => rentalCoversDate(r, date));
+  const covering = rentals.filter((r) => rentalCoversDate(r, date, now));
   if (covering.length <= 1) return covering[0];
   return covering.sort(
     (a, b) =>

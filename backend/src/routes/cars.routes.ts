@@ -67,6 +67,11 @@ carsRouter.get(
   validate({ params: carIdParamSchema }),
   asyncHandler(CarsController.getStats),
 );
+carsRouter.get(
+  '/cars/:id/profitability',
+  validate({ params: carIdParamSchema }),
+  asyncHandler(CarsController.getProfitability),
+);
 carsRouter.patch(
   '/cars/:id',
   validate({ params: carIdParamSchema, body: updateCarSchema }),

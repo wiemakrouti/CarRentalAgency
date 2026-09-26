@@ -108,6 +108,12 @@ function errorMessage(err: unknown, fallback: string): string {
 
 export function CarFormDialog({ open, onOpenChange, car, focusField }: CarFormDialogProps) {
   const isEdit = Boolean(car);
+  // A retired (sold) car's papers are never tracked again — same reasoning
+  // as the table/grid badge, the detail sheet's Documents section, and the
+  // reminders that would otherwise fire for them (see car-expiry-alerts.tsx,
+  // car-detail-sheet.tsx, reminders.service.ts). Disabled rather than
+  // hidden: the admin can still see what was on file at the time of sale.
+  const isOutOfService = car?.status === 'OUT_OF_SERVICE';
   const createMutation = useCreateCarMutation();
   const updateMutation = useUpdateCarMutation();
   const uploadImageMutation = useUploadCarImageMutation();
@@ -393,6 +399,12 @@ export function CarFormDialog({ open, onOpenChange, car, focusField }: CarFormDi
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Dates & documents
             </p>
+            {isOutOfService && (
+              <p className="text-xs text-muted-foreground">
+                Voiture hors service : ces documents ne sont plus suivis et ne peuvent plus être
+                modifiés.
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="purchaseDate">Date d'achat</Label>
@@ -434,6 +446,7 @@ export function CarFormDialog({ open, onOpenChange, car, focusField }: CarFormDi
                       type="date"
                       value={dateToInputValue(field.value)}
                       onChange={(e) => field.onChange(e.target.value === '' ? null : new Date(e.target.value))}
+                      disabled={isOutOfService}
                     />
                   )}
                 />
@@ -449,6 +462,7 @@ export function CarFormDialog({ open, onOpenChange, car, focusField }: CarFormDi
                       type="date"
                       value={dateToInputValue(field.value)}
                       onChange={(e) => field.onChange(e.target.value === '' ? null : new Date(e.target.value))}
+                      disabled={isOutOfService}
                     />
                   )}
                 />
@@ -464,6 +478,7 @@ export function CarFormDialog({ open, onOpenChange, car, focusField }: CarFormDi
                       type="date"
                       value={dateToInputValue(field.value)}
                       onChange={(e) => field.onChange(e.target.value === '' ? null : new Date(e.target.value))}
+                      disabled={isOutOfService}
                     />
                   )}
                 />

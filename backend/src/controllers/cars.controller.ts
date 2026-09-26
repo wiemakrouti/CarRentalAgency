@@ -58,6 +58,11 @@ export const CarsController = {
     res.status(200).json({ success: true, data: stats });
   },
 
+  async getProfitability(req: Request, res: Response) {
+    const profitability = await CarsService.getProfitability(req.user!.agencyId, req.params.id!);
+    res.status(200).json({ success: true, data: profitability });
+  },
+
   async create(req: Request, res: Response) {
     const input = req.body as CreateCarInput;
     const car = await CarsService.create(req.user!.agencyId, input, req.user!.id, req.ip);

@@ -26,6 +26,14 @@ const LEVEL_ICON = {
 // at a glance instead of three labels to parse; the full detail with
 // renew/fill-in actions is still one click away in the car's detail sheet.
 export function CarExpiryAlerts({ car }: { car: Car }) {
+  // A retired car's papers aren't going to be renewed, so surfacing their
+  // expiry status in the table/grid (unlike the detail sheet, which still
+  // shows it — an admin may need to check it before selling the car) would
+  // just be a permanently-red badge with nothing actionable behind it.
+  if (car.status === 'OUT_OF_SERVICE') {
+    return <span className="text-sm text-muted-foreground">—</span>;
+  }
+
   const documents = getDocumentStatuses(car);
   const summary = summarizeDocumentStatuses(documents);
   const Icon = LEVEL_ICON[summary.level];

@@ -81,6 +81,22 @@ export type CarStats = {
   lastRentalDate: string | null;
 };
 
+// Only fetched for OUT_OF_SERVICE cars (see CarDetailSheet's "Bilan
+// financier" section) — null purchasePrice/ownershipDays means the car has
+// no purchaseDate/purchasePrice recorded, so roiPercent/netResultPerDay
+// can't be computed and fall back to null rather than a misleading 0.
+export type CarProfitability = {
+  totalRevenue: number;
+  purchasePrice: number | null;
+  totalExpenses: number;
+  totalMaintenanceCost: number;
+  totalCost: number;
+  netResult: number;
+  roiPercent: number | null;
+  ownershipDays: number | null;
+  netResultPerDay: number | null;
+};
+
 export type CarDeletable = {
   canDelete: boolean;
   reason: string | null;
@@ -90,6 +106,7 @@ export const carsApi = {
   list: (params: CarListParams) => apiClient.getPaginated<Car>(`/cars${buildQueryString(params)}`),
   getById: (id: string) => apiClient.get<Car>(`/cars/${id}`),
   getStats: (id: string) => apiClient.get<CarStats>(`/cars/${id}/stats`),
+  getProfitability: (id: string) => apiClient.get<CarProfitability>(`/cars/${id}/profitability`),
   checkDeletable: (id: string) => apiClient.get<CarDeletable>(`/cars/${id}/deletable`),
   create: (input: CreateCarInput) => apiClient.post<Car>('/cars', input),
   update: (id: string, input: UpdateCarInput) => apiClient.patch<Car>(`/cars/${id}`, input),

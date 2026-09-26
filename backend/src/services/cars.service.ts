@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import type { Car } from '@prisma/client';
 import {
-  MANUALLY_SETTABLE_CAR_STATUSES,
+  CAR_STATUSES_ALLOWING_MANUAL_CHANGE,
   type CreateCarInput,
   type UpdateCarInput,
 } from '@car-rental/shared';
@@ -149,6 +149,17 @@ export const CarsService = {
         'Cette voiture est en cours de location. Retournez la location pour changer son statut.',
       );
     }
+    // OUT_OF_SERVICE means sold/retired for good — once there, no further
+    // status change is allowed, from anyone, through any path. Same
+    // fast-fail shape as the RENTED guard above, just for a permanent
+    // rather than temporary reason.
+    if (input.status && existing.status === 'OUT_OF_SERVICE') {
+      throw new AppError(
+        409,
+        'CAR_OUT_OF_SERVICE',
+        'Cette voiture est hors service et son statut ne peut plus être modifié.',
+      );
+    }
     try {
       return await prisma.$transaction(async (tx) => {
         let updated: Car;
@@ -159,10 +170,14 @@ export const CarsService = {
           // to/from RENTED right in between the read above and this write
           // can't be silently overwritten — closes the same class of race
           // the Rentals overlap check had. Non-status edits (e.g. tarif)
-          // never needed this guard and still skip it below.
+          // never needed this guard and still skip it below. Also closes
+          // the equivalent race for OUT_OF_SERVICE: expecting only the
+          // statuses a manual change may originate from means a car that
+          // just became OUT_OF_SERVICE between the read above and here is
+          // caught here too, not silently overwritten.
           const guarded = await CarsRepository.updateStatusGuarded(
             id,
-            MANUALLY_SETTABLE_CAR_STATUSES,
+            CAR_STATUSES_ALLOWING_MANUAL_CHANGE,
             input,
             tx,
           );
@@ -326,6 +341,13 @@ export const CarsService = {
           'Une ou plusieurs voitures sélectionnées sont en cours de location. Retournez leur location pour changer leur statut.',
         );
       }
+      if (existing.some((car) => car.status === 'OUT_OF_SERVICE')) {
+        throw new AppError(
+          409,
+          'CAR_OUT_OF_SERVICE',
+          'Une ou plusieurs voitures sélectionnées sont hors service et ne peuvent plus changer de statut.',
+        );
+      }
       const updated = [];
       for (const car of existing) {
         const result = await CarsRepository.update(car.id, { status }, tx);
@@ -351,6 +373,38 @@ export const CarsService = {
   async getStats(agencyId: string, id: string) {
     await CarsService.getById(agencyId, id);
     return CarsRepository.getStats(id);
+  },
+
+  // Only meaningful once a car is retired (see docs/architecture.md's Car
+  // status note) — the frontend only calls this for OUT_OF_SERVICE cars,
+  // but the derivation is agnostic to status so it isn't re-checked here.
+  async getProfitability(agencyId: string, id: string) {
+    await CarsService.getById(agencyId, id);
+    const raw = await CarsRepository.getProfitability(id);
+
+    const totalCost = (raw.purchasePrice ?? 0) + raw.totalExpenses + raw.totalMaintenanceCost;
+    const netResult = raw.totalRevenue - totalCost;
+    // Both ratios need a real, positive denominator — a car bought for 0
+    // (unset) or just barely acquired would otherwise divide by zero or
+    // report a wildly misleading ROI/day figure.
+    const roiPercent =
+      raw.purchasePrice && raw.purchasePrice > 0 ? (netResult / raw.purchasePrice) * 100 : null;
+    const ownershipDays = raw.purchaseDate
+      ? Math.max(1, Math.ceil((Date.now() - raw.purchaseDate.getTime()) / 86_400_000))
+      : null;
+    const netResultPerDay = ownershipDays ? netResult / ownershipDays : null;
+
+    return {
+      totalRevenue: raw.totalRevenue,
+      purchasePrice: raw.purchasePrice,
+      totalExpenses: raw.totalExpenses,
+      totalMaintenanceCost: raw.totalMaintenanceCost,
+      totalCost,
+      netResult,
+      roiPercent,
+      ownershipDays,
+      netResultPerDay,
+    };
   },
 
   async exportCsv(agencyId: string, query: CarExportQuery): Promise<string> {

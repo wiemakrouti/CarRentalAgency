@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { CalendarDays, ChevronRight, ImageOff, Images, Plus, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { MANUALLY_SETTABLE_CAR_STATUSES } from '@car-rental/shared';
+import { ConfirmDialog } from '@/components/common/confirm-dialog';
 import { ExpenseFormDialog } from '@/features/finances/components/expense-form-dialog';
 import { useExpensesQuery } from '@/features/finances/hooks/use-expenses';
 import { EXPENSE_CATEGORY_LABELS } from '@/features/finances/lib/finance-labels';
@@ -26,7 +27,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ApiClientError } from '@/lib/api-client';
 import { useFormatMoney } from '@/hooks/use-format-money';
 import type { Car, ManualCarStatus } from '../api/cars.api';
-import { useCarQuery, useCarStatsQuery, useUpdateCarStatusMutation } from '../hooks/use-cars';
+import {
+  useCarProfitabilityQuery,
+  useCarQuery,
+  useCarStatsQuery,
+  useUpdateCarStatusMutation,
+} from '../hooks/use-cars';
 import {
   formatDocumentStatus,
   getDocumentStatuses,
@@ -79,11 +85,13 @@ export function CarDetailSheet({
   onOpenCalendar,
 }: CarDetailSheetProps) {
   const [rentedNoticeOpen, setRentedNoticeOpen] = useState(false);
+  const [outOfServiceConfirmOpen, setOutOfServiceConfirmOpen] = useState(false);
   const [expenseFormOpen, setExpenseFormOpen] = useState(false);
   const formatMoney = useFormatMoney();
   const formatAmount = (value: string | number) => formatMoney(Number(value));
   const { data: car, isLoading } = useCarQuery(carId ?? '');
   const { data: stats } = useCarStatsQuery(carId);
+  const { data: profitability } = useCarProfitabilityQuery(carId, car?.status === 'OUT_OF_SERVICE');
   // Most recent first (the backend's own default order) — a compact side
   // panel, not the full Finances ledger, so 5 is plenty; the "au total"
   // count next to the heading covers the rest without a car filter/deep
@@ -111,7 +119,10 @@ export function CarDetailSheet({
       {
         onSuccess: () => toast.success('Statut mis à jour.'),
         onError: (err) => {
-          if (err instanceof ApiClientError && err.code === 'CAR_CURRENTLY_RENTED') {
+          if (
+            err instanceof ApiClientError &&
+            (err.code === 'CAR_CURRENTLY_RENTED' || err.code === 'CAR_OUT_OF_SERVICE')
+          ) {
             toast.warning(err.message);
           } else {
             toast.error(errorMessage(err, 'Erreur lors de la mise à jour du statut.'));
@@ -119,6 +130,18 @@ export function CarDetailSheet({
         },
       },
     );
+  }
+
+  // OUT_OF_SERVICE means sold/retired for good — the backend then refuses
+  // any further status change (see CarsService.update), so this is a
+  // one-way door. Routed through a confirmation instead of applying
+  // immediately like the other two manually-settable statuses.
+  function handleSelectStatus(status: ManualCarStatus) {
+    if (status === 'OUT_OF_SERVICE') {
+      setOutOfServiceConfirmOpen(true);
+    } else {
+      handleStatusChange(status);
+    }
   }
 
   return (
@@ -176,10 +199,10 @@ export function CarDetailSheet({
                 >
                   Changer le statut
                 </Button>
-              ) : (
+              ) : car.status === 'OUT_OF_SERVICE' ? null : (
                 <Select
                   value={car.status}
-                  onValueChange={(value) => handleStatusChange(value as ManualCarStatus)}
+                  onValueChange={(value) => handleSelectStatus(value as ManualCarStatus)}
                   disabled={updateStatusMutation.isPending}
                 >
                   <SelectTrigger className="h-7 w-44 text-xs">
@@ -232,51 +255,59 @@ export function CarDetailSheet({
               </div>
             </div>
 
-            <Separator className="my-4" />
+            {/* A retired (sold) car's papers will never be renewed by this
+                agency again, so this section — like the table/grid badge
+                and the reminders it would otherwise generate — has nothing
+                actionable to show once the car is OUT_OF_SERVICE. */}
+            {car.status !== 'OUT_OF_SERVICE' && (
+              <>
+                <Separator className="my-4" />
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Documents
-                </p>
-                {/* One button for the whole section, not one per document —
-                    all three expiry fields sit together in the edit form
-                    (car-form-dialog.tsx), so fixing the worst one lands the
-                    admin right next to the other two as well. Worst-first:
-                    expired beats expiring beats never-entered, same
-                    priority car-alerts.ts's own summary uses; hidden
-                    entirely once nothing needs attention. */}
-                {worstDocument && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 gap-1 text-xs"
-                    onClick={() => onEdit(car, worstDocument.field)}
-                  >
-                    <RefreshCw className="h-3 w-3" />
-                    Mettre à jour
-                  </Button>
-                )}
-              </div>
-              <ul className="space-y-2">
-                {documentStatuses.map((doc) => (
-                  <li
-                    key={doc.field}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-border p-2.5 text-sm"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-medium">{doc.label}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {doc.date ? `Expire le ${formatDate(doc.date)}` : 'Date non renseignée'}
-                      </p>
-                    </div>
-                    <Badge variant={DOCUMENT_BADGE_VARIANT[doc.level]}>
-                      {formatDocumentStatus(doc)}
-                    </Badge>
-                  </li>
-                ))}
-              </ul>
-            </div>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Documents
+                    </p>
+                    {/* One button for the whole section, not one per document —
+                        all three expiry fields sit together in the edit form
+                        (car-form-dialog.tsx), so fixing the worst one lands the
+                        admin right next to the other two as well. Worst-first:
+                        expired beats expiring beats never-entered, same
+                        priority car-alerts.ts's own summary uses; hidden
+                        entirely once nothing needs attention. */}
+                    {worstDocument && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 gap-1 text-xs"
+                        onClick={() => onEdit(car, worstDocument.field)}
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        Mettre à jour
+                      </Button>
+                    )}
+                  </div>
+                  <ul className="space-y-2">
+                    {documentStatuses.map((doc) => (
+                      <li
+                        key={doc.field}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-border p-2.5 text-sm"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-medium">{doc.label}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {doc.date ? `Expire le ${formatDate(doc.date)}` : 'Date non renseignée'}
+                          </p>
+                        </div>
+                        <Badge variant={DOCUMENT_BADGE_VARIANT[doc.level]}>
+                          {formatDocumentStatus(doc)}
+                        </Badge>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </>
+            )}
 
             <Separator className="my-4" />
 
@@ -318,6 +349,92 @@ export function CarDetailSheet({
                 <Skeleton className="h-16 w-full" />
               )}
             </div>
+
+            {/* Only meaningful once the car is retired — a still-active car's
+                purchase cost hasn't finished being "worked off" yet, so a
+                net result here would be premature rather than informative. */}
+            {car.status === 'OUT_OF_SERVICE' && (
+              <>
+                <Separator className="my-4" />
+
+                <div className="space-y-3">
+                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Bilan financier
+                  </p>
+                  {!profitability ? (
+                    <Skeleton className="h-40 w-full" />
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded-xl bg-muted p-3">
+                          <p className="text-[11px] font-medium text-muted-foreground">
+                            Revenus totaux
+                          </p>
+                          <p className="text-sm font-semibold text-foreground">
+                            {formatAmount(profitability.totalRevenue)}
+                          </p>
+                        </div>
+                        <div className="rounded-xl bg-muted p-3">
+                          <p className="text-[11px] font-medium text-muted-foreground">
+                            Prix d'achat
+                          </p>
+                          <p className="text-sm font-semibold text-foreground">
+                            {profitability.purchasePrice !== null
+                              ? formatAmount(profitability.purchasePrice)
+                              : 'Non renseigné'}
+                          </p>
+                        </div>
+                        <div className="rounded-xl bg-muted p-3">
+                          <p className="text-[11px] font-medium text-muted-foreground">Dépenses</p>
+                          <p className="text-sm font-semibold text-foreground">
+                            {formatAmount(profitability.totalExpenses)}
+                          </p>
+                        </div>
+                        <div className="rounded-xl bg-muted p-3">
+                          <p className="text-[11px] font-medium text-muted-foreground">Entretien</p>
+                          <p className="text-sm font-semibold text-foreground">
+                            {formatAmount(profitability.totalMaintenanceCost)}
+                          </p>
+                        </div>
+                        <div className="col-span-2 rounded-xl bg-muted p-3">
+                          <p className="text-[11px] font-medium text-muted-foreground">
+                            Coût total (achat + dépenses + entretien)
+                          </p>
+                          <p className="text-sm font-semibold text-foreground">
+                            {formatAmount(profitability.totalCost)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div
+                        className={`flex items-center justify-between rounded-xl px-4 py-3.5 ${
+                          profitability.netResult >= 0
+                            ? 'bg-success text-success-foreground'
+                            : 'bg-destructive text-destructive-foreground'
+                        }`}
+                      >
+                        <div>
+                          <p className="text-[11px] font-medium opacity-90">Résultat net</p>
+                          <p className="text-xl font-bold">{formatAmount(profitability.netResult)}</p>
+                        </div>
+                        {profitability.roiPercent !== null && (
+                          <p className="text-sm font-semibold">
+                            ROI {profitability.roiPercent.toFixed(1)}%
+                          </p>
+                        )}
+                      </div>
+
+                      {profitability.netResultPerDay !== null && (
+                        <p className="text-xs text-muted-foreground">
+                          Soit {formatAmount(profitability.netResultPerDay)} net par jour de
+                          possession ({profitability.ownershipDays} jours).
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              </>
+            )}
 
             <Separator className="my-4" />
 
@@ -385,6 +502,20 @@ export function CarDetailSheet({
         open={rentedNoticeOpen}
         onOpenChange={setRentedNoticeOpen}
         carId={carId ?? ''}
+      />
+
+      <ConfirmDialog
+        open={outOfServiceConfirmOpen}
+        onOpenChange={setOutOfServiceConfirmOpen}
+        title="Mettre cette voiture hors service ?"
+        description={
+          car
+            ? `${car.brand} ${car.model} (${car.licensePlate}) sera marquée hors service. Cette action est définitive : son statut ne pourra plus être modifié par la suite.`
+            : 'Cette action est définitive : le statut ne pourra plus être modifié par la suite.'
+        }
+        confirmLabel="Mettre hors service"
+        variant="destructive"
+        onConfirm={() => handleStatusChange('OUT_OF_SERVICE')}
       />
 
       {/* Mounted only while open, not toggled via a persistent instance —

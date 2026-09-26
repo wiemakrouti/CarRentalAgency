@@ -133,9 +133,13 @@ export class RemindersService {
       prisma.client.findMany({
         where: { agencyId, drivingLicenseExpiry: { not: null, lte: horizon } },
       }),
+      // Excludes OUT_OF_SERVICE: a retired car's papers aren't going to be
+      // renewed, so a reminder about them would just be permanent noise in
+      // the bell for as long as the car stays retired.
       prisma.car.findMany({
         where: {
           agencyId,
+          status: { not: 'OUT_OF_SERVICE' },
           OR: CAR_DOCUMENT_FIELDS.map(({ field }) => ({ [field]: { not: null, lte: horizon } })),
         },
       }),

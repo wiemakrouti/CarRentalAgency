@@ -81,6 +81,16 @@ export function useDashboardData() {
     queryKey: carKeys.list({ ...COUNT_ONLY, status: 'AVAILABLE' }),
     queryFn: () => carsApi.list({ ...COUNT_ONLY, status: 'AVAILABLE' }),
   });
+  // Subtracted from totalCarsQuery below rather than filtered server-side
+  // (the list endpoint only supports one status to match, not "any but
+  // this one") — a sold/retired car is gone for good, so it should never
+  // count toward "flotte totale" or dilute the occupancy heatmap's
+  // denominator, both of which assume every counted car can still be
+  // rented.
+  const outOfServiceCarsQuery = useQuery({
+    queryKey: carKeys.list({ ...COUNT_ONLY, status: 'OUT_OF_SERVICE' }),
+    queryFn: () => carsApi.list({ ...COUNT_ONLY, status: 'OUT_OF_SERVICE' }),
+  });
   const totalClientsQuery = useQuery({
     queryKey: clientKeys.list(COUNT_ONLY),
     queryFn: () => clientsApi.list(COUNT_ONLY),
@@ -134,6 +144,7 @@ export function useDashboardData() {
     rentalSummaryQuery,
     totalCarsQuery,
     availableCarsQuery,
+    outOfServiceCarsQuery,
     totalClientsQuery,
     currentRevenueQuery,
     previousRevenueQuery,
@@ -176,7 +187,8 @@ export function useDashboardData() {
     isLoading,
     isError,
     refetch,
-    totalCars: totalCarsQuery.data?.meta.total ?? 0,
+    totalCars:
+      (totalCarsQuery.data?.meta.total ?? 0) - (outOfServiceCarsQuery.data?.meta.total ?? 0),
     availableCars: availableCarsQuery.data?.meta.total ?? 0,
     // RentalsRepository.getSummaryCounts' `active` deliberately excludes a
     // late return (it's carved out into `overdueReturn`, both status

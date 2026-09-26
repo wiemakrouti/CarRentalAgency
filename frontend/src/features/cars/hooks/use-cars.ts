@@ -27,6 +27,16 @@ export function useCarStatsQuery(id: string | undefined) {
   });
 }
 
+// Only queried while the detail sheet's car is OUT_OF_SERVICE (see
+// CarDetailSheet) — `enabled` keeps this from firing for every other car.
+export function useCarProfitabilityQuery(id: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: carKeys.profitability(id ?? ''),
+    queryFn: () => carsApi.getProfitability(id!),
+    enabled: Boolean(id) && enabled,
+  });
+}
+
 // Powers the delete confirmation dialog: checked as soon as it opens so the
 // dialog can show a destructive confirm or an explanatory notice up front,
 // instead of only finding out after the admin submits.

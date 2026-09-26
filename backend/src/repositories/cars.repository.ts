@@ -210,6 +210,42 @@ export const CarsRepository = {
     };
   },
 
+  // Powers the "Bilan financier" section shown only once a car is
+  // OUT_OF_SERVICE (CarsService.getProfitability derives the actual
+  // profit/ROI numbers from these raw sums). Revenue uses the same
+  // COMPLETED + REVENUE_PAYMENT_TYPES filter as getStats above; expenses
+  // and maintenance costs both exclude soft-deleted rows.
+  async getProfitability(carId: string, db: Db = prisma) {
+    const [car, revenue, expenses, maintenance] = await Promise.all([
+      db.car.findUnique({ where: { id: carId }, select: { purchasePrice: true, purchaseDate: true } }),
+      db.payment.aggregate({
+        where: {
+          status: 'COMPLETED',
+          deletedAt: null,
+          rental: { carId },
+          type: { in: [...REVENUE_PAYMENT_TYPES] },
+        },
+        _sum: { amount: true },
+      }),
+      db.expense.aggregate({
+        where: { carId, deletedAt: null },
+        _sum: { amount: true },
+      }),
+      db.maintenanceRecord.aggregate({
+        where: { carId, deletedAt: null },
+        _sum: { cost: true },
+      }),
+    ]);
+
+    return {
+      purchasePrice: car?.purchasePrice ? Number(car.purchasePrice) : null,
+      purchaseDate: car?.purchaseDate ?? null,
+      totalRevenue: Number(revenue._sum.amount ?? 0),
+      totalExpenses: Number(expenses._sum.amount ?? 0),
+      totalMaintenanceCost: Number(maintenance._sum.cost ?? 0),
+    };
+  },
+
   findAvailable(agencyId: string, params: { pickupDate: Date; returnDate: Date }, db: Db = prisma) {
     const availabilityFilter: Prisma.CarWhereInput = {
       agencyId,
