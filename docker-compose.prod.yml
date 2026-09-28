@@ -32,8 +32,13 @@ services:
       APP_URL: https://${DOMAIN:?DOMAIN is required}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
-      RESEND_API_KEY: ${RESEND_API_KEY:?RESEND_API_KEY is required}
-      EMAIL_FROM: ${EMAIL_FROM:?EMAIL_FROM is required}
+      # Optional — the backend's own email-client.ts already falls back to
+      # logging emails to the container's console instead of sending them
+      # when RESEND_API_KEY is unset (see backend/.env.example). Leave both
+      # blank to launch without Resend configured yet; verification/reset
+      # emails just won't actually be delivered until it's set up later.
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-Car Rental App <onboarding@resend.dev>}
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}

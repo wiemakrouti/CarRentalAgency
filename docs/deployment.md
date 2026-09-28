@@ -44,6 +44,18 @@ Self-hosted VPS (OVH) — one dedicated instance per client agency, per the mult
    Caddy (the only service with published ports) terminates TLS and obtains/renews its Let's Encrypt certificate automatically for `DOMAIN`; it routes `/api/*` to the backend and everything else to the static frontend build, both over the compose network — postgres/backend/frontend have no ports exposed to the host.
 6. **Redeploying** after a code change: `git pull`, then rerun the `up --build -d` command from step 5 (image rebuild only, no need to repeat migrate/seed unless the schema changed — then rerun `migrate deploy` too).
 
+## Backups
+
+`scripts/backup-db.sh` dumps the Postgres database (`pg_dump` through the `postgres` container, gzipped) into `/home/ubuntu/backups/` and prunes dumps older than 14 days. On the VPS it's installed outside the repo (so `git pull` never touches it) and run daily by cron:
+
+```
+scp scripts/backup-db.sh ubuntu@<vps-ip>:/home/ubuntu/backup-db.sh
+ssh ubuntu@<vps-ip> "chmod +x /home/ubuntu/backup-db.sh"
+ssh ubuntu@<vps-ip> '(crontab -l 2>/dev/null; echo "15 3 * * * /home/ubuntu/backup-db.sh >> /home/ubuntu/backups/backup.log 2>&1") | crontab -'
+```
+
+To restore a dump: `gunzip -c /home/ubuntu/backups/<file>.sql.gz | docker compose -f docker-compose.prod.yml exec -T postgres psql -U postgres car_rental_agence`.
+
 Registering a new agency on its own VPS later: repeat this whole section with a fresh VPS, domain (or subdomain), and Resend-verified sender — never point a second agency's frontend at an existing agency's backend.
 
 ## Environment variables
