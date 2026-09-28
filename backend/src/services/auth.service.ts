@@ -173,10 +173,10 @@ export const AuthService = {
     // email provider had a hiccup — same "DB first, side effect after"
     // pattern as CarsService's Cloudinary uploads.
     try {
-      const { subject, html } = verificationEmail(
+      const { subject, html, text } = verificationEmail(
         `${env.APP_URL}/verify-email?token=${rawVerificationToken}`,
       );
-      await sendEmail({ to: email, subject, html });
+      await sendEmail({ to: email, subject, html, text });
     } catch (err) {
       console.error('Failed to send verification email:', err);
     }
@@ -227,10 +227,10 @@ export const AuthService = {
       );
     });
 
-    const { subject, html } = verificationEmail(
+    const { subject, html, text } = verificationEmail(
       `${env.APP_URL}/verify-email?token=${rawVerificationToken}`,
     );
-    await sendEmail({ to: user.email, subject, html });
+    await sendEmail({ to: user.email, subject, html, text });
   },
 
   // Always resolves the same way whether or not `email` matches an account —
@@ -253,10 +253,10 @@ export const AuthService = {
       );
     });
 
-    const { subject, html } = passwordResetEmail(
+    const { subject, html, text } = passwordResetEmail(
       `${env.APP_URL}/reset-password?token=${rawResetToken}`,
     );
-    await sendEmail({ to: user.email, subject, html });
+    await sendEmail({ to: user.email, subject, html, text });
   },
 
   async resetPassword(rawToken: string, newPassword: string): Promise<void> {

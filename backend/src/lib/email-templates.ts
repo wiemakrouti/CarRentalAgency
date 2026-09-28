@@ -23,7 +23,7 @@ function button(url: string, label: string): string {
   `;
 }
 
-export function verificationEmail(verifyUrl: string): { subject: string; html: string } {
+export function verificationEmail(verifyUrl: string): { subject: string; html: string; text: string } {
   return {
     subject: 'Confirmez votre adresse email',
     html: layout(
@@ -36,10 +36,18 @@ export function verificationEmail(verifyUrl: string): { subject: string; html: s
         <p style="font-size: 12px; color: #6b7488;">Ce lien expire dans 24 heures.</p>
       `,
     ),
+    text: `Confirmez votre adresse email
+
+Merci d'avoir créé votre agence. Ouvrez ce lien pour confirmer votre adresse email :
+${verifyUrl}
+
+Ce lien expire dans 24 heures.
+
+Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer cet email.`,
   };
 }
 
-export function passwordResetEmail(resetUrl: string): { subject: string; html: string } {
+export function passwordResetEmail(resetUrl: string): { subject: string; html: string; text: string } {
   return {
     subject: 'Réinitialisation de votre mot de passe',
     html: layout(
@@ -52,5 +60,13 @@ export function passwordResetEmail(resetUrl: string): { subject: string; html: s
         <p style="font-size: 12px; color: #6b7488;">Ce lien expire dans 1 heure.</p>
       `,
     ),
+    text: `Réinitialisation de votre mot de passe
+
+Vous avez demandé à réinitialiser votre mot de passe. Ouvrez ce lien pour en choisir un nouveau :
+${resetUrl}
+
+Ce lien expire dans 1 heure.
+
+Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer cet email.`,
   };
 }
