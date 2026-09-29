@@ -94,7 +94,7 @@ export function ClientCalendarDialog({
     { clientId: client?.id, pageSize: 100 },
     { enabled: Boolean(client) && open },
   );
-  const allRentals = data?.items ?? [];
+  const allRentals = useMemo(() => data?.items ?? [], [data]);
   // The grid itself mirrors the Cars calendar here: cancelled rentals never
   // occupied a real day, so they're filtered out before marking cells. The
   // Historique tab below is where a client's cancelled reservations still

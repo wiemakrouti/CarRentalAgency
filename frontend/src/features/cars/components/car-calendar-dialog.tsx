@@ -79,7 +79,7 @@ export function CarCalendarDialog({ car, open, onOpenChange, defaultTab = 'calen
     { carId: car?.id, pageSize: 100 },
     { enabled: Boolean(car) && open },
   );
-  const allRentals = data?.items ?? [];
+  const allRentals = useMemo(() => data?.items ?? [], [data]);
   // The grid itself only ever shows what actually occupied the car —
   // cancelled reservations never did, so they're filtered out before
   // marking cells. The Historique tab below is where a car's cancelled
