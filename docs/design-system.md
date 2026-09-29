@@ -23,7 +23,7 @@ Other scales in the same two files: `radius` (sm/md/lg/xl), elevation shadows (`
 
 ## Theme system
 
-`frontend/src/providers/theme-provider.tsx` — `ThemeProvider` + `useTheme()`. Three modes: `light` / `dark` / `system`, persisted to `localStorage` (`car-rental-theme`), live-updates on OS preference change when in `system` mode. A blocking inline script in `index.html` applies the `dark` class before first paint to prevent a flash of the wrong theme. The `ThemeToggle` (`components/layout/theme-toggle.tsx`) in the topbar exposes all three modes via a dropdown.
+`frontend/src/providers/theme-provider.tsx` (`ThemeProvider`) + `theme-context.ts` (`useTheme()`). Three modes: `light` / `dark` / `system`, persisted to `localStorage` (`car-rental-theme`), live-updates on OS preference change when in `system` mode. A blocking inline script in `index.html` applies the `dark` class before first paint to prevent a flash of the wrong theme. The `ThemeToggle` (`components/layout/theme-toggle.tsx`) in the topbar exposes all three modes via a dropdown.
 
 ## Component inventory
 
@@ -79,6 +79,6 @@ Every page today is a `PageContainer` + `PageHeader` + `EmptyState` ("Module en 
 
 ## Known deferrals
 
-- Authentication shipped in Phase 1b (`docs/api.md`, `docs/database.md`) — every route now requires a session; see `frontend/src/providers/auth-provider.tsx` and `frontend/src/components/layout/protected-route.tsx`.
+- Authentication shipped in Phase 1b (`docs/api.md`, `docs/database.md`) — every route now requires a session; see `frontend/src/providers/auth-provider.tsx` (+ `auth-context.ts` for `useAuth()`) and `frontend/src/components/layout/protected-route.tsx`.
 - `SearchBar`/`FilterBar`/`Pagination`/`CommandPalette` render but don't query real data — wired up when each feature module (Cars, Clients, Rentals, …) is built.
 - Dashboard charts use static local arrays, not API data — real aggregation queries come in the Reports phase (`docs/roadmap.md`).
