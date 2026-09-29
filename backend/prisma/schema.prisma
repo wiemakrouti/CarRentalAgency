@@ -342,9 +342,14 @@ model Rental {
   plannedReturnDate DateTime
   actualReturnDate  DateTime?
 
-  // Snapshotted from Car.dailyRate at creation time so a later price change
+  // The rate actually charged: Car.dailyRate at creation time, or a price
+  // negotiated for this rental only. Snapshotted so a later price change
   // never retroactively alters an existing contract/report.
-  dailyRate       Decimal @db.Decimal(10, 3)
+  dailyRate        Decimal @db.Decimal(10, 3)
+  // Car.dailyRate as it stood at creation — kept alongside dailyRate so a
+  // negotiated price stays visible as such even after the car's own rate
+  // changes.
+  catalogDailyRate Decimal @db.Decimal(10, 3)
   totalAmount     Decimal @db.Decimal(10, 3)
   depositAmount   Decimal @db.Decimal(10, 3)
   depositReturned Boolean @default(false)

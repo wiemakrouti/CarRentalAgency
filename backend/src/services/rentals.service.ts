@@ -191,7 +191,10 @@ export const RentalsService = {
     const setting = await prisma.setting.findFirst({ where: { agencyId } });
     const depositAmount = input.depositAmount ?? Number(setting?.defaultDepositAmount ?? 0);
     const nights = calculateNights(input.pickupDate, input.plannedReturnDate);
-    const totalAmount = Number(car.dailyRate) * nights;
+    // A negotiated rate applies to this rental only; the car's own
+    // catalogue rate is never modified, just recorded alongside it.
+    const dailyRate = input.dailyRate ?? Number(car.dailyRate);
+    const totalAmount = dailyRate * nights;
 
     for (let attempt = 0; attempt < MAX_RENTAL_NUMBER_ATTEMPTS; attempt += 1) {
       const rentalNumber = generateRentalNumber();
@@ -222,7 +225,8 @@ export const RentalsService = {
               clientId: input.clientId,
               pickupDate: input.pickupDate,
               plannedReturnDate: input.plannedReturnDate,
-              dailyRate: car.dailyRate,
+              dailyRate,
+              catalogDailyRate: car.dailyRate,
               totalAmount,
               depositAmount,
               notes: input.notes ?? null,

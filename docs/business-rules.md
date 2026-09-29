@@ -12,7 +12,7 @@ All code (folders, files, DB tables/columns, API routes, variables, classes) is 
 
 ## Late fee policy
 
-`rental.dailyRate × daysLate`, computed automatically server-side when a rental is returned late (`POST /rentals/:id/return`). Uses the rental's own snapshotted `dailyRate`, not a separate configurable rate. Written as an automatic `Payment(type: LATE_FEE)`.
+`rental.dailyRate × daysLate`, computed automatically server-side when a rental is returned late (`POST /rentals/:id/return`). Uses the rental's own snapshotted `dailyRate` (the negotiated price, if one was set at creation), not a separate configurable rate. Extensions are priced the same way. Written as an automatic `Payment(type: LATE_FEE)`.
 
 ## Damage charges
 

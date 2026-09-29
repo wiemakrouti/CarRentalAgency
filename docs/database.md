@@ -37,6 +37,7 @@ Money fields use `Decimal(10,3)` — TND (Tunisian Dinar) has 3 decimal places (
 ## Key design decisions
 
 - **`Rental.dailyRate`/`totalAmount` are snapshotted**, not read live from `Car.dailyRate` — a later price change never retroactively alters a historical contract.
+- **`Rental.catalogDailyRate`** records `Car.dailyRate` at creation. It differs from `Rental.dailyRate` when the admin negotiated a price for that rental only; existing rows were backfilled with `catalogDailyRate = dailyRate`.
 - **`RentalStatus.OVERDUE`** is not flipped by a background job (no scheduler in v1). It's set by the return flow when a rental comes back late; read-side queries (dashboard) treat `ACTIVE` + past `plannedReturnDate` as overdue for display/counting.
 - **`Payment` is normalized under `Rental`**, not a flat `amountPaid` field — a rental can have multiple payment events with different methods and types.
 - **`Expense.carId` is nullable** — not every agency expense is car-specific.

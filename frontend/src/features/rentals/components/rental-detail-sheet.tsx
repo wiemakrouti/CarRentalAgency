@@ -501,6 +501,11 @@ export function RentalDetailSheet({ rentalId, open, onOpenChange }: RentalDetail
                         {formatAmount(rental.totalAmount)}
                       </p>
                       <p className="mt-0.5 text-[10.5px] text-muted-foreground">{formatAmount(rental.dailyRate)} / jour</p>
+                      {Number(rental.dailyRate) !== Number(rental.catalogDailyRate) && (
+                        <p className="text-[10.5px] text-muted-foreground">
+                          Tarif négocié · {formatAmount(rental.catalogDailyRate)}
+                        </p>
+                      )}
                     </div>
                     {/* Restituée reads as a resolved/positive state, still
                         held reads as pending — same success/warn split the

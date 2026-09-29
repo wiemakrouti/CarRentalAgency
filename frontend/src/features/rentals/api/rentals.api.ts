@@ -30,6 +30,7 @@ export type Rental = {
   plannedReturnDate: string;
   actualReturnDate: string | null;
   dailyRate: string;
+  catalogDailyRate: string;
   totalAmount: string;
   depositAmount: string;
   depositReturned: boolean;

@@ -82,6 +82,10 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
   // until someone does that as a separate step afterward.
   const [mileageAtPickup, setMileageAtPickup] = useState('');
   const [fuelLevelAtPickup, setFuelLevelAtPickup] = useState('');
+  // A price negotiated for this rental only — null means the car's own
+  // catalogue rate applies. Never written back to the car: the backend
+  // snapshots it onto the rental alongside the catalogue rate.
+  const [customDailyRate, setCustomDailyRate] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const hasDepositAmount = depositAmount !== '' && Number(depositAmount) > 0;
@@ -114,7 +118,16 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
   const nights = datesValid
     ? Math.max(Math.ceil((new Date(plannedReturnDate).getTime() - new Date(pickupDate).getTime()) / MS_PER_DAY), 1)
     : 0;
-  const estimatedTotal = selectedCar ? nights * Number(selectedCar.dailyRate) : null;
+  const catalogDailyRate = selectedCar ? Number(selectedCar.dailyRate) : null;
+  const isCustomRate = customDailyRate !== null;
+  const customRateValue = isCustomRate && customDailyRate !== '' ? Number(customDailyRate) : null;
+  const effectiveDailyRate = isCustomRate ? customRateValue : catalogDailyRate;
+  const estimatedTotal =
+    selectedCar && effectiveDailyRate !== null && effectiveDailyRate > 0 ? nights * effectiveDailyRate : null;
+  const rateDifferencePercent =
+    catalogDailyRate && customRateValue && customRateValue !== catalogDailyRate
+      ? Math.round(((customRateValue - catalogDailyRate) / catalogDailyRate) * 100)
+      : null;
 
   // Dates changed (or dialog reopened) — the previously selected car may no
   // longer be in the available list, so don't silently keep a stale pick.
@@ -127,7 +140,10 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
   // Prefills with the selected car's own current mileage — same default
   // ActivateRentalDialog uses — since it's what's actually on the odometer
   // right now; still fully editable if that's a moment out of date.
+  // A negotiated price belongs to the car it was negotiated for — picking
+  // another car goes back to that car's own catalogue rate.
   useEffect(() => {
+    setCustomDailyRate(null);
     if (selectedCar) {
       setMileageAtPickup(String(selectedCar.mileage));
     }
@@ -152,6 +168,11 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
       pickupDate: pickupDate || undefined,
       plannedReturnDate: plannedReturnDate || undefined,
       depositAmount: depositAmount === '' ? undefined : Number(depositAmount),
+      // Sent only when it actually differs — an unchanged rate is just the
+      // catalogue one, which the backend applies by default. An emptied
+      // field is sent as 0 so it fails validation instead of silently
+      // falling back to the catalogue rate.
+      dailyRate: isCustomRate && customRateValue !== catalogDailyRate ? (customRateValue ?? 0) : undefined,
       initialPayment:
         bookingMode === 'IMMEDIATE' && collectDepositNow && hasDepositAmount
           ? { amount: Number(depositAmount), type: 'DEPOSIT' as const, method: depositMethod }
@@ -283,6 +304,61 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
               {fieldErrors.carId && <p className="text-sm text-destructive">{fieldErrors.carId}</p>}
             </div>
 
+            {selectedCar && catalogDailyRate !== null && (
+              <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-0.5">
+                    <Label htmlFor={isCustomRate ? 'customDailyRate' : undefined}>Tarif journalier</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Tarif catalogue : {catalogDailyRate.toLocaleString('fr-TN')} DT/jour
+                    </p>
+                  </div>
+                  {isCustomRate ? (
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setCustomDailyRate(null)}>
+                      Rétablir le tarif d'origine
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCustomDailyRate(String(catalogDailyRate))}
+                    >
+                      Modifier le tarif
+                    </Button>
+                  )}
+                </div>
+                {isCustomRate && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <Input
+                        id="customDailyRate"
+                        type="number"
+                        step="0.001"
+                        min="0"
+                        autoFocus
+                        className="max-w-[180px]"
+                        value={customDailyRate}
+                        onChange={(e) => setCustomDailyRate(e.target.value)}
+                      />
+                      <span className="text-sm text-muted-foreground">DT/jour</span>
+                      {rateDifferencePercent !== null && (
+                        <span className="text-sm font-medium text-muted-foreground">
+                          {rateDifferencePercent > 0 ? '+' : ''}
+                          {rateDifferencePercent} %
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      S'applique à cette location uniquement (prolongations et frais de retard inclus) — le tarif
+                      de la voiture reste inchangé.
+                    </p>
+                  </div>
+                )}
+                {fieldErrors.dailyRate && <p className="text-sm text-destructive">{fieldErrors.dailyRate}</p>}
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label required>Client</Label>
               <Select value={clientId} onValueChange={setClientId}>
@@ -342,8 +418,14 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
 
             {estimatedTotal !== null && (
               <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
-                {nights} nuit{nights > 1 ? 's' : ''} × {Number(selectedCar!.dailyRate).toLocaleString('fr-TN')} DT ={' '}
-                <span className="font-semibold">{estimatedTotal.toLocaleString('fr-TN')} DT</span>
+                {nights} nuit{nights > 1 ? 's' : ''} × {effectiveDailyRate!.toLocaleString('fr-TN')} DT
+                {rateDifferencePercent !== null && (
+                  <span className="text-muted-foreground">
+                    {' '}
+                    (au lieu de {catalogDailyRate!.toLocaleString('fr-TN')} DT)
+                  </span>
+                )}{' '}
+                = <span className="font-semibold">{estimatedTotal.toLocaleString('fr-TN')} DT</span>
               </div>
             )}
 

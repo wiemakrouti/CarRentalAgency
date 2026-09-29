@@ -23,6 +23,11 @@ export const createRentalSchema = z
     pickupDate: z.coerce.date(),
     plannedReturnDate: z.coerce.date(),
     depositAmount: z.coerce.number().nonnegative('Le dépôt doit être positif').optional(),
+    // A negotiated per-day price for this rental only — overrides the car's
+    // catalogue Car.dailyRate for the snapshot (and therefore for later
+    // extensions and late fees) without ever touching the car itself.
+    // Omitted → the catalogue rate applies.
+    dailyRate: z.coerce.number().positive('Le tarif journalier doit être positif').optional(),
     notes: z.string().trim().min(1).nullable().optional(),
     // A payment already collected at booking time (the "Location immédiate"
     // tab's own Paiement section) — created atomically alongside the rental
