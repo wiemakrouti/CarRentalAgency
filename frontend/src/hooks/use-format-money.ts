@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { CURRENCY_OPTIONS } from '@car-rental/shared';
-import { useSettings } from '@/providers/settings-provider';
+import { useSettings } from '@/providers/settings-context';
 
 const SYMBOL_BY_CODE = new Map(CURRENCY_OPTIONS.map((option) => [option.code, option.symbol]));
 

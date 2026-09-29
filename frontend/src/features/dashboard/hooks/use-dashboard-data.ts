@@ -7,6 +7,7 @@ import { clientKeys } from '@/features/clients/api/clients.keys';
 import { financesApi, type FinanceSummary } from '@/features/finances/api/finances.api';
 import { financeSummaryKeys } from '@/features/finances/api/finances.keys';
 import { useRentalOccupancyQuery, useRentalSummaryQuery } from '@/features/rentals/hooks/use-rentals';
+import { toDateParam } from '@/lib/date-range';
 
 const MONTH_LABELS = [
   'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc',
@@ -20,18 +21,6 @@ const COUNT_ONLY = { page: 1, pageSize: 1 } as const;
 // Occupancy heatmap window — 90 days ending today (inclusive), matching the
 // "90 derniers jours" the widget itself is labeled with.
 const OCCUPANCY_WINDOW_DAYS = 90;
-
-// Local getters, not `toISOString()` — the Date objects built below (e.g.
-// `startOfMonth`) are local midnight, and `toISOString()` converts to UTC
-// first: in any timezone ahead of UTC that silently shifts "the 1st" back
-// onto the last day of the previous month (same bug class as this session's
-// backend/frontend rental late-day fixes — see date-range-filter.tsx).
-function toDateParam(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
 
 function startOfMonth(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), 1);

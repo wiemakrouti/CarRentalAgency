@@ -1,6 +1,6 @@
 import { Check, Monitor, Moon, Sun } from 'lucide-react';
 
-import { useTheme, type Theme } from '@/providers/theme-provider';
+import { useTheme, type Theme } from '@/providers/theme-context';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,

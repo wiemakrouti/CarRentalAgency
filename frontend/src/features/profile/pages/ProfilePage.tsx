@@ -13,8 +13,8 @@ import {
 } from '@car-rental/shared';
 import type { z } from 'zod';
 
-import { useAuth } from '@/providers/auth-provider';
-import { useSettings } from '@/providers/settings-provider';
+import { useAuth } from '@/providers/auth-context';
+import { useSettings } from '@/providers/settings-context';
 import { ApiClientError } from '@/lib/api-client';
 import { ErrorState } from '@/components/common/error-state';
 import { LoadingState } from '@/components/common/loading-state';

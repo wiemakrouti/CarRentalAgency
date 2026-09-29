@@ -5,7 +5,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { CarFront, Loader2 } from 'lucide-react';
 import { loginSchema, type LoginInput } from '@car-rental/shared';
 
-import { useAuth } from '@/providers/auth-provider';
+import { useAuth } from '@/providers/auth-context';
 import { authApi } from '@/features/auth/api/auth.api';
 import { AuthLayout } from '@/features/auth/components/auth-layout';
 import { ApiClientError } from '@/lib/api-client';

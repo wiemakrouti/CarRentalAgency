@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { CarFront, Menu } from 'lucide-react';
 
-import { useSettings } from '@/providers/settings-provider';
+import { useSettings } from '@/providers/settings-context';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { SidebarNav } from '@/components/layout/sidebar-nav';

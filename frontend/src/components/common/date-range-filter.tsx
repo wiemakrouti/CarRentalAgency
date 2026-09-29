@@ -1,10 +1,8 @@
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { computeDateRangePreset, type BoundedPreset, type DateRange } from '@/lib/date-range';
 import { cn } from '@/lib/utils';
 
-export type DateRange = { from?: string; to?: string };
-
-type BoundedPreset = 'this_month' | 'last_month' | 'this_year';
 type Preset = 'all' | BoundedPreset | 'custom';
 
 const BOUNDED_PRESET_LABELS: Record<BoundedPreset, string> = {
@@ -12,32 +10,6 @@ const BOUNDED_PRESET_LABELS: Record<BoundedPreset, string> = {
   last_month: 'Mois dernier',
   this_year: 'Cette année',
 };
-
-// Local getters, not `toISOString()` — the Date objects built below (e.g.
-// `new Date(year, month, 1)`) are local midnight, and `toISOString()`
-// converts to UTC first: in any timezone ahead of UTC that silently shifts
-// "the 1st" back onto the last day of the previous month.
-export function toDateParam(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-export function computeDateRangePreset(preset: BoundedPreset): Required<DateRange> {
-  const now = new Date();
-  switch (preset) {
-    case 'this_month':
-      return { from: toDateParam(new Date(now.getFullYear(), now.getMonth(), 1)), to: toDateParam(now) };
-    case 'last_month':
-      return {
-        from: toDateParam(new Date(now.getFullYear(), now.getMonth() - 1, 1)),
-        to: toDateParam(new Date(now.getFullYear(), now.getMonth(), 0)),
-      };
-    case 'this_year':
-      return { from: toDateParam(new Date(now.getFullYear(), 0, 1)), to: toDateParam(now) };
-  }
-}
 
 // Re-derived from `value` on every render instead of tracked as its own
 // state — editing either date field by hand falls back to "Personnalisé"

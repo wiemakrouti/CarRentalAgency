@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useSettings } from '@/providers/settings-provider';
+import { useSettings } from '@/providers/settings-context';
 import { notificationsApi } from '../api/notifications.api';
 import { notificationKeys } from '../api/notifications.keys';
 

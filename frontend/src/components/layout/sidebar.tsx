@@ -2,8 +2,8 @@ import { Link } from 'react-router-dom';
 import { CarFront, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/providers/auth-provider';
-import { useSettings } from '@/providers/settings-provider';
+import { useAuth } from '@/providers/auth-context';
+import { useSettings } from '@/providers/settings-context';
 import { Button } from '@/components/ui/button';
 import { SidebarNav } from '@/components/layout/sidebar-nav';
 

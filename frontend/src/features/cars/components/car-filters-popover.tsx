@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Filter } from 'lucide-react';
 import { CAR_CATEGORIES, CAR_STATUSES, CURRENCY_OPTIONS, TRANSMISSIONS } from '@car-rental/shared';
 
-import { useSettings } from '@/providers/settings-provider';
+import { useSettings } from '@/providers/settings-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';

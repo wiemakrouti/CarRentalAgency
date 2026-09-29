@@ -6,7 +6,7 @@ import { Loader2, LogOut, Monitor, Smartphone, Wallet } from 'lucide-react';
 import { CURRENCY_OPTIONS, updateSettingsSchema } from '@car-rental/shared';
 import type { z } from 'zod';
 
-import { useSettings } from '@/providers/settings-provider';
+import { useSettings } from '@/providers/settings-context';
 import { ApiClientError } from '@/lib/api-client';
 import { PageContainer } from '@/components/common/page-container';
 import { PageHeader } from '@/components/common/page-header';

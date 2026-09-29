@@ -331,7 +331,6 @@ export function CarsPage() {
   const formatMoney = useFormatMoney();
   const columns = useMemo(
     () => buildColumns(openEditForm, openDetail, openCalendar, formatMoney),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [formatMoney],
   );
 

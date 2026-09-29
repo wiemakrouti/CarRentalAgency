@@ -18,7 +18,7 @@ import {
   XCircle,
 } from 'lucide-react';
 
-import { useTheme } from '@/providers/theme-provider';
+import { useTheme } from '@/providers/theme-context';
 import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';

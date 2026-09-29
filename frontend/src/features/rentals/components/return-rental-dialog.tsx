@@ -10,7 +10,7 @@ import {
 } from '@car-rental/shared';
 
 import { ApiClientError } from '@/lib/api-client';
-import { useSettings } from '@/providers/settings-provider';
+import { useSettings } from '@/providers/settings-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';

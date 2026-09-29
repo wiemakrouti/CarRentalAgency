@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DateRangeFilter, type DateRange } from '@/components/common/date-range-filter';
+import { DateRangeFilter } from '@/components/common/date-range-filter';
+import type { DateRange } from '@/lib/date-range';
 
 const ALL_VALUE = '__all__';
 

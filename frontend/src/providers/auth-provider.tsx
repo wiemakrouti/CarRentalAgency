@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { LoginInput } from '@car-rental/shared';
 import { authApi, type AuthUser } from '@/features/auth/api/auth.api';
@@ -9,21 +9,7 @@ import {
   refreshAccessToken,
   setAccessToken,
 } from '@/lib/auth-session';
-
-type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
-
-type AuthContextValue = {
-  user: AuthUser | null;
-  status: AuthStatus;
-  login: (input: LoginInput) => Promise<void>;
-  logout: () => Promise<void>;
-  // Lets a successful profile edit (ProfilePage) refresh the name/email
-  // shown in the topbar immediately, without re-fetching /auth/me — the
-  // PATCH response already carries the full, up-to-date user.
-  updateUser: (user: AuthUser) => void;
-};
-
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+import { AuthContext, type AuthStatus } from './auth-context';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -99,10 +85,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within an AuthProvider');
-  return context;
 }

@@ -237,7 +237,6 @@ export function ClientsPage() {
 
   const columns = useMemo(
     () => buildColumns(openEditForm, openProfile, openCalendar),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 

@@ -1,7 +1,7 @@
 import { Link, useMatches, useNavigate } from 'react-router-dom';
 import { LogOut, Search, User } from 'lucide-react';
 
-import { useAuth } from '@/providers/auth-provider';
+import { useAuth } from '@/providers/auth-context';
 import { Button } from '@/components/ui/button';
 import {
   Breadcrumb,
