@@ -1,0 +1,43 @@
+name: CI
+
+# Lint + typecheck + build every workspace. Runs on its own for every push/PR,
+# and is also called by deploy.yml so nothing reaches a VPS without passing it.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Lint, typecheck & build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # prisma generate only needs the variable to exist — no database is
+      # contacted during CI.
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # Backend and frontend import the compiled dist/ of the shared package,
+      # and the backend's types come from the generated Prisma client — both
+      # must exist before lint/build can resolve imports.
+      - run: npm run build:shared
+      - run: npx prisma generate
+        working-directory: backend
+
+      - run: npm run lint
+
+      # Backend: tsc. Frontend: tsc -b (tsconfig.app.json) + vite build.
+      - run: npm run build

@@ -18,10 +18,9 @@ docker compose up --build
 
 Brings up Postgres, the backend (Express, built + run via Node), and the frontend (built static assets served by nginx). Override secrets via a `.env` file at the repo root (`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `CLOUDINARY_*`) — `docker-compose.yml` falls back to development placeholders if unset, which must never be used in a real deployment.
 
-After first boot, run migrations + seed inside the backend container:
+The backend applies pending migrations itself on startup. After first boot, seed inside the backend container:
 
 ```
-docker compose exec backend npx prisma migrate deploy
 docker compose exec backend npm run seed
 ```
 
@@ -38,11 +37,36 @@ Self-hosted VPS (OVH) — one dedicated instance per client agency, per the mult
 5. **Launch**:
    ```
    docker compose -f docker-compose.prod.yml --env-file .env up --build -d
-   docker compose -f docker-compose.prod.yml exec backend npx prisma migrate deploy
    docker compose -f docker-compose.prod.yml exec backend npm run seed
    ```
+   The backend container applies pending Prisma migrations itself on every start (`backend/Dockerfile` runs `prisma migrate deploy` before the server), so the first `up` already creates the schema the seed needs.
    Caddy (the only service with published ports) terminates TLS and obtains/renews its Let's Encrypt certificate automatically for `DOMAIN`; it routes `/api/*` to the backend and everything else to the static frontend build, both over the compose network — postgres/backend/frontend have no ports exposed to the host.
-6. **Redeploying** after a code change: `git pull`, then rerun the `up --build -d` command from step 5 (image rebuild only, no need to repeat migrate/seed unless the schema changed — then rerun `migrate deploy` too).
+6. **Redeploying** after a code change: use the **Deploy** button (see "Automated deployment" below). The manual equivalent is `~/backup-db.sh`, `git pull`, then the `up --build -d` command from step 5 — migrations apply on their own when the new backend starts. Never rerun the seed.
+7. **Enable automated deployment** for this VPS — one-time setup, see below.
+
+## Automated deployment (GitHub Actions)
+
+- **CI** (`.github/workflows/ci.yml`) runs lint + typecheck + build on every push to `main` and every pull request.
+- **Deploy** (`.github/workflows/deploy.yml`) is manual only: GitHub → *Actions* → *Deploy* → *Run workflow*, pick the agency's environment. It re-runs CI, then SSHes into that agency's VPS and pipes `scripts/remote-deploy.sh` to it, which backs up the database, fast-forwards the checkout to the deployed commit (`--ff-only`: fails instead of overwriting if the VPS checkout diverged), rebuilds/restarts the containers, and waits for the backend's health check. The workflow finally checks the public `/api/v1/health` URL. Deploys only run from `main`, and two deploys to the same VPS never overlap.
+
+### One-time setup per agency VPS
+
+1. **Deploy key** — on your own machine, create a key used only by GitHub (no passphrase, CI can't type one):
+   ```
+   ssh-keygen -t ed25519 -f deploy_key_<agency> -C "github-deploy-<agency>" -N ""
+   ```
+   Append `deploy_key_<agency>.pub` to `~/.ssh/authorized_keys` on the VPS (`ubuntu` user — it needs Docker access, which that user already has).
+2. **GitHub environment** — repo → *Settings* → *Environments* → *New environment*, named after the agency (e.g. `houssemalouirentcar`). Optionally add yourself as a *required reviewer* for a confirmation click before each deploy. Then add:
+   - Secret `DEPLOY_SSH_KEY`: the full contents of the **private** key file `deploy_key_<agency>`.
+   - Variables:
+     - `DEPLOY_HOST`: the VPS IP.
+     - `DEPLOY_USER`: `ubuntu`.
+     - `DEPLOY_PATH`: `/home/ubuntu/app`.
+     - `DEPLOY_URL`: `https://<domain>` (no trailing slash).
+     - `DEPLOY_KNOWN_HOSTS`: output of `ssh-keyscan -t ed25519 <vps-ip>` (the line without `#`) — pins the server's identity.
+3. Delete both local key files once the secret is saved; if the key ever leaks, remove its line from `authorized_keys` and generate a new one.
+
+The backup script (`~/backup-db.sh`, see "Backups") must already be installed on the VPS — the deploy calls it and fails if it's missing.
 
 ## Backups
 

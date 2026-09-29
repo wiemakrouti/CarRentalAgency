@@ -1,0 +1,68 @@
+name: Deploy
+
+# Manual only: GitHub → Actions → Deploy → "Run workflow". Each agency's VPS is
+# a GitHub Environment holding its own connection settings (see
+# docs/deployment.md "Automated deployment"), so adding an agency later means
+# adding an environment, not editing this file.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Agency to deploy
+        type: environment
+        required: true
+
+permissions:
+  contents: read
+
+# Never run two deploys against the same VPS at once; a second click waits
+# for the first instead of cancelling it mid-migration.
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ vars.DEPLOY_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Pinned host key — never trust-on-first-use from a CI runner.
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Deploy on VPS
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            bash -s -- "$DEPLOY_PATH" "$GITHUB_SHA" < scripts/remote-deploy.sh
+
+      - name: Check public health endpoint
+        env:
+          DEPLOY_URL: ${{ vars.DEPLOY_URL }}
+        run: curl --fail --silent --show-error --retry 5 --retry-delay 5 --retry-all-errors "$DEPLOY_URL/api/v1/health"
+
+      - name: Remove SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

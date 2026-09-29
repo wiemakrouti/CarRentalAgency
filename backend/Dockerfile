@@ -21,4 +21,8 @@ RUN npx prisma generate
 RUN npm run build
 
 EXPOSE 4000
-CMD ["node", "dist/server.js"]
+# Pending migrations are applied before the server starts listening, so the
+# new code never runs against an old schema. A failed migration stops the
+# container (and fails the deploy's health check) instead of serving errors.
+# `exec` hands PID 1 to node so it receives Docker's stop signals directly.
+CMD ["sh", "-c", "npx prisma migrate deploy && exec node dist/server.js"]
