@@ -31,3 +31,6 @@ coverage/
 
 # Misc
 *.tsbuildinfo
+
+# SSH deploy keys generated for GitHub Actions (docs/deployment.md) — never commit
+deploy_key*

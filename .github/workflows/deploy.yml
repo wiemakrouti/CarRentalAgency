@@ -58,6 +58,22 @@ jobs:
             "$DEPLOY_USER@$DEPLOY_HOST" \
             bash -s -- "$DEPLOY_PATH" "$GITHUB_SHA" < scripts/remote-deploy.sh
 
+      # Independent proof the deploy actually happened — a script that stops
+      # early but exits 0 must never show up as a green deploy.
+      - name: Verify deployed commit
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          deployed=$(ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$DEPLOY_USER@$DEPLOY_HOST" git -C "$DEPLOY_PATH" rev-parse HEAD </dev/null)
+          if [ "$deployed" != "$GITHUB_SHA" ]; then
+            echo "::error::VPS is on $deployed, expected $GITHUB_SHA"
+            exit 1
+          fi
+          echo "VPS is on $GITHUB_SHA"
+
       - name: Check public health endpoint
         env:
           DEPLOY_URL: ${{ vars.DEPLOY_URL }}
