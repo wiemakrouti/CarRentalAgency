@@ -11,6 +11,13 @@ export function toLocalDayOnly(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
+// An ACTIVE rental can still be called off on the spot (e.g. a failed test
+// drive) — but only on its handover day, mirroring RentalsService.
+// cancelHandover. After that it's a real rental, closed with "Clôturer".
+export function canCancelHandover(rental: Rental, now: Date = new Date()): boolean {
+  return rental.status === 'ACTIVE' && apiDateToLocalDay(rental.pickupDate).getTime() === toLocalDayOnly(now).getTime();
+}
+
 // Mirrors the backend's read-side rule (docs/api.md "Cars"): OVERDUE is never
 // a stored status, just ACTIVE + plannedReturnDate in the past. The calendar
 // needs to show it distinctly, so it computes the same condition here rather

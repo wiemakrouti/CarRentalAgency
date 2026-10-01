@@ -138,6 +138,26 @@ export const PaymentsRepository = {
     return db.payment.update({ where: { id }, data: archive(), include: PAYMENT_INCLUDE });
   },
 
+  // Same-day cancellation of a handover (RentalsService.cancel): everything
+  // actually collected for the rental goes back to the client in full —
+  // COMPLETED → REFUNDED, which also drops it from revenue (only COMPLETED
+  // payments count there).
+  refundCollectedForRental(rentalId: string, db: Db = prisma) {
+    return db.payment.updateMany({
+      where: { rentalId, status: 'COMPLETED', deletedAt: null },
+      data: { status: 'REFUNDED' },
+    });
+  },
+
+  // …and anything still PENDING (an auto-generated charge never collected)
+  // is no longer owed at all, so it's archived rather than marked refunded.
+  archivePendingForRental(rentalId: string, db: Db = prisma) {
+    return db.payment.updateMany({
+      where: { rentalId, status: 'PENDING', deletedAt: null },
+      data: archive(),
+    });
+  },
+
   restoreById(id: string, db: Db = prisma) {
     return db.payment.update({ where: { id }, data: restore(), include: PAYMENT_INCLUDE });
   },

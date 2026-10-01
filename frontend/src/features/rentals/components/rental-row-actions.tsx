@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 import type { Rental } from '../api/rentals.api';
+import { canCancelHandover } from '../lib/rental-calendar';
 import { ActivateRentalDialog } from './activate-rental-dialog';
 import { CancelRentalDialog } from './cancel-rental-dialog';
 import { ReturnRentalDialog } from './return-rental-dialog';
@@ -50,6 +51,11 @@ export function RentalRowActions({ rental }: RentalRowActionsProps) {
             <>
               <DropdownMenuItem onClick={() => setReturnOpen(true)}>Clôturer</DropdownMenuItem>
               <DropdownMenuItem onClick={() => setExtendOpen(true)}>Prolonger</DropdownMenuItem>
+              {canCancelHandover(rental) && (
+                <DropdownMenuItem className="text-destructive" onClick={() => setCancelOpen(true)}>
+                  Annuler
+                </DropdownMenuItem>
+              )}
             </>
           )}
         </DropdownMenuContent>

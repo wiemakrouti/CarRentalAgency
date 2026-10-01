@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils';
 import type { Rental } from '../api/rentals.api';
 import { useRentalQuery } from '../hooks/use-rentals';
 import {
+  canCancelHandover,
   getDisplayRentalStatusSummary,
   getEffectiveRentalStatus,
   toLocalDayOnly,
@@ -812,6 +813,17 @@ export function RentalDetailSheet({ rentalId, open, onOpenChange }: RentalDetail
                   <CalendarPlus className="h-4 w-4" />
                   Prolonger
                 </button>
+                {canCancelHandover(rental) && (
+                  <button
+                    type="button"
+                    onClick={() => setCancelOpen(true)}
+                    title="Annuler la remise des clés (le jour même uniquement)"
+                    className="flex items-center justify-center gap-2 rounded-xl border border-destructive/40 px-4 py-3 text-sm font-semibold text-destructive transition-colors hover:bg-destructive/10 active:scale-[0.98]"
+                  >
+                    <XCircle className="h-4 w-4" />
+                    Annuler
+                  </button>
+                )}
               </div>
             )}
 

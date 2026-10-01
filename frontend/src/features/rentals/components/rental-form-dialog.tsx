@@ -39,20 +39,30 @@ type RentalFormDialogProps = {
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-type BookingMode = 'IMMEDIATE' | 'ADVANCE';
 
 function errorMessage(err: unknown, fallback: string): string {
   return err instanceof ApiClientError ? err.message : fallback;
 }
 
-// Local calendar date, not UTC — "today" for the Location immédiate tab
+// Local calendar date, not UTC — "today" (a pickup on this day is a Location immédiate)
 // means the admin's own wall-clock day, same as what a bare <input
 // type="date"> shows/expects (YYYY-MM-DD).
+type BookingMode = 'IMMEDIATE' | 'ADVANCE';
+
 function todayInputValue(): string {
   const now = new Date();
   const y = now.getFullYear();
   const m = String(now.getMonth() + 1).padStart(2, '0');
   const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function tomorrowInputValue(): string {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const y = tomorrow.getFullYear();
+  const m = String(tomorrow.getMonth() + 1).padStart(2, '0');
+  const d = String(tomorrow.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
 }
 
@@ -76,11 +86,6 @@ function licenseWarning(client: Client | null, pickupDate: string, plannedReturn
 }
 
 export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDialogProps) {
-  // Two tabs, not a checkbox or a radio card — "Location immédiate" is the
-  // default (first) tab and owns the Paiement section, since collecting
-  // money on the spot only really applies to a walk-in client; a
-  // "Réservation à l'avance" has nothing to encaisser yet.
-  const [bookingMode, setBookingMode] = useState<BookingMode>('IMMEDIATE');
   const [pickupDate, setPickupDate] = useState(() => todayInputValue());
   const [plannedReturnDate, setPlannedReturnDate] = useState('');
   const [carId, setCarId] = useState<string | undefined>(undefined);
@@ -110,6 +115,21 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const hasDepositAmount = depositAmount !== '' && Number(depositAmount) > 0;
+  // The pickup date decides (agency rule) and the tabs just follow it: today
+  // means the client leaves with the car now — "Location immédiate", created
+  // ACTIVE with the remise-des-clés and Paiement sections. Any later date is
+  // a "Réservation à l'avance", created RESERVED and activated on the day.
+  // (So a reservation for later *today* isn't possible from this form.)
+  const isImmediate = pickupDate === todayInputValue();
+  const bookingMode: BookingMode = isImmediate ? 'IMMEDIATE' : 'ADVANCE';
+
+  // Clicking a tab moves the pickup date to match it, so tab and date can
+  // never disagree: "Immédiate" → today; "À l'avance" → tomorrow if the
+  // date was still today (a later date already chosen is kept).
+  function handleBookingModeChange(mode: BookingMode) {
+    if (mode === 'IMMEDIATE') setPickupDate(todayInputValue());
+    else if (isImmediate) setPickupDate(tomorrowInputValue());
+  }
 
   // The toggle only makes sense once there's a caution amount to collect —
   // if the admin clears it (or never set one), silently drop the toggle
@@ -171,24 +191,14 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCar?.id]);
 
-  // The dialog stays mounted between openings, and in "Immédiate" its date
-  // field is locked — re-sync it to today on every open so a page left
-  // open overnight can't submit a stale (now rejected) pickup date.
+  // The dialog stays mounted between openings — a pickup date left from a
+  // page open overnight would now be in the past, so bring it back to today.
   useEffect(() => {
-    if (open && bookingMode === 'IMMEDIATE') {
+    if (open && pickupDate < todayInputValue()) {
       setPickupDate(todayInputValue());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
-
-  // Only switching TO "Immédiate" acts (prefills today) — switching away is
-  // just a declaration, it never clears a date the admin already chose.
-  function handleBookingModeChange(mode: BookingMode) {
-    setBookingMode(mode);
-    if (mode === 'IMMEDIATE') {
-      setPickupDate(todayInputValue());
-    }
-  }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -200,7 +210,7 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
     if (pickupDate && pickupDate < todayInputValue()) {
       extraErrors.pickupDate = "La date de prise en charge ne peut pas être antérieure à aujourd'hui.";
     }
-    if (bookingMode === 'IMMEDIATE' && selectedCar && mileageAtPickup !== '' && Number(mileageAtPickup) < selectedCar.mileage) {
+    if (isImmediate && selectedCar && mileageAtPickup !== '' && Number(mileageAtPickup) < selectedCar.mileage) {
       extraErrors['activation.mileageAtPickup'] =
         `Inférieur au compteur de la voiture (${selectedCar.mileage.toLocaleString('fr-TN')} km).`;
     }
@@ -217,13 +227,13 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
       // falling back to the catalogue rate.
       dailyRate: isCustomRate && customRateValue !== catalogDailyRate ? (customRateValue ?? 0) : undefined,
       initialPayment:
-        bookingMode === 'IMMEDIATE' && collectDepositNow && hasDepositAmount
+        isImmediate && collectDepositNow && hasDepositAmount
           ? { amount: Number(depositAmount), type: 'DEPOSIT' as const, method: depositMethod }
-          : bookingMode === 'IMMEDIATE' && rentalPaymentAmount !== ''
+          : isImmediate && rentalPaymentAmount !== ''
             ? { amount: Number(rentalPaymentAmount), type: 'RENTAL_PAYMENT' as const, method: rentalPaymentMethod }
             : undefined,
       activation:
-        bookingMode === 'IMMEDIATE'
+        isImmediate
           ? {
               mileageAtPickup: mileageAtPickup === '' ? undefined : Number(mileageAtPickup),
               fuelLevelAtPickup,
@@ -247,7 +257,7 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
     setFieldErrors({});
     try {
       const rental = await createMutation.mutateAsync(parsed.data);
-      toast.success(bookingMode === 'IMMEDIATE' ? 'Location créée et activée.' : 'Location créée.');
+      toast.success(isImmediate ? 'Location créée et activée.' : 'Location créée.');
       onOpenChange(false);
       onCreated?.(rental);
     } catch (err) {
@@ -293,23 +303,13 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
                 <Label htmlFor="pickupDate" required>
                   Date de prise en charge
                 </Label>
-                {/* Locked to today in "Immédiate": the keys are handed over
-                    now, so the rental is created ACTIVE — a future date here
-                    would mark it "en cours" before it starts (the backend
-                    rejects that too). Other dates go through "À l'avance". */}
                 <Input
                   id="pickupDate"
                   type="date"
                   value={pickupDate}
                   min={todayInputValue()}
                   onChange={(e) => setPickupDate(e.target.value)}
-                  disabled={bookingMode === 'IMMEDIATE'}
                 />
-                {bookingMode === 'IMMEDIATE' && (
-                  <p className="text-xs text-muted-foreground">
-                    Aujourd'hui. Pour une autre date, choisissez « Réservation à l'avance ».
-                  </p>
-                )}
                 {fieldErrors.pickupDate && <p className="text-sm text-destructive">{fieldErrors.pickupDate}</p>}
               </div>
               <div className="space-y-2">
@@ -432,7 +432,7 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
                 reservation for later has no odometer/carburant reading to
                 take yet. RentalsService.create() uses these to activate the
                 rental atomically, exactly like ActivateRentalDialog would. */}
-            {bookingMode === 'IMMEDIATE' && (
+            {isImmediate && (
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="mileageAtPickup" required>
@@ -498,7 +498,7 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
 
               {/* Only "Location immédiate" can encaisser anything on the spot
                   — a reservation for later has nothing to collect yet. */}
-              {bookingMode === 'IMMEDIATE' && hasDepositAmount && (
+              {isImmediate && hasDepositAmount && (
                 <div className="rounded-lg border border-border bg-muted/30 p-3">
                   <div className="flex items-center justify-between gap-4">
                     <div className="space-y-0.5">
@@ -534,7 +534,7 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
               )}
             </div>
 
-            {bookingMode === 'IMMEDIATE' && (
+            {isImmediate && (
               <div className="space-y-2">
                 <Label>Paiement du loyer</Label>
                 {/* Only one of Caution/loyer can be encaissé at creation — the

@@ -29,8 +29,8 @@ export const createRentalSchema = z
     // Omitted → the catalogue rate applies.
     dailyRate: z.coerce.number().positive('Le tarif journalier doit être positif').optional(),
     notes: z.string().trim().min(1).nullable().optional(),
-    // A payment already collected at booking time (the "Location immédiate"
-    // tab's own Paiement section) — created atomically alongside the rental
+    // A payment already collected at booking time (the Paiement section shown
+    // for a "Location immédiate", i.e. a pickup dated today) — created atomically alongside the rental
     // itself in RentalsService.create(), not as a separate follow-up call,
     // so a rental is never left referencing a payment that didn't actually
     // get created (or vice versa).
@@ -41,7 +41,7 @@ export const createRentalSchema = z
         method: z.enum(PAYMENT_METHODS),
       })
       .optional(),
-    // The "Location immédiate" tab's own remise-des-clés fields — when
+    // The remise-des-clés fields shown for a "Location immédiate" (pickup today) — when
     // present, RentalsService.create() moves the rental straight to ACTIVE
     // (and the car to RENTED) inside the same transaction as the creation,
     // exactly like a manual activate() would, instead of leaving a walk-in

@@ -135,7 +135,7 @@ export function RentalStatusCards({ summary, onSelect }: RentalStatusCardsProps)
             type="button"
             onClick={() => onSelect(segment.filter)}
             className={cn(
-              'relative overflow-hidden rounded-[20px] border p-[22px] text-left transition-transform duration-150 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+              'relative grid gap-2.5 overflow-hidden rounded-2xl border px-4 py-3.5 text-left transition-transform duration-150 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
               TONE_CARD[segment.tone],
             )}
           >
@@ -144,23 +144,33 @@ export function RentalStatusCards({ summary, onSelect }: RentalStatusCardsProps)
                 information; purely decorative so it's aria-hidden. */}
             <Icon
               aria-hidden
-              className={cn('pointer-events-none absolute -bottom-4 -right-3 h-24 w-24 -rotate-[8deg]', TONE_WATERMARK[segment.tone])}
+              className={cn('pointer-events-none absolute -bottom-3 -right-2 h-[72px] w-[72px] -rotate-[8deg]', TONE_WATERMARK[segment.tone])}
             />
-            <div
-              className={cn(
-                'relative mb-4 flex h-[38px] w-[38px] items-center justify-center rounded-xl',
-                TONE_ICON_BOX[segment.tone],
-              )}
-            >
-              <Icon className="h-[17px] w-[17px]" />
+            {/* Icon, name and number on one row — the number pinned right so
+                it lines up across the four cards; the name takes what's left
+                and wraps (up to two lines) when a 4-column row gets narrow. */}
+            <div className="relative flex items-center gap-3">
+              <div
+                className={cn(
+                  'flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]',
+                  TONE_ICON_BOX[segment.tone],
+                )}
+              >
+                <Icon className="h-[17px] w-[17px]" />
+              </div>
+              <p className="line-clamp-2 min-w-0 flex-1 text-[11.5px] font-bold uppercase leading-tight tracking-wide text-muted-foreground">
+                {segment.label}
+              </p>
+              <p
+                className={cn(
+                  'shrink-0 font-mono text-[28px] font-extrabold leading-none tracking-tight tabular-nums',
+                  TONE_VALUE[segment.tone],
+                )}
+              >
+                {segment.value}
+              </p>
             </div>
-            <p className="relative mb-2 text-[11.5px] font-bold uppercase tracking-wide text-muted-foreground">
-              {segment.label}
-            </p>
-            <p className={cn('relative font-mono text-4xl font-extrabold leading-none tracking-tight', TONE_VALUE[segment.tone])}>
-              {segment.value}
-            </p>
-            <div className="relative mt-3 flex items-center gap-1.5 text-xs">
+            <div className="relative flex min-w-0 items-center gap-1.5 text-xs">
               <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', TONE_DOT[segment.tone])} />
               <span className={TONE_STATUS_TEXT[segment.tone]}>{segment.status}</span>
             </div>

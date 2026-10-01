@@ -277,8 +277,8 @@ export const RentalsService = {
             tx,
           );
 
-          // A payment already collected at booking (the "Location immédiate"
-          // tab's own Paiement section) — created here, in the same
+          // A payment already collected at booking (the Paiement section of a
+          // "Location immédiate") — created here, in the same
           // transaction as the rental, so the two can never drift: either
           // both commit, or neither does.
           if (input.initialPayment) {
@@ -296,8 +296,8 @@ export const RentalsService = {
             );
           }
 
-          // A walk-in client picking up the car right now (the "Location
-          // immédiate" tab) skips the RESERVED state entirely — same
+          // A walk-in client picking up the car right now (a "Location
+          // immédiate": pickup dated today) skips the RESERVED state entirely — same
           // transaction as the creation, so the rental is never left
           // referencing keys that were never actually handed over (or vice
           // versa). No late-pickup recalculation here unlike activate():
@@ -707,6 +707,10 @@ export const RentalsService = {
   ) {
     const rental = await RentalsService.getById(agencyId, id);
 
+    if (rental.status === 'ACTIVE') {
+      return RentalsService.cancelHandover(agencyId, rental, input, userId, ipAddress);
+    }
+
     if (rental.status !== 'RESERVED') {
       throw new AppError(
         409,
@@ -742,5 +746,83 @@ export const RentalsService = {
       });
       return updated;
     });
+  },
+
+  // Calling off a handover on the spot (e.g. the client's test drive went
+  // badly): the rental never really happened, so it's CANCELLED — not
+  // COMPLETED, which would leave the full total owed and count it as a real
+  // rental in occupancy and the car's history. Only on the handover day
+  // itself; after that it's a genuine rental and goes through returnRental.
+  // Agency rule: everything collected is refunded in full.
+  async cancelHandover(
+    agencyId: string,
+    rental: NonNullable<Awaited<ReturnType<typeof RentalsRepository.findById>>>,
+    input: CancelRentalInput,
+    userId: string,
+    ipAddress?: string,
+  ) {
+    if (agencyDay(rental.pickupDate).getTime() !== agencyDay().getTime()) {
+      throw new AppError(
+        409,
+        'HANDOVER_CANCEL_EXPIRED',
+        "Une location en cours ne peut être annulée que le jour de la remise des clés. Utilisez « Clôturer » pour la terminer.",
+      );
+    }
+    if (!input.cancelledReason) {
+      throw new AppError(
+        400,
+        'CANCEL_REASON_REQUIRED',
+        "Indiquez le motif de l'annulation de la remise des clés.",
+      );
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const rentalGuarded = await RentalsRepository.updateGuarded(
+        rental.id,
+        ['ACTIVE'],
+        { status: 'CANCELLED', cancelledReason: input.cancelledReason },
+        tx,
+      );
+      if (!rentalGuarded) {
+        throw new AppError(
+          409,
+          'INVALID_RENTAL_STATE',
+          'Cette location a été modifiée entre-temps, veuillez réessayer.',
+        );
+      }
+
+      const carGuarded = await CarsRepository.updateStatusGuarded(
+        rental.carId,
+        ['RENTED'],
+        { status: 'AVAILABLE' },
+        tx,
+      );
+      if (!carGuarded) {
+        throw new AppError(
+          409,
+          'CAR_STATE_CONFLICT',
+          "L'état de la voiture a changé de manière inattendue.",
+        );
+      }
+
+      await PaymentsRepository.refundCollectedForRental(rental.id, tx);
+      await PaymentsRepository.archivePendingForRental(rental.id, tx);
+      // A collected caution is now handed back too.
+      if (rental.payments.some((p) => p.type === 'DEPOSIT' && p.status === 'COMPLETED')) {
+        await RentalsRepository.markDepositReturned(rental.id, tx);
+      }
+
+      const updated = await RentalsRepository.findById(agencyId, rental.id, undefined, tx);
+      await AuditService.record(tx, {
+        userId,
+        action: 'RENTAL_CANCEL',
+        entityType: 'Rental',
+        entityId: rental.id,
+        before: rental,
+        after: updated,
+        ipAddress,
+      });
+      return updated;
+    }, LIFECYCLE_ISOLATION);
   },
 };

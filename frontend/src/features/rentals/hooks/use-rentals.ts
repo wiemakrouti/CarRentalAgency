@@ -69,7 +69,7 @@ export function useCreateRentalMutation() {
       // (ClientsRepository.getStats counts every status, not just
       // COMPLETED) — shown on their profile sheet.
       queryClient.invalidateQueries({ queryKey: clientKeys.stats(rental.clientId) });
-      // The "Location immédiate" tab can optionally collect a payment right
+      // A "Location immédiate" (pickup today) can optionally collect a payment right
       // at booking (RentalsService.create's initialPayment) — the Finances
       // ledger and summary widget need to pick that up too.
       queryClient.invalidateQueries({ queryKey: paymentKeys.lists() });
@@ -77,7 +77,7 @@ export function useCreateRentalMutation() {
       // ...and that initial payment could itself be the DEPOSIT — a rental
       // booked and paid in one step can show up in "Cautions" immediately.
       queryClient.invalidateQueries({ queryKey: depositsKeys.all });
-      // The "Location immédiate" tab can also activate the rental right at
+      // A "Location immédiate" (pickup today) can also activate the rental right at
       // booking (RentalsService.create's activation) — same reminder
       // implications as a manual activate() (its RENTAL_PICKUP_OVERDUE
       // reminder never applies, a return-due-soon one might already).
