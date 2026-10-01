@@ -5,7 +5,7 @@ import {
   type UpdateCarInput,
 } from '@car-rental/shared';
 import { prisma } from '../lib/prisma-client.js';
-import { overlappingRentalsFilter } from '../lib/rental-availability.js';
+import { BOOKABLE_CAR_STATUSES, overlappingRentalsFilter } from '../lib/rental-availability.js';
 import type { CarExportQuery, CarListQuery } from '../validators/car.validator.js';
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -249,7 +249,7 @@ export const CarsRepository = {
   findAvailable(agencyId: string, params: { pickupDate: Date; returnDate: Date }, db: Db = prisma) {
     const availabilityFilter: Prisma.CarWhereInput = {
       agencyId,
-      status: 'AVAILABLE',
+      status: { in: [...BOOKABLE_CAR_STATUSES] },
       rentals: { none: overlappingRentalsFilter(params) },
     };
 

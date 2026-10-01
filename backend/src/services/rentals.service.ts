@@ -15,7 +15,8 @@ import { RentalExtensionsRepository } from '../repositories/rental-extensions.re
 import { CarsService } from './cars.service.js';
 import { ClientsService } from './clients.service.js';
 import { AuditService } from './audit.service.js';
-import { formatDateOnly, startOfDayUTC } from '../lib/date-utils.js';
+import { agencyDay, formatDateOnly } from '../lib/date-utils.js';
+import { BOOKABLE_CAR_STATUSES } from '../lib/rental-availability.js';
 import type { RentalListQuery, RentalOccupancyQuery } from '../validators/rental.validator.js';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -34,7 +35,9 @@ const AUTO_PAYMENT_METHOD = 'CASH';
 const AUTO_PAYMENT_STATUS = 'PENDING';
 
 function generateRentalNumber(): string {
-  const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  // The agency's own date (Tunis), not UTC's — otherwise a rental created
+  // between 00:00 and 01:00 was numbered with the previous day.
+  const datePart = formatDateOnly(agencyDay()).replace(/-/g, '');
   const randomPart = Math.random().toString(36).slice(2, 6).toUpperCase();
   return `LOC-${datePart}-${randomPart}`;
 }
@@ -44,6 +47,19 @@ function generateRentalNumber(): string {
 function calculateNights(pickupDate: Date, plannedReturnDate: Date): number {
   const nights = Math.ceil((plannedReturnDate.getTime() - pickupDate.getTime()) / MS_PER_DAY);
   return Math.max(nights, 1);
+}
+
+// The odometer can't run backward: a pickup reading below the car's own
+// recorded mileage is a typo (or the car's mileage was entered wrong), and
+// letting it through would corrupt every later mileage check on this car.
+function assertMileageNotBelowOdometer(mileageAtPickup: number, carMileage: number) {
+  if (mileageAtPickup < carMileage) {
+    throw new AppError(
+      400,
+      'MILEAGE_BELOW_ODOMETER',
+      `Le kilométrage au départ (${mileageAtPickup.toLocaleString('fr-FR')} km) est inférieur au compteur de la voiture (${carMileage.toLocaleString('fr-FR')} km). Si le compteur enregistré est erroné, corrigez-le dans la fiche de la voiture.`,
+    );
+  }
 }
 
 export const RentalsService = {
@@ -61,16 +77,9 @@ export const RentalsService = {
   // and getSummary() on the same page load just no-ops the second time.
   async sweepExpiredReservations(agencyId: string) {
     // Start of today, not `new Date()` — a reservation whose plannedReturnDate
-    // is today hasn't actually expired until today is over. startOfDayUTC, not
-    // startOfToday's server-local midnight: plannedReturnDate is UTC-midnight
-    // of a calendar day, and on any server not running in UTC (this one runs
-    // in Africa/Lagos, UTC+1) a local midnight rolls over up to `offset` early
-    // — which used to auto-cancel a reservation up to an hour before its
-    // planned day had actually finished.
-    const expired = await RentalsRepository.findExpiredReservations(
-      agencyId,
-      startOfDayUTC(new Date()),
-    );
+    // is today hasn't actually expired until today is over. agencyDay (the
+    // Tunis calendar day), the same "today" every other rental view uses.
+    const expired = await RentalsRepository.findExpiredReservations(agencyId, agencyDay());
     if (expired.length === 0) return 0;
 
     await prisma.$transaction(async (tx) => {
@@ -123,10 +132,7 @@ export const RentalsService = {
     // An ongoing rental (no actualReturnDate yet) counts as occupying every
     // day up to and including today — never plannedReturnDate, which for an
     // overdue return already sits in the past while the car is still out.
-    // "Today" is truncated with startOfDayUTC, not startOfToday's local
-    // midnight, to stay in the same UTC-midnight terms as `from`/`to`/
-    // `pickup` above.
-    const ongoingEnd = new Date(startOfDayUTC(new Date()).getTime() + MS_PER_DAY);
+    const ongoingEnd = new Date(agencyDay().getTime() + MS_PER_DAY);
 
     const days: { date: string; count: number }[] = [];
     for (
@@ -135,11 +141,12 @@ export const RentalsService = {
       cursor = new Date(cursor.getTime() + MS_PER_DAY)
     ) {
       const count = rentals.reduce((total, rental) => {
-        const pickup = rental.pickupDate;
-        // actualReturnDate is a real timestamp (returnRental below sets it
-        // to `new Date()`), not a date-only value like pickupDate — still
-        // needs truncating to a comparable UTC calendar day.
-        const end = rental.actualReturnDate ? startOfDayUTC(rental.actualReturnDate) : ongoingEnd;
+        // Both truncated to their (Tunis) calendar day: actualReturnDate is
+        // always a real timestamp, and so is pickupDate once activate() has
+        // set it to the handover instant — compared raw, a car handed over
+        // at 10:00 didn't count as out on its own pickup day.
+        const pickup = agencyDay(rental.pickupDate);
+        const end = rental.actualReturnDate ? agencyDay(rental.actualReturnDate) : ongoingEnd;
         return cursor.getTime() >= pickup.getTime() && cursor.getTime() < end.getTime()
           ? total + 1
           : total;
@@ -161,11 +168,40 @@ export const RentalsService = {
     const car = await CarsService.getById(agencyId, input.carId);
     await ClientsService.getById(agencyId, input.clientId);
 
-    if (car.status !== 'AVAILABLE') {
+    // RENTED passes here on purpose (see BOOKABLE_CAR_STATUSES): whether the
+    // car is actually free for *these* dates is the overlap check's job
+    // below, which also blocks a same-day booking while it's still out.
+    if (!(BOOKABLE_CAR_STATUSES as readonly string[]).includes(car.status)) {
       throw new AppError(
         409,
         'CAR_NOT_AVAILABLE',
         `Cette voiture n'est pas disponible actuellement (statut : ${car.status}).`,
+      );
+    }
+
+    // A booking can't start in the past: as a reservation it would read as
+    // "départ en retard" from the moment it's created, and the remise des
+    // clés would then re-date it to today anyway. Today itself is fine.
+    if (input.pickupDate.getTime() < agencyDay().getTime()) {
+      throw new AppError(
+        400,
+        'PICKUP_DATE_IN_PAST',
+        'La date de prise en charge ne peut pas être antérieure à aujourd’hui.',
+      );
+    }
+
+    // A handover (activation) means the client leaves with the keys right
+    // now, so it's only meaningful for a rental starting today. Without
+    // this guard, a future-dated "Location immédiate" was created straight
+    // as ACTIVE with its car flipped to RENTED weeks ahead of time — showing
+    // as "en cours" before its date and hiding the car from every other
+    // booking in the meantime. A future pickup must go through the
+    // RESERVED → activate() path instead.
+    if (input.activation && input.pickupDate.getTime() !== agencyDay().getTime()) {
+      throw new AppError(
+        400,
+        'IMMEDIATE_PICKUP_NOT_TODAY',
+        "Une location immédiate doit commencer aujourd'hui. Pour une autre date, utilisez la réservation à l'avance.",
       );
     }
 
@@ -186,6 +222,12 @@ export const RentalsService = {
         'CAR_NOT_AVAILABLE',
         'Cette voiture est déjà réservée pour ces dates.',
       );
+    }
+
+    // After the availability checks: for a car that isn't free anyway,
+    // "unavailable" is the useful answer, not its odometer.
+    if (input.activation) {
+      assertMileageNotBelowOdometer(input.activation.mileageAtPickup, car.mileage);
     }
 
     const setting = await prisma.setting.findFirst({ where: { agencyId } });
@@ -280,10 +322,11 @@ export const RentalsService = {
               );
             }
 
+            // The pickup reading is now the car's current odometer.
             const carActivated = await CarsRepository.updateStatusGuarded(
               input.carId,
               ['AVAILABLE'],
-              { status: 'RENTED' },
+              { status: 'RENTED', mileage: input.activation.mileageAtPickup },
               tx,
             );
             if (!carActivated) {
@@ -351,6 +394,8 @@ export const RentalsService = {
       );
     }
 
+    assertMileageNotBelowOdometer(input.mileageAtPickup, rental.car.mileage);
+
     // Activation always records the moment the keys actually change hands,
     // not whatever pickupDate was originally booked — recalculated
     // unconditionally, not just for a late pickup. An early activation (the
@@ -360,8 +405,12 @@ export const RentalsService = {
     // on-time activation lands on the same night count either way
     // (calculateNights rounds up), so this never double-charges or
     // undercharges the common case.
+    // Nights counted from today's calendar day, not the exact instant: from
+    // `now` itself, a handover between 00:00 and 01:00 (Tunis) on the
+    // scheduled day — still the previous day in UTC — billed one night more
+    // than an on-time activation any other hour of that same day.
     const now = new Date();
-    const totalAmount = calculateNights(now, rental.plannedReturnDate) * Number(rental.dailyRate);
+    const totalAmount = calculateNights(agencyDay(now), rental.plannedReturnDate) * Number(rental.dailyRate);
 
     return prisma.$transaction(async (tx) => {
       // An early activation widens the car's occupied window backward to
@@ -404,10 +453,11 @@ export const RentalsService = {
         );
       }
 
+      // The pickup reading is now the car's current odometer.
       const carGuarded = await CarsRepository.updateStatusGuarded(
         rental.carId,
         ['AVAILABLE'],
-        { status: 'RENTED' },
+        { status: 'RENTED', mileage: input.mileageAtPickup },
         tx,
       );
       if (!carGuarded) {
@@ -459,23 +509,16 @@ export const RentalsService = {
 
     const actualReturnDate = new Date();
     // Full calendar days late — returning any time on the planned return day
-    // itself is 0 days late, not 1: comparing the exact instant (the old
-    // `actualReturnDate > plannedReturnDate` + Math.ceil) rounded any moment
-    // past midnight of that day up to a full day late, charging a fee for a
-    // return that was actually on time. actualReturnDate (a real timestamp)
-    // is truncated with startOfDayUTC, not startOfDay's server-local midnight
-    // — plannedReturnDate is already UTC midnight, so comparing it against a
-    // local-midnight truncation of actualReturnDate silently mis-charges a
-    // return made in the last `offset` stretch of the planned day itself (on
-    // this server, the last hour before UTC midnight: local time has already
-    // rolled to the next calendar day, billing an on-time return as 1 day
-    // late). plannedReturnDate needs no truncation of its own — it's already
-    // the UTC-midnight instant this comparison wants.
+    // itself is 0 days late, not 1: comparing the exact instant rounded any
+    // moment past midnight of that day up to a full day late, charging a fee
+    // for a return that was actually on time. actualReturnDate (a real
+    // timestamp) is truncated to its Tunis calendar day (agencyDay) — a UTC
+    // truncation billed a return made between 00:00 and 01:00 one day short.
+    // plannedReturnDate is already a calendar day.
     const lateDays = Math.max(
       0,
       Math.floor(
-        (startOfDayUTC(actualReturnDate).getTime() - rental.plannedReturnDate.getTime()) /
-          MS_PER_DAY,
+        (agencyDay(actualReturnDate).getTime() - rental.plannedReturnDate.getTime()) / MS_PER_DAY,
       ),
     );
     const lateFeeAmount = lateDays * Number(rental.dailyRate);

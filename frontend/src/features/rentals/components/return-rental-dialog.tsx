@@ -65,7 +65,10 @@ export function ReturnRentalDialog({ open, onOpenChange, rental }: ReturnRentalD
   } = useForm<ReturnRentalInput>({
     resolver: zodResolver(returnRentalSchema),
     defaultValues: {
-      mileageAtReturn: rental.car.mileage,
+      // The car's own odometer isn't updated at handover, so it can sit
+      // below what was read at pickup — prefilling it made the default value
+      // itself fail the backend's "return ≥ pickup mileage" check.
+      mileageAtReturn: Math.max(rental.car.mileage, rental.mileageAtPickup ?? 0),
       fuelLevelAtReturn: '',
       carStatusAfterReturn: 'AVAILABLE',
     },
@@ -213,7 +216,12 @@ export function ReturnRentalDialog({ open, onOpenChange, rental }: ReturnRentalD
                   placeholder="Ex. Rayure portière avant droite"
                   className="min-h-16 resize-none"
                   rows={2}
-                  {...register('damageFeeNotes')}
+                  // Optional field: left empty, it must reach the schema as
+                  // undefined — an empty string failed its min(1) and blocked
+                  // closing every rental that had no damage to describe.
+                  {...register('damageFeeNotes', {
+                    setValueAs: (v: string) => (v.trim() === '' ? undefined : v),
+                  })}
                 />
                 {errors.damageFeeNotes && (
                   <p className="text-sm text-destructive">{errors.damageFeeNotes.message}</p>

@@ -41,6 +41,7 @@ export function ActivateRentalDialog({ open, onOpenChange, rental }: ActivateRen
     register,
     handleSubmit,
     reset,
+    setError,
     formState: { errors },
   } = useForm<ActivateRentalInput>({
     resolver: zodResolver(activateRentalSchema),
@@ -73,10 +74,19 @@ export function ActivateRentalDialog({ open, onOpenChange, rental }: ActivateRen
   const originalTotal = Number(rental.totalAmount);
   const originalNights = Math.round(originalTotal / dailyRate);
 
-  const adjustedNights = isDateAdjusted ? Math.max(1, Math.ceil((plannedReturnTime - now) / MS_PER_DAY)) : originalNights;
+  // Day to day, same as the backend — not from the exact instant `now`.
+  const plannedReturnDay = toLocalDayOnly(new Date(plannedReturnTime)).getTime();
+  const adjustedNights = isDateAdjusted ? Math.max(1, Math.round((plannedReturnDay - today) / MS_PER_DAY)) : originalNights;
   const adjustedTotal = isDateAdjusted ? adjustedNights * dailyRate : originalTotal;
 
   async function onSubmit(values: ActivateRentalInput) {
+    // Same rule the backend enforces — caught here, right under the field.
+    if (values.mileageAtPickup < rental.car.mileage) {
+      setError('mileageAtPickup', {
+        message: `Inférieur au compteur de la voiture (${rental.car.mileage.toLocaleString('fr-TN')} km).`,
+      });
+      return;
+    }
     try {
       await activateMutation.mutateAsync({ id: rental.id, input: values });
       toast.success('Location activée : remise des clés enregistrée.');
@@ -106,6 +116,7 @@ export function ActivateRentalDialog({ open, onOpenChange, rental }: ActivateRen
               <Input
                 id="mileageAtPickup"
                 type="number"
+                min={rental.car.mileage}
                 {...register('mileageAtPickup', { setValueAs: Number })}
               />
               {errors.mileageAtPickup && (

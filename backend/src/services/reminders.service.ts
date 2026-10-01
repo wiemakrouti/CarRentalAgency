@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma-client.js';
+import { agencyDay } from '../lib/date-utils.js';
 import { RentalsService } from './rentals.service.js';
 
 export type ReminderType =
@@ -67,16 +68,13 @@ export class RemindersService {
     const todayUtcMidnight = new Date(
       Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
     );
-    // The rental queries below reuse this same todayUtcMidnight, not a
-    // separate server-local "start of today" — pickupDate/plannedReturnDate
-    // get the exact same "not overdue until the day is over" treatment as
-    // the calendar-day fields above (rental-calendar.ts's
-    // getEffectiveRentalStatus mirrors this same boundary on the frontend),
-    // rather than the exact instant `now`, which used to mark a rental
-    // "en retard"/"non récupérée" the moment any hour past midnight of its
-    // due day ticked by. A local-midnight cutoff here would silently disagree
-    // with these UTC-midnight fields by the server's own offset — on a
-    // server not running in UTC, up to `offset` early.
+    // The rental queries below use the agency's own calendar day instead
+    // (agencyDay, Tunis time) — the same "today" the Rentals table, KPI
+    // header and calendars use, so a rental is never "en retard" here while
+    // those still show it on schedule. Still a calendar day, not the exact
+    // instant `now`, which used to mark a rental "en retard"/"non récupérée"
+    // the moment any hour past midnight of its due day ticked by.
+    const today = agencyDay(now);
 
     const [
       dueSoonRentals,
@@ -96,7 +94,7 @@ export class RemindersService {
           agencyId,
           status: 'ACTIVE',
           deletedAt: null,
-          plannedReturnDate: { gte: todayUtcMidnight, lte: horizon },
+          plannedReturnDate: { gte: today, lte: horizon },
         },
       }),
       prisma.rental.findMany({
@@ -104,7 +102,7 @@ export class RemindersService {
           agencyId,
           status: 'ACTIVE',
           deletedAt: null,
-          plannedReturnDate: { lt: todayUtcMidnight },
+          plannedReturnDate: { lt: today },
         },
       }),
       // A RESERVED rental whose pickupDate has passed without ever being
@@ -118,7 +116,7 @@ export class RemindersService {
           agencyId,
           status: 'RESERVED',
           deletedAt: null,
-          pickupDate: { lt: todayUtcMidnight },
+          pickupDate: { lt: today },
         },
       }),
       // No lower bound: a maintenance due date already in the past is

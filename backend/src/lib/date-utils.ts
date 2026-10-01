@@ -21,6 +21,32 @@ export function startOfDayUTC(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
+// The agency's own wall-clock timezone. Each deployment serves a single
+// Tunisian agency (see CLAUDE.md § Project Context), so this is a constant
+// rather than a per-agency setting.
+const AGENCY_TIME_ZONE = 'Africa/Tunis';
+
+// The calendar day `now` falls on *as the agency sees it* (today by
+// default), in the same UTC-midnight representation as pickupDate/
+// plannedReturnDate — so it compares directly against a date the admin
+// picked in an <input type="date">, which the browser reads in Tunis time.
+// Unlike startOfDayUTC, this doesn't read the date from UTC: between 00:00
+// and 01:00 in Tunis it's still "yesterday" in UTC, so a UTC-based "today"
+// disagreed with the browser for that hour. Use it for every rental rule
+// that hinges on a calendar day: "today" (overdue/upcoming, auto-cancel,
+// same-day handover) and the day a real timestamp fell on (an activation's
+// pickupDate, an actualReturnDate).
+export function agencyDay(now: Date = new Date()): Date {
+  // en-CA formats as YYYY-MM-DD, which new Date() parses as UTC midnight.
+  const day = new Intl.DateTimeFormat('en-CA', {
+    timeZone: AGENCY_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+  return new Date(day);
+}
+
 // `date` is UTC midnight of a calendar day (z.coerce.date() of a
 // YYYY-MM-DD query param) — but a real timestamp field (createdAt, paidAt...)
 // compared with a plain `lte: date` would exclude almost everything recorded

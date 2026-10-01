@@ -80,6 +80,18 @@ ssh ubuntu@<vps-ip> '(crontab -l 2>/dev/null; echo "15 3 * * * /home/ubuntu/back
 
 To restore a dump: `gunzip -c /home/ubuntu/backups/<file>.sql.gz | docker compose -f docker-compose.prod.yml exec -T postgres psql -U postgres car_rental_agence`.
 
+## One-off data repairs
+
+Repair scripts live in `backend/src/scripts/`, ship compiled inside the backend image, and are dry-run by default (they only list what they'd change until passed `--apply`). Always take a backup first:
+
+```
+~/backup-db.sh
+docker compose -f docker-compose.prod.yml exec backend node dist/scripts/<script>.js           # dry run
+docker compose -f docker-compose.prod.yml exec backend node dist/scripts/<script>.js --apply
+```
+
+- `revert-premature-activations` — puts back to `RESERVED` (car `AVAILABLE`) the rentals created as "Location immédiate" with a future pickup date before that was blocked. Rentals whose date has since arrived are only listed for manual checking.
+
 Registering a new agency on its own VPS later: repeat this whole section with a fresh VPS, domain (or subdomain), and Resend-verified sender — never point a second agency's frontend at an existing agency's backend.
 
 ## Environment variables

@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 import { createRentalSchema, PAYMENT_METHODS, type PaymentMethod } from '@car-rental/shared';
 
 import { ApiClientError } from '@/lib/api-client';
 import { useAvailableCarsQuery } from '@/features/cars/hooks/use-cars';
-import { useClientsQuery } from '@/features/clients/hooks/use-clients';
+import type { Client } from '@/features/clients/api/clients.api';
+import { ClientCombobox } from '@/features/clients/components/client-combobox';
 import { PAYMENT_METHOD_LABELS } from '@/features/finances/lib/finance-labels';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -54,6 +56,25 @@ function todayInputValue(): string {
   return `${y}-${m}-${d}`;
 }
 
+function formatDay(value: string): string {
+  return new Date(value).toLocaleDateString('fr-TN');
+}
+
+// Non-blocking: renting to a client whose permis is (or will be) expired is
+// the agency's call, but it should never happen by accident. Compared as
+// calendar days (YYYY-MM-DD), the same representation as the date inputs.
+function licenseWarning(client: Client | null, pickupDate: string, plannedReturnDate: string): string | null {
+  if (!client?.drivingLicenseExpiry || !pickupDate) return null;
+  const expiry = client.drivingLicenseExpiry.slice(0, 10);
+  if (expiry < pickupDate) {
+    return `Le permis de ce client a expiré le ${formatDay(expiry)}.`;
+  }
+  if (plannedReturnDate && expiry < plannedReturnDate) {
+    return `Le permis de ce client expire le ${formatDay(expiry)}, avant la fin de la location.`;
+  }
+  return null;
+}
+
 export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDialogProps) {
   // Two tabs, not a checkbox or a radio card — "Location immédiate" is the
   // default (first) tab and owns the Paiement section, since collecting
@@ -63,7 +84,7 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
   const [pickupDate, setPickupDate] = useState(() => todayInputValue());
   const [plannedReturnDate, setPlannedReturnDate] = useState('');
   const [carId, setCarId] = useState<string | undefined>(undefined);
-  const [clientId, setClientId] = useState<string | undefined>(undefined);
+  const [client, setClient] = useState<Client | null>(null);
   const [depositAmount, setDepositAmount] = useState('');
   // "Encaissée maintenant" — a toggle right on the Caution field, not a
   // separate amount input: the amount collected is unambiguously the
@@ -111,10 +132,10 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
 
   const datesValid = Boolean(pickupDate && plannedReturnDate && plannedReturnDate > pickupDate);
   const { data: availableCars, isLoading: isLoadingCars } = useAvailableCarsQuery(pickupDate, plannedReturnDate);
-  const { data: clientsData } = useClientsQuery({ pageSize: 100 });
   const createMutation = useCreateRentalMutation();
 
   const selectedCar = availableCars?.find((c) => c.id === carId);
+  const clientLicenseWarning = licenseWarning(client, pickupDate, plannedReturnDate);
   const nights = datesValid
     ? Math.max(Math.ceil((new Date(plannedReturnDate).getTime() - new Date(pickupDate).getTime()) / MS_PER_DAY), 1)
     : 0;
@@ -150,6 +171,16 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCar?.id]);
 
+  // The dialog stays mounted between openings, and in "Immédiate" its date
+  // field is locked — re-sync it to today on every open so a page left
+  // open overnight can't submit a stale (now rejected) pickup date.
+  useEffect(() => {
+    if (open && bookingMode === 'IMMEDIATE') {
+      setPickupDate(todayInputValue());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   // Only switching TO "Immédiate" acts (prefills today) — switching away is
   // just a declaration, it never clears a date the admin already chose.
   function handleBookingModeChange(mode: BookingMode) {
@@ -162,9 +193,21 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
 
+    // Checks the shared schema can't express: "today" depends on the
+    // admin's clock, and the odometer on the car picked. The backend
+    // enforces both too — these just catch them right under the field.
+    const extraErrors: Record<string, string> = {};
+    if (pickupDate && pickupDate < todayInputValue()) {
+      extraErrors.pickupDate = "La date de prise en charge ne peut pas être antérieure à aujourd'hui.";
+    }
+    if (bookingMode === 'IMMEDIATE' && selectedCar && mileageAtPickup !== '' && Number(mileageAtPickup) < selectedCar.mileage) {
+      extraErrors['activation.mileageAtPickup'] =
+        `Inférieur au compteur de la voiture (${selectedCar.mileage.toLocaleString('fr-TN')} km).`;
+    }
+
     const parsed = createRentalSchema.safeParse({
       carId,
-      clientId,
+      clientId: client?.id,
       pickupDate: pickupDate || undefined,
       plannedReturnDate: plannedReturnDate || undefined,
       depositAmount: depositAmount === '' ? undefined : Number(depositAmount),
@@ -188,9 +231,9 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
           : undefined,
     });
 
-    if (!parsed.success) {
-      const errors: Record<string, string> = {};
-      parsed.error.issues.forEach((issue) => {
+    if (!parsed.success || Object.keys(extraErrors).length > 0) {
+      const errors: Record<string, string> = { ...extraErrors };
+      parsed.error?.issues.forEach((issue) => {
         // Nested errors (e.g. initialPayment.amount) join to a dotted key so
         // they can be looked up right under their own input, not lumped
         // under a generic "initialPayment" that no field reads from.
@@ -250,12 +293,23 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
                 <Label htmlFor="pickupDate" required>
                   Date de prise en charge
                 </Label>
+                {/* Locked to today in "Immédiate": the keys are handed over
+                    now, so the rental is created ACTIVE — a future date here
+                    would mark it "en cours" before it starts (the backend
+                    rejects that too). Other dates go through "À l'avance". */}
                 <Input
                   id="pickupDate"
                   type="date"
                   value={pickupDate}
+                  min={todayInputValue()}
                   onChange={(e) => setPickupDate(e.target.value)}
+                  disabled={bookingMode === 'IMMEDIATE'}
                 />
+                {bookingMode === 'IMMEDIATE' && (
+                  <p className="text-xs text-muted-foreground">
+                    Aujourd'hui. Pour une autre date, choisissez « Réservation à l'avance ».
+                  </p>
+                )}
                 {fieldErrors.pickupDate && <p className="text-sm text-destructive">{fieldErrors.pickupDate}</p>}
               </div>
               <div className="space-y-2">
@@ -266,6 +320,7 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
                   id="plannedReturnDate"
                   type="date"
                   value={plannedReturnDate}
+                  min={pickupDate || todayInputValue()}
                   onChange={(e) => setPlannedReturnDate(e.target.value)}
                 />
                 {fieldErrors.plannedReturnDate && (
@@ -360,23 +415,17 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
             )}
 
             <div className="space-y-2">
-              <Label required>Client</Label>
-              <Select value={clientId} onValueChange={setClientId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Sélectionner un client" />
-                </SelectTrigger>
-                <SelectContent>
-                  {clientsData?.items.map((client) => (
-                    <SelectItem key={client.id} value={client.id}>
-                      <span className="flex items-center gap-2">
-                        {client.firstName} {client.lastName}
-                        <span className="text-muted-foreground">— {client.phone}</span>
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="clientId" required>
+                Client
+              </Label>
+              <ClientCombobox id="clientId" value={client} onChange={setClient} />
               {fieldErrors.clientId && <p className="text-sm text-destructive">{fieldErrors.clientId}</p>}
+              {clientLicenseWarning && (
+                <Alert variant="warning">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>{clientLicenseWarning}</AlertDescription>
+                </Alert>
+              )}
             </div>
 
             {/* Only "Location immédiate" hands the car over right now — a
@@ -392,6 +441,7 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
                   <Input
                     id="mileageAtPickup"
                     type="number"
+                    min={selectedCar?.mileage ?? 0}
                     value={mileageAtPickup}
                     onChange={(e) => setMileageAtPickup(e.target.value)}
                   />

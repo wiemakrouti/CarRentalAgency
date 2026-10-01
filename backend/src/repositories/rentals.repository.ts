@@ -2,7 +2,7 @@ import type { Prisma, PrismaClient, RentalStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma-client.js';
 import { notDeleted } from './soft-delete.js';
 import { overlappingRentalsFilter } from '../lib/rental-availability.js';
-import { startOfDayUTC } from '../lib/date-utils.js';
+import { agencyDay, endOfDayExclusive } from '../lib/date-utils.js';
 import type { RentalListQuery } from '../validators/rental.validator.js';
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -43,10 +43,9 @@ function buildWhere(agencyId: string, query: RentalListQuery): Prisma.RentalWher
   // today is over, so comparing against `now` instead flagged it "en retard"
   // the moment any hour past midnight ticked by (rental-calendar.ts's
   // getEffectiveRentalStatus mirrors this same boundary on the frontend).
-  // startOfDayUTC, not startOfToday's server-local midnight: pickupDate/
-  // plannedReturnDate are UTC-midnight of a calendar day, and a local cutoff
-  // would silently disagree with them by the server's own UTC offset.
-  const today = startOfDayUTC(new Date());
+  // agencyDay (Tunis calendar day), not a UTC or server-local one — the
+  // same "today" the browser's calendars and badges use.
+  const today = agencyDay();
   if (query.pickupOverdue !== undefined) {
     where.status = 'RESERVED';
     where.pickupDate = query.pickupOverdue ? { lt: today } : { gte: today };
@@ -78,15 +77,25 @@ function buildWhere(agencyId: string, query: RentalListQuery): Prisma.RentalWher
     };
   }
 
+  // Every word must match some field, but not necessarily the same one —
+  // so "Amine Ben Salah" (first + last name) or "Clio 123 TUN" still find
+  // the rental, where matching the whole phrase against each single field
+  // found nothing. A license plate's own words ("123 TUN 4567") each still
+  // match that same plate.
   if (query.search) {
-    where.OR = [
-      { rentalNumber: { contains: query.search, mode: 'insensitive' } },
-      { car: { brand: { contains: query.search, mode: 'insensitive' } } },
-      { car: { model: { contains: query.search, mode: 'insensitive' } } },
-      { car: { licensePlate: { contains: query.search, mode: 'insensitive' } } },
-      { client: { firstName: { contains: query.search, mode: 'insensitive' } } },
-      { client: { lastName: { contains: query.search, mode: 'insensitive' } } },
-    ];
+    where.AND = query.search
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((term) => ({
+        OR: [
+          { rentalNumber: { contains: term, mode: 'insensitive' } },
+          { car: { brand: { contains: term, mode: 'insensitive' } } },
+          { car: { model: { contains: term, mode: 'insensitive' } } },
+          { car: { licensePlate: { contains: term, mode: 'insensitive' } } },
+          { client: { firstName: { contains: term, mode: 'insensitive' } } },
+          { client: { lastName: { contains: term, mode: 'insensitive' } } },
+        ],
+      }));
   }
 
   return where;
@@ -179,9 +188,8 @@ export const RentalsRepository = {
   async getSummaryCounts(agencyId: string, db: Db = prisma) {
     // Start of today, not `now` — see buildWhere's own comment above: a
     // pickup/return due today isn't overdue until today is actually over.
-    // startOfDayUTC, not startOfToday's server-local midnight — same reason
-    // as buildWhere's own `today` above.
-    const today = startOfDayUTC(new Date());
+    // agencyDay — same reason as buildWhere's own `today` above.
+    const today = agencyDay();
     const [active, overdueReturn, overduePickup, upcomingReservations] = await Promise.all([
       db.rental.count({
         where: { agencyId, status: 'ACTIVE', deletedAt: null, plannedReturnDate: { gte: today } },
@@ -211,17 +219,18 @@ export const RentalsRepository = {
   // Day-by-day bucketing happens in the service, not here: Prisma has no
   // clean way to "count per calendar day over a range" without raw SQL.
   //
-  // pickupDate uses `lte`, not `lt`: a rental picked up exactly on `to`
-  // (e.g. a car collected earlier today) must still be a candidate, or it
-  // silently vanishes from that day's count — the day-bucketing loop below
-  // already treats `to` as inclusive, so the candidate filter has to agree.
+  // pickupDate is compared against the *end* of `to`, not `to` itself: a
+  // rental activated today has a real handover timestamp (activate() sets
+  // pickupDate to `now`, e.g. 10:00), which is later than `to`'s midnight —
+  // a plain `lte: to` silently dropped every car handed over today from
+  // today's count.
   findOccupancyRentals(agencyId: string, from: Date, to: Date, db: Db = prisma) {
     return db.rental.findMany({
       where: {
         agencyId,
         deletedAt: null,
         status: { in: ['ACTIVE', 'COMPLETED'] },
-        pickupDate: { lte: to },
+        pickupDate: { lt: endOfDayExclusive(to) },
         OR: [{ actualReturnDate: null }, { actualReturnDate: { gt: from } }],
       },
       select: { pickupDate: true, actualReturnDate: true },

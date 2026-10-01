@@ -761,6 +761,8 @@ async function seedDemoRentals(agencyId: string, adminUserId: string) {
         plannedReturnDate: input.plannedReturnDate,
         actualReturnDate: input.actualReturnDate ?? null,
         dailyRate,
+        // Demo rentals are all at the catalogue rate (no negotiated price).
+        catalogDailyRate: dailyRate,
         totalAmount: dailyRate * nights,
         depositAmount,
         depositReturned: input.status === 'COMPLETED',
@@ -1295,6 +1297,7 @@ async function seedCalendarTestRentals(agencyId: string, adminUserId: string) {
           plannedReturnDate,
           actualReturnDate,
           dailyRate,
+          catalogDailyRate: dailyRate,
           totalAmount: dailyRate * nights,
           depositAmount,
           depositReturned: status === 'COMPLETED',

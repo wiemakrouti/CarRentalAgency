@@ -107,6 +107,8 @@ export const AUDIT_ACTIONS = [
   'RENTAL_EXTEND',
   'RENTAL_CANCEL',
   'RENTAL_AUTO_CANCEL',
+  // One-off data repair (backend/src/scripts/revert-premature-activations.ts).
+  'RENTAL_REVERT_ACTIVATION',
   'CAR_IMAGE_ADD',
   'CAR_IMAGE_REMOVE',
   'CAR_IMAGE_SET_PRIMARY',

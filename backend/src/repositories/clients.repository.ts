@@ -24,14 +24,22 @@ const LICENSE_EXPIRY_WARNING_DAYS = 30;
 function buildWhere(agencyId: string, query: ClientFilterQuery): Prisma.ClientWhereInput {
   const where: Prisma.ClientWhereInput = { agencyId };
 
+  // Every word must match some field, not necessarily the same one — so
+  // "Amine Ben Salah" (first + last name) finds the client, where matching
+  // the whole phrase against each single field found nothing.
   if (query.search) {
-    where.OR = [
-      { firstName: { contains: query.search, mode: 'insensitive' } },
-      { lastName: { contains: query.search, mode: 'insensitive' } },
-      { phone: { contains: query.search, mode: 'insensitive' } },
-      { email: { contains: query.search, mode: 'insensitive' } },
-      { drivingLicenseNumber: { contains: query.search, mode: 'insensitive' } },
-    ];
+    where.AND = query.search
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((term) => ({
+        OR: [
+          { firstName: { contains: term, mode: 'insensitive' } },
+          { lastName: { contains: term, mode: 'insensitive' } },
+          { phone: { contains: term, mode: 'insensitive' } },
+          { email: { contains: term, mode: 'insensitive' } },
+          { drivingLicenseNumber: { contains: term, mode: 'insensitive' } },
+        ],
+      }));
   }
 
   if (query.city) {
