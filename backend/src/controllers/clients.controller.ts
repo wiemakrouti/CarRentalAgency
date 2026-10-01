@@ -7,7 +7,7 @@ import {
 import { AppError } from '../utils/app-error.js';
 import { ClientsService } from '../services/clients.service.js';
 import type {
-  ClientCheckPhoneQuery,
+  ClientCheckDuplicatesQuery,
   ClientExportQuery,
   ClientListQuery,
 } from '../validators/client.validator.js';
@@ -44,9 +44,9 @@ export const ClientsController = {
     res.status(200).send(buffer);
   },
 
-  async checkPhoneDuplicate(req: Request, res: Response) {
-    const { phone, excludeId } = req.query as unknown as ClientCheckPhoneQuery;
-    const matches = await ClientsService.checkPhoneDuplicate(req.user!.agencyId, phone, excludeId);
+  async checkDuplicates(req: Request, res: Response) {
+    const query = req.query as unknown as ClientCheckDuplicatesQuery;
+    const matches = await ClientsService.checkDuplicates(req.user!.agencyId, query);
     res.status(200).json({ success: true, data: matches });
   },
 

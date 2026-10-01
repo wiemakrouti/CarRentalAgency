@@ -162,13 +162,29 @@ export const ClientsRepository = {
     });
   },
 
-  // Non-blocking duplicate-phone check (see ClientsService.checkPhoneDuplicate)
-  // — exact match on the stored string, same as the email uniqueness
-  // constraint, no digit normalization in this v1.
-  findByPhone(agencyId: string, phone: string, excludeId: string | undefined, db: Db = prisma) {
+  // Non-blocking duplicate check (see ClientsService.checkDuplicates):
+  // clients sharing the phone, CIN or licence number being typed. Exact
+  // match on the trimmed value (case-insensitive for the two ID numbers),
+  // no digit normalization. Full records, so the form can offer "use this
+  // client" directly.
+  findPotentialDuplicates(
+    agencyId: string,
+    fields: { phone?: string; nationalIdNumber?: string; drivingLicenseNumber?: string },
+    excludeId: string | undefined,
+    db: Db = prisma,
+  ) {
+    const or: Prisma.ClientWhereInput[] = [];
+    if (fields.phone) or.push({ phone: fields.phone });
+    if (fields.nationalIdNumber) {
+      or.push({ nationalIdNumber: { equals: fields.nationalIdNumber, mode: 'insensitive' } });
+    }
+    if (fields.drivingLicenseNumber) {
+      or.push({ drivingLicenseNumber: { equals: fields.drivingLicenseNumber, mode: 'insensitive' } });
+    }
     return db.client.findMany({
-      where: { agencyId, phone, id: excludeId ? { not: excludeId } : undefined },
-      select: { id: true, firstName: true, lastName: true, phone: true },
+      where: { agencyId, OR: or, id: excludeId ? { not: excludeId } : undefined },
+      include: { documents: true },
+      take: 5,
     });
   },
 

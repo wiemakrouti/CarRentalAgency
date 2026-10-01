@@ -1,4 +1,4 @@
-import type { ClientListParams } from './clients.api';
+import type { ClientDuplicateFields, ClientListParams } from './clients.api';
 
 export const clientKeys = {
   all: ['clients'] as const,
@@ -8,6 +8,6 @@ export const clientKeys = {
   detail: (id: string) => [...clientKeys.details(), id] as const,
   stats: (id: string) => [...clientKeys.all, 'stats', id] as const,
   deletable: (id: string) => [...clientKeys.all, 'deletable', id] as const,
-  phoneDuplicate: (phone: string, excludeId?: string) =>
-    [...clientKeys.all, 'phone-duplicate', phone, excludeId] as const,
+  duplicates: (fields: ClientDuplicateFields, excludeId?: string) =>
+    [...clientKeys.all, 'duplicates', fields, excludeId] as const,
 };

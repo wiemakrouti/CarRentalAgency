@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ClientDocumentType, CreateClientInput, UpdateClientInput } from '@car-rental/shared';
 import { notificationKeys } from '@/features/notifications/api/notifications.keys';
-import { clientsApi, type ClientListParams } from '../api/clients.api';
+import { clientsApi, type ClientDuplicateFields, type ClientListParams } from '../api/clients.api';
 import { clientKeys } from '../api/clients.keys';
 
 export function useClientsQuery(params: ClientListParams) {
@@ -38,15 +38,21 @@ export function useClientDeletableQuery(id: string, enabled: boolean) {
   });
 }
 
-// Powers the non-blocking duplicate-phone warning in ClientFormDialog — no
-// long cache lifetime since the whole point is to reflect what's in the
-// database right now, not a value worth keeping around after the field
-// changes again.
-export function useCheckPhoneDuplicateQuery(phone: string, excludeId?: string) {
+// Powers the non-blocking duplicate warning in ClientFormDialog (phone, CIN,
+// licence number) — no long cache lifetime since the whole point is to
+// reflect what's in the database right now. Values shorter than 4
+// characters are ignored: too short to identify anyone, and they'd match
+// on every keystroke.
+export function useCheckDuplicatesQuery(fields: ClientDuplicateFields, excludeId?: string) {
+  const usable: ClientDuplicateFields = {};
+  for (const [key, value] of Object.entries(fields) as [keyof ClientDuplicateFields, string | undefined][]) {
+    const trimmed = value?.trim() ?? '';
+    if (trimmed.length > 3) usable[key] = trimmed;
+  }
   return useQuery({
-    queryKey: clientKeys.phoneDuplicate(phone, excludeId),
-    queryFn: () => clientsApi.checkPhoneDuplicate(phone, excludeId),
-    enabled: phone.trim().length > 3,
+    queryKey: clientKeys.duplicates(usable, excludeId),
+    queryFn: () => clientsApi.checkDuplicates(usable, excludeId),
+    enabled: Object.keys(usable).length > 0,
     staleTime: 0,
   });
 }

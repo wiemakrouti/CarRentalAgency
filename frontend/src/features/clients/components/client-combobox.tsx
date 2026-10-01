@@ -1,10 +1,17 @@
 import { useState } from 'react';
-import { Check, ChevronsUpDown, Loader2 } from 'lucide-react';
+import { Check, ChevronsUpDown, Loader2, UserPlus } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { Button } from '@/components/ui/button';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import {
+  Command,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 import type { Client } from '../api/clients.api';
@@ -16,6 +23,9 @@ type ClientComboboxProps = {
   value: Client | null;
   onChange: (client: Client | null) => void;
   id?: string;
+  // When given, the list always ends with "+ Nouveau client" — called with
+  // whatever was typed so the caller can prefill the new client's form.
+  onCreateNew?: (search: string) => void;
 };
 
 // Searchable client picker backed by the server-side /clients search, so it
@@ -23,7 +33,7 @@ type ClientComboboxProps = {
 // page of results silently hid every client past the first 100. Hands back
 // the whole Client (not just its id) so callers can read its details (e.g.
 // the driving-licence expiry) without a second fetch.
-export function ClientCombobox({ value, onChange, id }: ClientComboboxProps) {
+export function ClientCombobox({ value, onChange, id, onCreateNew }: ClientComboboxProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search.trim());
@@ -73,7 +83,9 @@ export function ClientCombobox({ value, onChange, id }: ClientComboboxProps) {
                 Recherche...
               </div>
             ) : (
-              <CommandEmpty>Aucun client trouvé.</CommandEmpty>
+              // Explicit rather than cmdk's <CommandEmpty>, which never shows
+              // while the "Nouveau client" item is in the list.
+              clients.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">Aucun client trouvé.</p>
             )}
             {clients.length > 0 && (
               <CommandGroup>
@@ -92,6 +104,24 @@ export function ClientCombobox({ value, onChange, id }: ClientComboboxProps) {
                   </CommandItem>
                 ))}
               </CommandGroup>
+            )}
+            {onCreateNew && (
+              <>
+                {clients.length > 0 && <CommandSeparator />}
+                <CommandGroup>
+                  <CommandItem
+                    value="__create__"
+                    onSelect={() => {
+                      onCreateNew(search.trim());
+                      setOpen(false);
+                    }}
+                    className="text-primary"
+                  >
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    {search.trim() ? `Nouveau client « ${search.trim()} »` : 'Nouveau client'}
+                  </CommandItem>
+                </CommandGroup>
+              </>
             )}
             {hasMore && (
               <p className="border-t border-border px-3 py-2 text-xs text-muted-foreground">

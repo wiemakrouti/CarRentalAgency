@@ -12,7 +12,7 @@ import {
 } from '../lib/cloudinary-client.js';
 import { ClientsRepository } from '../repositories/clients.repository.js';
 import { AuditService } from './audit.service.js';
-import type { ClientExportQuery, ClientListQuery } from '../validators/client.validator.js';
+import type { ClientCheckDuplicatesQuery, ClientExportQuery, ClientListQuery } from '../validators/client.validator.js';
 
 const UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
 const FOREIGN_KEY_CONSTRAINT_VIOLATION = 'P2003';
@@ -246,12 +246,23 @@ export const ClientsService = {
     return ClientsRepository.getStats(id);
   },
 
-  // Non-blocking — the form dialog shows this as a warning, never a hard
-  // stop, since two clients (e.g. family members) can legitimately share a
-  // phone number. See client-form-dialog.tsx.
-  async checkPhoneDuplicate(agencyId: string, phone: string, excludeId?: string) {
-    const matches = await ClientsRepository.findByPhone(agencyId, phone, excludeId);
-    return matches;
+  // Non-blocking — the form dialog shows these as a warning, never a hard
+  // stop: family members can share a phone, and a client may come back with
+  // a renewed licence. Each match says which field(s) it shares, so the
+  // warning can name them. See client-form-dialog.tsx.
+  async checkDuplicates(agencyId: string, query: ClientCheckDuplicatesQuery) {
+    const { excludeId, ...fields } = query;
+    const clients = await ClientsRepository.findPotentialDuplicates(agencyId, fields, excludeId);
+    const same = (a: string | null, b: string | undefined) =>
+      Boolean(a && b && a.trim().toLowerCase() === b.trim().toLowerCase());
+    return clients.map((client) => ({
+      client,
+      matchedOn: [
+        ...(same(client.phone, fields.phone) ? ['phone' as const] : []),
+        ...(same(client.nationalIdNumber, fields.nationalIdNumber) ? ['nationalIdNumber' as const] : []),
+        ...(same(client.drivingLicenseNumber, fields.drivingLicenseNumber) ? ['drivingLicenseNumber' as const] : []),
+      ],
+    }));
   },
 
   async exportCsv(agencyId: string, query: ClientExportQuery): Promise<string> {

@@ -65,11 +65,15 @@ export type ClientStats = {
   reliabilityRate: number | null;
 };
 
-export type ClientPhoneMatch = {
-  id: string;
-  firstName: string;
-  lastName: string;
-  phone: string;
+export type ClientDuplicateField = 'phone' | 'nationalIdNumber' | 'drivingLicenseNumber';
+
+export type ClientDuplicateFields = Partial<Record<ClientDuplicateField, string>>;
+
+// An existing client sharing at least one identity field with the one being
+// typed — `matchedOn` says which.
+export type ClientDuplicateMatch = {
+  client: Client;
+  matchedOn: ClientDuplicateField[];
 };
 
 export type ClientDeletable = {
@@ -82,8 +86,8 @@ export const clientsApi = {
   getById: (id: string) => apiClient.get<Client>(`/clients/${id}`),
   getStats: (id: string) => apiClient.get<ClientStats>(`/clients/${id}/stats`),
   checkDeletable: (id: string) => apiClient.get<ClientDeletable>(`/clients/${id}/deletable`),
-  checkPhoneDuplicate: (phone: string, excludeId?: string) =>
-    apiClient.get<ClientPhoneMatch[]>(`/clients/check-phone${buildQueryString({ phone, excludeId })}`),
+  checkDuplicates: (fields: ClientDuplicateFields, excludeId?: string) =>
+    apiClient.get<ClientDuplicateMatch[]>(`/clients/check-duplicates${buildQueryString({ ...fields, excludeId })}`),
   create: (input: CreateClientInput) => apiClient.post<Client>('/clients', input),
   update: (id: string, input: UpdateClientInput) => apiClient.patch<Client>(`/clients/${id}`, input),
   delete: (id: string) => apiClient.delete<{ deleted: boolean }>(`/clients/${id}`),

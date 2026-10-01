@@ -7,7 +7,7 @@ import { asyncHandler } from '../utils/async-handler.js';
 import { uploadClientDocument } from '../middleware/upload.js';
 import { ClientsController } from '../controllers/clients.controller.js';
 import {
-  clientCheckPhoneQuerySchema,
+  clientCheckDuplicatesQuerySchema,
   clientDocumentIdParamSchema,
   clientExportQuerySchema,
   clientIdParamSchema,
@@ -18,7 +18,7 @@ export const clientsRouter = Router();
 
 clientsRouter.use('/clients', authenticate, authorize('ADMIN'));
 
-// Must be registered before /clients/:id so "export"/"check-phone" aren't
+// Must be registered before /clients/:id so "export"/"check-duplicates" aren't
 // matched as an id (mirrors /cars/export in cars.routes.ts).
 clientsRouter.get(
   '/clients/export',
@@ -31,9 +31,9 @@ clientsRouter.get(
   asyncHandler(ClientsController.exportXlsx),
 );
 clientsRouter.get(
-  '/clients/check-phone',
-  validate({ query: clientCheckPhoneQuerySchema }),
-  asyncHandler(ClientsController.checkPhoneDuplicate),
+  '/clients/check-duplicates',
+  validate({ query: clientCheckDuplicatesQuerySchema }),
+  asyncHandler(ClientsController.checkDuplicates),
 );
 
 clientsRouter.get('/clients', validate({ query: clientListQuerySchema }), asyncHandler(ClientsController.list));

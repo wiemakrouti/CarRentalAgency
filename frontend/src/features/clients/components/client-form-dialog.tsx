@@ -31,9 +31,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 
-import type { Client } from '../api/clients.api';
+import type { Client, ClientDuplicateField } from '../api/clients.api';
 import {
-  useCheckPhoneDuplicateQuery,
+  useCheckDuplicatesQuery,
   useCreateClientMutation,
   useUpdateClientMutation,
   useUploadClientDocumentMutation,
@@ -50,6 +50,20 @@ type ClientFormDialogProps = {
   // badge) land the admin directly on the field to fix, instead of a form
   // they have to hunt through themselves.
   focusField?: 'drivingLicenseExpiry';
+  // Add form only: prefills fields (e.g. the name typed in a rental's
+  // client search), and reports the client once created so the caller can
+  // select it right away.
+  initialValues?: Partial<UpdateClientInput>;
+  onCreated?: (client: Client) => void;
+  // When given, each duplicate warning offers "Utiliser ce client" — picks
+  // the existing record instead of creating a second one.
+  onUseExisting?: (client: Client) => void;
+};
+
+const DUPLICATE_FIELD_LABELS: Record<ClientDuplicateField, string> = {
+  phone: 'le même téléphone',
+  nationalIdNumber: 'le même n° de CIN',
+  drivingLicenseNumber: 'le même n° de permis',
 };
 
 // A document can only be uploaded once the client exists (the endpoint is
@@ -76,11 +90,11 @@ function dateToInputValue(date: Date | null | undefined): string {
   return `${y}-${m}-${d}`;
 }
 
-function buildDefaultValues(client?: Client): UpdateClientInput {
+function buildDefaultValues(client?: Client, initialValues?: Partial<UpdateClientInput>): UpdateClientInput {
   if (!client) {
     // New clients default to the agency's own nationality — the vast
     // majority of walk-in clients — rather than starting the picker empty.
-    return { nationality: DEFAULT_CLIENT_NATIONALITY };
+    return { nationality: DEFAULT_CLIENT_NATIONALITY, ...initialValues };
   }
   return {
     firstName: client.firstName,
@@ -102,7 +116,15 @@ function errorMessage(err: unknown, fallback: string): string {
   return err instanceof ApiClientError ? err.message : fallback;
 }
 
-export function ClientFormDialog({ open, onOpenChange, client, focusField }: ClientFormDialogProps) {
+export function ClientFormDialog({
+  open,
+  onOpenChange,
+  client,
+  focusField,
+  initialValues,
+  onCreated,
+  onUseExisting,
+}: ClientFormDialogProps) {
   const isEdit = Boolean(client);
   const createMutation = useCreateClientMutation();
   const updateMutation = useUpdateClientMutation();
@@ -118,7 +140,7 @@ export function ClientFormDialog({ open, onOpenChange, client, focusField }: Cli
     formState: { errors },
   } = useForm<UpdateClientInput>({
     resolver: zodResolver(isEdit ? updateClientSchema : createClientSchema) as Resolver<UpdateClientInput>,
-    defaultValues: buildDefaultValues(client),
+    defaultValues: buildDefaultValues(client, initialValues),
   });
 
   const [pendingDocuments, setPendingDocuments] = useState<PendingDocument[]>([]);
@@ -132,7 +154,7 @@ export function ClientFormDialog({ open, onOpenChange, client, focusField }: Cli
   // the newly-selected client's actual data.
   useEffect(() => {
     if (open) {
-      reset(buildDefaultValues(client));
+      reset(buildDefaultValues(client, initialValues));
       setPendingDocuments((prev) => {
         prev.forEach((d) => URL.revokeObjectURL(d.previewUrl));
         return [];
@@ -152,13 +174,18 @@ export function ClientFormDialog({ open, onOpenChange, client, focusField }: Cli
     return () => clearTimeout(timer);
   }, [open, focusField]);
 
-  // Non-blocking duplicate warning — a phone number can legitimately be
-  // shared (e.g. family members), so this never prevents saving, unlike the
-  // email uniqueness constraint enforced server-side.
-  const phoneValue = watch('phone') ?? '';
-  const debouncedPhone = useDebouncedValue(phoneValue);
-  const { data: phoneMatches } = useCheckPhoneDuplicateQuery(debouncedPhone, client?.id);
-  const hasPhoneDuplicate = Boolean(phoneMatches && phoneMatches.length > 0);
+  // Non-blocking duplicate warning on phone, CIN and licence number — never
+  // prevents saving (family members share phones, a licence gets renewed),
+  // unlike the email uniqueness constraint enforced server-side.
+  // Debounced one string at a time — a fresh object literal would never be
+  // equal to the previous one and would re-render endlessly.
+  const debouncedPhone = useDebouncedValue(watch('phone') ?? '');
+  const debouncedCin = useDebouncedValue(watch('nationalIdNumber') ?? '');
+  const debouncedLicense = useDebouncedValue(watch('drivingLicenseNumber') ?? '');
+  const { data: duplicates } = useCheckDuplicatesQuery(
+    { phone: debouncedPhone, nationalIdNumber: debouncedCin, drivingLicenseNumber: debouncedLicense },
+    client?.id,
+  );
 
   function handlePendingFileSelected(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -221,6 +248,7 @@ export function ClientFormDialog({ open, onOpenChange, client, focusField }: Cli
         } else {
           toast.success(pendingDocuments.length > 0 ? 'Client et documents ajoutés.' : 'Client ajouté.');
         }
+        onCreated?.(newClient);
       }
       onOpenChange(false);
     } catch (err) {
@@ -279,17 +307,6 @@ export function ClientFormDialog({ open, onOpenChange, client, focusField }: Cli
                 />
                 {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
               </div>
-              {hasPhoneDuplicate && (
-                <div className="col-span-2">
-                  <Alert variant="warning">
-                    <UserRoundSearch className="h-4 w-4" />
-                    <AlertDescription>
-                      Un client avec ce numéro existe déjà :{' '}
-                      {phoneMatches!.map((m) => `${m.firstName} ${m.lastName}`).join(', ')}.
-                    </AlertDescription>
-                  </Alert>
-                </div>
-              )}
               <div className="space-y-2">
                 <Label htmlFor="dateOfBirth" required>
                   Date de naissance
@@ -469,6 +486,42 @@ export function ClientFormDialog({ open, onOpenChange, client, focusField }: Cli
             </>
           )}
           </div>
+
+          {/* Outside the scroll area, right above the buttons: it stays in
+              view whichever field (phone at the top, CIN/permis further
+              down) triggered it. */}
+          {duplicates && duplicates.length > 0 && (
+            <Alert variant="warning" className="mt-4">
+              <UserRoundSearch className="h-4 w-4" />
+              <AlertDescription>
+                <ul className="space-y-1.5">
+                  {duplicates.map(({ client: match, matchedOn }) => (
+                    <li key={match.id} className="flex flex-wrap items-center justify-between gap-2">
+                      <span>
+                        <span className="font-semibold">
+                          {match.firstName} {match.lastName}
+                        </span>{' '}
+                        a déjà {matchedOn.map((f) => DUPLICATE_FIELD_LABELS[f]).join(', ')}.
+                      </span>
+                      {onUseExisting && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            onUseExisting(match);
+                            onOpenChange(false);
+                          }}
+                        >
+                          Utiliser ce client
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

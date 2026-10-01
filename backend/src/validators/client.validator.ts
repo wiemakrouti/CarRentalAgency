@@ -36,9 +36,17 @@ export const clientExportQuerySchema = clientListQuerySchema.omit({ page: true, 
 
 export type ClientExportQuery = z.infer<typeof clientExportQuerySchema>;
 
-export const clientCheckPhoneQuerySchema = z.object({
-  phone: z.string().trim().min(1),
-  excludeId: z.string().uuid().optional(),
-});
+// Any subset of the three identity fields a duplicate is checked on — at
+// least one must be given.
+export const clientCheckDuplicatesQuerySchema = z
+  .object({
+    phone: z.string().trim().min(1).optional(),
+    nationalIdNumber: z.string().trim().min(1).optional(),
+    drivingLicenseNumber: z.string().trim().min(1).optional(),
+    excludeId: z.string().uuid().optional(),
+  })
+  .refine((q) => q.phone || q.nationalIdNumber || q.drivingLicenseNumber, {
+    message: 'Indiquez au moins un champ à vérifier.',
+  });
 
-export type ClientCheckPhoneQuery = z.infer<typeof clientCheckPhoneQuerySchema>;
+export type ClientCheckDuplicatesQuery = z.infer<typeof clientCheckDuplicatesQuerySchema>;

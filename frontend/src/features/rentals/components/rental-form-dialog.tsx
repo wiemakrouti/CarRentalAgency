@@ -7,6 +7,7 @@ import { ApiClientError } from '@/lib/api-client';
 import { useAvailableCarsQuery } from '@/features/cars/hooks/use-cars';
 import type { Client } from '@/features/clients/api/clients.api';
 import { ClientCombobox } from '@/features/clients/components/client-combobox';
+import { ClientFormDialog } from '@/features/clients/components/client-form-dialog';
 import { PAYMENT_METHOD_LABELS } from '@/features/finances/lib/finance-labels';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -85,11 +86,27 @@ function licenseWarning(client: Client | null, pickupDate: string, plannedReturn
   return null;
 }
 
+// Turns what was typed in the client search into a head start for the new
+// client's form: a number goes to the phone, otherwise the first word is
+// the first name and the rest the last name ("Amine Ben Salah").
+function newClientPrefill(search: string): { firstName?: string; lastName?: string; phone?: string } {
+  const text = search.trim();
+  if (!text) return {};
+  if (/^[\d\s+./-]+$/.test(text)) return { phone: text };
+  const [firstName, ...rest] = text.split(/\s+/);
+  return { firstName, lastName: rest.join(' ') || undefined };
+}
+
 export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDialogProps) {
   const [pickupDate, setPickupDate] = useState(() => todayInputValue());
   const [plannedReturnDate, setPlannedReturnDate] = useState('');
   const [carId, setCarId] = useState<string | undefined>(undefined);
   const [client, setClient] = useState<Client | null>(null);
+  // "+ Nouveau client" in the client search opens the regular client form on
+  // top of this one; the created (or picked existing) client comes back
+  // selected, and everything already filled in here is kept.
+  const [newClientOpen, setNewClientOpen] = useState(false);
+  const [newClientSearch, setNewClientSearch] = useState('');
   const [depositAmount, setDepositAmount] = useState('');
   // "Encaissée maintenant" — a toggle right on the Caution field, not a
   // separate amount input: the amount collected is unambiguously the
@@ -266,257 +283,316 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85vh] max-w-xl flex-col">
-        <DialogHeader>
-          <DialogTitle>Nouvelle location</DialogTitle>
-          <DialogDescription>Choisissez les dates, puis la voiture et le client.</DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="flex max-h-[85vh] max-w-xl flex-col">
+          <DialogHeader>
+            <DialogTitle>Nouvelle location</DialogTitle>
+            <DialogDescription>Choisissez les dates, puis la voiture et le client.</DialogDescription>
+          </DialogHeader>
 
-        {/* The footer sits outside this scrolling div, not pinned via
-            `position: sticky` inside it — a sticky footer sharing the same
-            scroll container as tall content (like the Caution/Paiement
-            blocks below) gets visually pulled up over whatever hasn't
-            scrolled past it yet, cutting off/overlapping that content
-            instead of floating cleanly above it. Splitting the scroll
-            region from the footer like this means the footer is simply
-            never part of what can overlap — it's always fully visible. */}
-        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col" noValidate>
-          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto">
-            <Tabs value={bookingMode} onValueChange={(v) => handleBookingModeChange(v as BookingMode)}>
-              {/* h-auto + whitespace-normal override TabsTrigger's default
-                  single-line fit: at dialog widths under ~420px, "Réservation
-                  à l'avance" doesn't fit half a 2-column row on one line and
-                  was overflowing past the dialog edge instead of wrapping. */}
-              <TabsList className="grid h-auto w-full grid-cols-2">
-                <TabsTrigger value="IMMEDIATE" className="whitespace-normal py-2 text-center leading-tight">
-                  Location immédiate
-                </TabsTrigger>
-                <TabsTrigger value="ADVANCE" className="whitespace-normal py-2 text-center leading-tight">
-                  Réservation à l'avance
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+          {/* The footer sits outside this scrolling div, not pinned via
+              `position: sticky` inside it — a sticky footer sharing the same
+              scroll container as tall content (like the Caution/Paiement
+              blocks below) gets visually pulled up over whatever hasn't
+              scrolled past it yet, cutting off/overlapping that content
+              instead of floating cleanly above it. Splitting the scroll
+              region from the footer like this means the footer is simply
+              never part of what can overlap — it's always fully visible. */}
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col" noValidate>
+            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto">
+              <Tabs value={bookingMode} onValueChange={(v) => handleBookingModeChange(v as BookingMode)}>
+                {/* h-auto + whitespace-normal override TabsTrigger's default
+                    single-line fit: at dialog widths under ~420px, "Réservation
+                    à l'avance" doesn't fit half a 2-column row on one line and
+                    was overflowing past the dialog edge instead of wrapping. */}
+                <TabsList className="grid h-auto w-full grid-cols-2">
+                  <TabsTrigger value="IMMEDIATE" className="whitespace-normal py-2 text-center leading-tight">
+                    Location immédiate
+                  </TabsTrigger>
+                  <TabsTrigger value="ADVANCE" className="whitespace-normal py-2 text-center leading-tight">
+                    Réservation à l'avance
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="pickupDate" required>
-                  Date de prise en charge
-                </Label>
-                <Input
-                  id="pickupDate"
-                  type="date"
-                  value={pickupDate}
-                  min={todayInputValue()}
-                  onChange={(e) => setPickupDate(e.target.value)}
-                />
-                {fieldErrors.pickupDate && <p className="text-sm text-destructive">{fieldErrors.pickupDate}</p>}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="plannedReturnDate" required>
-                  Date de retour prévue
-                </Label>
-                <Input
-                  id="plannedReturnDate"
-                  type="date"
-                  value={plannedReturnDate}
-                  min={pickupDate || todayInputValue()}
-                  onChange={(e) => setPlannedReturnDate(e.target.value)}
-                />
-                {fieldErrors.plannedReturnDate && (
-                  <p className="text-sm text-destructive">{fieldErrors.plannedReturnDate}</p>
-                )}
-              </div>
-            </div>
-
-            <Separator />
-
-            <div className="space-y-2">
-              <Label required>Voiture</Label>
-              <Select value={carId} onValueChange={setCarId} disabled={!datesValid || isLoadingCars}>
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={
-                      !datesValid
-                        ? 'Choisissez d\'abord les dates'
-                        : isLoadingCars
-                          ? 'Chargement...'
-                          : 'Sélectionner une voiture'
-                    }
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="pickupDate" required>
+                    Date de prise en charge
+                  </Label>
+                  <Input
+                    id="pickupDate"
+                    type="date"
+                    value={pickupDate}
+                    min={todayInputValue()}
+                    onChange={(e) => setPickupDate(e.target.value)}
                   />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableCars?.map((car) => (
-                    <SelectItem key={car.id} value={car.id}>
-                      {car.brand} {car.model} ({car.licensePlate}) — {Number(car.dailyRate).toLocaleString('fr-TN')} DT/jour
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {datesValid && !isLoadingCars && availableCars?.length === 0 && (
-                <p className="text-sm text-muted-foreground">Aucune voiture disponible pour ces dates.</p>
-              )}
-              {fieldErrors.carId && <p className="text-sm text-destructive">{fieldErrors.carId}</p>}
-            </div>
-
-            {selectedCar && catalogDailyRate !== null && (
-              <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-0.5">
-                    <Label htmlFor={isCustomRate ? 'customDailyRate' : undefined}>Tarif journalier</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Tarif catalogue : {catalogDailyRate.toLocaleString('fr-TN')} DT/jour
-                    </p>
-                  </div>
-                  {isCustomRate ? (
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setCustomDailyRate(null)}>
-                      Rétablir le tarif d'origine
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCustomDailyRate(String(catalogDailyRate))}
-                    >
-                      Modifier le tarif
-                    </Button>
+                  {fieldErrors.pickupDate && <p className="text-sm text-destructive">{fieldErrors.pickupDate}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="plannedReturnDate" required>
+                    Date de retour prévue
+                  </Label>
+                  <Input
+                    id="plannedReturnDate"
+                    type="date"
+                    value={plannedReturnDate}
+                    min={pickupDate || todayInputValue()}
+                    onChange={(e) => setPlannedReturnDate(e.target.value)}
+                  />
+                  {fieldErrors.plannedReturnDate && (
+                    <p className="text-sm text-destructive">{fieldErrors.plannedReturnDate}</p>
                   )}
                 </div>
-                {isCustomRate && (
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <Label required>Voiture</Label>
+                <Select value={carId} onValueChange={setCarId} disabled={!datesValid || isLoadingCars}>
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={
+                        !datesValid
+                          ? 'Choisissez d\'abord les dates'
+                          : isLoadingCars
+                            ? 'Chargement...'
+                            : 'Sélectionner une voiture'
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableCars?.map((car) => (
+                      <SelectItem key={car.id} value={car.id}>
+                        {car.brand} {car.model} ({car.licensePlate}) — {Number(car.dailyRate).toLocaleString('fr-TN')} DT/jour
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {datesValid && !isLoadingCars && availableCars?.length === 0 && (
+                  <p className="text-sm text-muted-foreground">Aucune voiture disponible pour ces dates.</p>
+                )}
+                {fieldErrors.carId && <p className="text-sm text-destructive">{fieldErrors.carId}</p>}
+              </div>
+
+              {selectedCar && catalogDailyRate !== null && (
+                <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-0.5">
+                      <Label htmlFor={isCustomRate ? 'customDailyRate' : undefined}>Tarif journalier</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Tarif catalogue : {catalogDailyRate.toLocaleString('fr-TN')} DT/jour
+                      </p>
+                    </div>
+                    {isCustomRate ? (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setCustomDailyRate(null)}>
+                        Rétablir le tarif d'origine
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCustomDailyRate(String(catalogDailyRate))}
+                      >
+                        Modifier le tarif
+                      </Button>
+                    )}
+                  </div>
+                  {isCustomRate && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-3">
+                        <Input
+                          id="customDailyRate"
+                          type="number"
+                          step="0.001"
+                          min="0"
+                          autoFocus
+                          className="max-w-[180px]"
+                          value={customDailyRate}
+                          onChange={(e) => setCustomDailyRate(e.target.value)}
+                        />
+                        <span className="text-sm text-muted-foreground">DT/jour</span>
+                        {rateDifferencePercent !== null && (
+                          <span className="text-sm font-medium text-muted-foreground">
+                            {rateDifferencePercent > 0 ? '+' : ''}
+                            {rateDifferencePercent} %
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        S'applique à cette location uniquement (prolongations et frais de retard inclus) — le tarif
+                        de la voiture reste inchangé.
+                      </p>
+                    </div>
+                  )}
+                  {fieldErrors.dailyRate && <p className="text-sm text-destructive">{fieldErrors.dailyRate}</p>}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="clientId" required>
+                  Client
+                </Label>
+                <ClientCombobox
+                  id="clientId"
+                  value={client}
+                  onChange={setClient}
+                  onCreateNew={(search) => {
+                    setNewClientSearch(search);
+                    setNewClientOpen(true);
+                  }}
+                />
+                {fieldErrors.clientId && <p className="text-sm text-destructive">{fieldErrors.clientId}</p>}
+                {clientLicenseWarning && (
+                  <Alert variant="warning">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>{clientLicenseWarning}</AlertDescription>
+                  </Alert>
+                )}
+              </div>
+
+              {/* Only "Location immédiate" hands the car over right now — a
+                  reservation for later has no odometer/carburant reading to
+                  take yet. RentalsService.create() uses these to activate the
+                  rental atomically, exactly like ActivateRentalDialog would. */}
+              {isImmediate && (
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <div className="flex items-center gap-3">
+                    <Label htmlFor="mileageAtPickup" required>
+                      Kilométrage au départ
+                    </Label>
+                    <Input
+                      id="mileageAtPickup"
+                      type="number"
+                      min={selectedCar?.mileage ?? 0}
+                      value={mileageAtPickup}
+                      onChange={(e) => setMileageAtPickup(e.target.value)}
+                    />
+                    {fieldErrors['activation.mileageAtPickup'] && (
+                      <p className="text-sm text-destructive">{fieldErrors['activation.mileageAtPickup']}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="fuelLevelAtPickup" required>
+                      Niveau de carburant
+                    </Label>
+                    <Input
+                      id="fuelLevelAtPickup"
+                      placeholder="Ex. Plein, 3/4, Moitié..."
+                      value={fuelLevelAtPickup}
+                      onChange={(e) => setFuelLevelAtPickup(e.target.value)}
+                    />
+                    {fieldErrors['activation.fuelLevelAtPickup'] && (
+                      <p className="text-sm text-destructive">{fieldErrors['activation.fuelLevelAtPickup']}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {estimatedTotal !== null && (
+                <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
+                  {nights} nuit{nights > 1 ? 's' : ''} × {effectiveDailyRate!.toLocaleString('fr-TN')} DT
+                  {rateDifferencePercent !== null && (
+                    <span className="text-muted-foreground">
+                      {' '}
+                      (au lieu de {catalogDailyRate!.toLocaleString('fr-TN')} DT)
+                    </span>
+                  )}{' '}
+                  = <span className="font-semibold">{estimatedTotal.toLocaleString('fr-TN')} DT</span>
+                </div>
+              )}
+
+              <Separator />
+
+              <div className="space-y-2">
+                <Label htmlFor="depositAmount">Caution</Label>
+                <Input
+                  id="depositAmount"
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  placeholder="Montant par défaut de l'agence"
+                  value={depositAmount}
+                  onChange={(e) => setDepositAmount(e.target.value)}
+                />
+                {fieldErrors.depositAmount && (
+                  <p className="text-sm text-destructive">{fieldErrors.depositAmount}</p>
+                )}
+
+                {/* Only "Location immédiate" can encaisser anything on the spot
+                    — a reservation for later has nothing to collect yet. */}
+                {isImmediate && hasDepositAmount && (
+                  <div className="rounded-lg border border-border bg-muted/30 p-3">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="space-y-0.5">
+                        <Label htmlFor="collectDepositNow" className="cursor-pointer">
+                          Encaissée maintenant
+                        </Label>
+                      </div>
+                      <Switch
+                        id="collectDepositNow"
+                        checked={collectDepositNow}
+                        onCheckedChange={handleToggleCollectDepositNow}
+                        disabled={rentalPaymentAmount !== ''}
+                      />
+                    </div>
+                    {collectDepositNow && (
+                      <div className="mt-3 space-y-2">
+                        <Label>Méthode</Label>
+                        <Select value={depositMethod} onValueChange={(v) => setDepositMethod(v as PaymentMethod)}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PAYMENT_METHODS.map((m) => (
+                              <SelectItem key={m} value={m}>
+                                {PAYMENT_METHOD_LABELS[m]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {isImmediate && (
+                <div className="space-y-2">
+                  <Label>Paiement du loyer</Label>
+                  {/* Only one of Caution/loyer can be encaissé at creation — the
+                      other is added afterward from the fiche's "+ Ajouter",
+                      already préseedé intelligemment for that case. */}
+                  <div
+                    className={`grid grid-cols-2 gap-4 rounded-lg border border-border bg-muted/30 p-3 ${
+                      collectDepositNow ? 'opacity-50' : ''
+                    }`}
+                  >
+                    <div className="space-y-2">
+                      <Label htmlFor="rentalPaymentAmount">Montant (DT)</Label>
                       <Input
-                        id="customDailyRate"
+                        id="rentalPaymentAmount"
                         type="number"
                         step="0.001"
                         min="0"
-                        autoFocus
-                        className="max-w-[180px]"
-                        value={customDailyRate}
-                        onChange={(e) => setCustomDailyRate(e.target.value)}
+                        disabled={collectDepositNow}
+                        value={rentalPaymentAmount}
+                        onChange={(e) => handleRentalPaymentAmountChange(e.target.value)}
                       />
-                      <span className="text-sm text-muted-foreground">DT/jour</span>
-                      {rateDifferencePercent !== null && (
-                        <span className="text-sm font-medium text-muted-foreground">
-                          {rateDifferencePercent > 0 ? '+' : ''}
-                          {rateDifferencePercent} %
-                        </span>
+                      {fieldErrors['initialPayment.amount'] && (
+                        <p className="text-sm text-destructive">{fieldErrors['initialPayment.amount']}</p>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      S'applique à cette location uniquement (prolongations et frais de retard inclus) — le tarif
-                      de la voiture reste inchangé.
-                    </p>
-                  </div>
-                )}
-                {fieldErrors.dailyRate && <p className="text-sm text-destructive">{fieldErrors.dailyRate}</p>}
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="clientId" required>
-                Client
-              </Label>
-              <ClientCombobox id="clientId" value={client} onChange={setClient} />
-              {fieldErrors.clientId && <p className="text-sm text-destructive">{fieldErrors.clientId}</p>}
-              {clientLicenseWarning && (
-                <Alert variant="warning">
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription>{clientLicenseWarning}</AlertDescription>
-                </Alert>
-              )}
-            </div>
-
-            {/* Only "Location immédiate" hands the car over right now — a
-                reservation for later has no odometer/carburant reading to
-                take yet. RentalsService.create() uses these to activate the
-                rental atomically, exactly like ActivateRentalDialog would. */}
-            {isImmediate && (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="mileageAtPickup" required>
-                    Kilométrage au départ
-                  </Label>
-                  <Input
-                    id="mileageAtPickup"
-                    type="number"
-                    min={selectedCar?.mileage ?? 0}
-                    value={mileageAtPickup}
-                    onChange={(e) => setMileageAtPickup(e.target.value)}
-                  />
-                  {fieldErrors['activation.mileageAtPickup'] && (
-                    <p className="text-sm text-destructive">{fieldErrors['activation.mileageAtPickup']}</p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="fuelLevelAtPickup" required>
-                    Niveau de carburant
-                  </Label>
-                  <Input
-                    id="fuelLevelAtPickup"
-                    placeholder="Ex. Plein, 3/4, Moitié..."
-                    value={fuelLevelAtPickup}
-                    onChange={(e) => setFuelLevelAtPickup(e.target.value)}
-                  />
-                  {fieldErrors['activation.fuelLevelAtPickup'] && (
-                    <p className="text-sm text-destructive">{fieldErrors['activation.fuelLevelAtPickup']}</p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {estimatedTotal !== null && (
-              <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
-                {nights} nuit{nights > 1 ? 's' : ''} × {effectiveDailyRate!.toLocaleString('fr-TN')} DT
-                {rateDifferencePercent !== null && (
-                  <span className="text-muted-foreground">
-                    {' '}
-                    (au lieu de {catalogDailyRate!.toLocaleString('fr-TN')} DT)
-                  </span>
-                )}{' '}
-                = <span className="font-semibold">{estimatedTotal.toLocaleString('fr-TN')} DT</span>
-              </div>
-            )}
-
-            <Separator />
-
-            <div className="space-y-2">
-              <Label htmlFor="depositAmount">Caution</Label>
-              <Input
-                id="depositAmount"
-                type="number"
-                step="0.001"
-                min="0"
-                placeholder="Montant par défaut de l'agence"
-                value={depositAmount}
-                onChange={(e) => setDepositAmount(e.target.value)}
-              />
-              {fieldErrors.depositAmount && (
-                <p className="text-sm text-destructive">{fieldErrors.depositAmount}</p>
-              )}
-
-              {/* Only "Location immédiate" can encaisser anything on the spot
-                  — a reservation for later has nothing to collect yet. */}
-              {isImmediate && hasDepositAmount && (
-                <div className="rounded-lg border border-border bg-muted/30 p-3">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="collectDepositNow" className="cursor-pointer">
-                        Encaissée maintenant
-                      </Label>
-                    </div>
-                    <Switch
-                      id="collectDepositNow"
-                      checked={collectDepositNow}
-                      onCheckedChange={handleToggleCollectDepositNow}
-                      disabled={rentalPaymentAmount !== ''}
-                    />
-                  </div>
-                  {collectDepositNow && (
-                    <div className="mt-3 space-y-2">
+                    <div className="space-y-2">
                       <Label>Méthode</Label>
-                      <Select value={depositMethod} onValueChange={(v) => setDepositMethod(v as PaymentMethod)}>
+                      <Select
+                        value={rentalPaymentMethod}
+                        onValueChange={(v) => setRentalPaymentMethod(v as PaymentMethod)}
+                        disabled={collectDepositNow}
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
@@ -529,72 +605,30 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
                         </SelectContent>
                       </Select>
                     </div>
-                  )}
+                  </div>
                 </div>
               )}
             </div>
 
-            {isImmediate && (
-              <div className="space-y-2">
-                <Label>Paiement du loyer</Label>
-                {/* Only one of Caution/loyer can be encaissé at creation — the
-                    other is added afterward from the fiche's "+ Ajouter",
-                    already préseedé intelligemment for that case. */}
-                <div
-                  className={`grid grid-cols-2 gap-4 rounded-lg border border-border bg-muted/30 p-3 ${
-                    collectDepositNow ? 'opacity-50' : ''
-                  }`}
-                >
-                  <div className="space-y-2">
-                    <Label htmlFor="rentalPaymentAmount">Montant (DT)</Label>
-                    <Input
-                      id="rentalPaymentAmount"
-                      type="number"
-                      step="0.001"
-                      min="0"
-                      disabled={collectDepositNow}
-                      value={rentalPaymentAmount}
-                      onChange={(e) => handleRentalPaymentAmountChange(e.target.value)}
-                    />
-                    {fieldErrors['initialPayment.amount'] && (
-                      <p className="text-sm text-destructive">{fieldErrors['initialPayment.amount']}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Méthode</Label>
-                    <Select
-                      value={rentalPaymentMethod}
-                      onValueChange={(v) => setRentalPaymentMethod(v as PaymentMethod)}
-                      disabled={collectDepositNow}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PAYMENT_METHODS.map((m) => (
-                          <SelectItem key={m} value={m}>
-                            {PAYMENT_METHOD_LABELS[m]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Annuler
-            </Button>
-            <Button type="submit" disabled={createMutation.isPending}>
-              {createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              Créer la location
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Annuler
+              </Button>
+              <Button type="submit" disabled={createMutation.isPending}>
+                {createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                Créer la location
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <ClientFormDialog
+        open={newClientOpen}
+        onOpenChange={setNewClientOpen}
+        initialValues={newClientPrefill(newClientSearch)}
+        onCreated={setClient}
+        onUseExisting={setClient}
+      />
+    </>
   );
 }
