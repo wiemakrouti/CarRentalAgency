@@ -1,26 +1,13 @@
 import { useQueries, useQuery, type UseQueryResult } from '@tanstack/react-query';
 
-import { carsApi } from '@/features/cars/api/cars.api';
-import { carKeys } from '@/features/cars/api/cars.keys';
-import { clientsApi } from '@/features/clients/api/clients.api';
-import { clientKeys } from '@/features/clients/api/clients.keys';
 import { financesApi, type FinanceSummary } from '@/features/finances/api/finances.api';
 import { financeSummaryKeys } from '@/features/finances/api/finances.keys';
-import { useRentalOccupancyQuery, useRentalSummaryQuery } from '@/features/rentals/hooks/use-rentals';
+import { useToCollectRentalsQuery } from '@/features/rentals/hooks/use-rentals';
 import { toDateParam } from '@/lib/date-range';
 
 const MONTH_LABELS = [
   'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc',
 ];
-
-// Only the single row list endpoints need — accurate `meta.total` costs the
-// same one extra Prisma count() query however small `items` is, and a
-// pageSize of 1 keeps the payload itself negligible.
-const COUNT_ONLY = { page: 1, pageSize: 1 } as const;
-
-// Occupancy heatmap window — 90 days ending today (inclusive), matching the
-// "90 derniers jours" the widget itself is labeled with.
-const OCCUPANCY_WINDOW_DAYS = 90;
 
 function startOfMonth(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), 1);
@@ -53,37 +40,14 @@ function useFinanceSummaryQueries(ranges: { from: string; to: string }[]): UseQu
   });
 }
 
-// Consolidates every data source the Dashboard needs into one hook, so the
-// page component itself stays presentation-only (per the project's UI/
-// business-logic separation rule) — it never talks to an API client
-// directly.
+// Consolidates every data source the Dashboard's Finances section needs into
+// one hook, so the page component itself stays presentation-only (per the
+// project's UI/business-logic separation rule) — it never talks to an API
+// client directly. The fleet planning loads its own data.
 export function useDashboardData() {
   const now = new Date();
 
-  const rentalSummaryQuery = useRentalSummaryQuery();
-
-  const totalCarsQuery = useQuery({
-    queryKey: carKeys.list(COUNT_ONLY),
-    queryFn: () => carsApi.list(COUNT_ONLY),
-  });
-  const availableCarsQuery = useQuery({
-    queryKey: carKeys.list({ ...COUNT_ONLY, status: 'AVAILABLE' }),
-    queryFn: () => carsApi.list({ ...COUNT_ONLY, status: 'AVAILABLE' }),
-  });
-  // Subtracted from totalCarsQuery below rather than filtered server-side
-  // (the list endpoint only supports one status to match, not "any but
-  // this one") — a sold/retired car is gone for good, so it should never
-  // count toward "flotte totale" or dilute the occupancy heatmap's
-  // denominator, both of which assume every counted car can still be
-  // rented.
-  const outOfServiceCarsQuery = useQuery({
-    queryKey: carKeys.list({ ...COUNT_ONLY, status: 'OUT_OF_SERVICE' }),
-    queryFn: () => carsApi.list({ ...COUNT_ONLY, status: 'OUT_OF_SERVICE' }),
-  });
-  const totalClientsQuery = useQuery({
-    queryKey: clientKeys.list(COUNT_ONLY),
-    queryFn: () => clientsApi.list(COUNT_ONLY),
-  });
+  const toCollectQuery = useToCollectRentalsQuery();
 
   // Month-to-date revenue vs. the same number of days last month — a fair
   // "progress so far" comparison. Comparing against a full prior month
@@ -105,14 +69,6 @@ export function useDashboardData() {
     queryFn: () => financesApi.getSummary(previousPeriod.from, previousPeriod.to),
   });
 
-  // "+X ce mois-ci" under the Clients enregistrés KPI — same month-to-date
-  // window as the revenue/profit figures above.
-  const newClientsParams = { ...COUNT_ONLY, createdFrom: currentPeriod.from, createdTo: currentPeriod.to };
-  const newClientsQuery = useQuery({
-    queryKey: clientKeys.list(newClientsParams),
-    queryFn: () => clientsApi.list(newClientsParams),
-  });
-
   // Six calendar months ending with the current one (month-to-date) — the
   // chart's own trend line, independent of the like-for-like pair above.
   const monthRanges = Array.from({ length: 6 }, (_, i) => {
@@ -125,20 +81,10 @@ export function useDashboardData() {
   });
   const monthlyRevenueQueries = useFinanceSummaryQueries(monthRanges);
 
-  const occupancyFrom = new Date(now);
-  occupancyFrom.setDate(occupancyFrom.getDate() - (OCCUPANCY_WINDOW_DAYS - 1));
-  const occupancyQuery = useRentalOccupancyQuery(toDateParam(occupancyFrom), toDateParam(now));
-
   const allQueries: UseQueryResult<unknown>[] = [
-    rentalSummaryQuery,
-    totalCarsQuery,
-    availableCarsQuery,
-    outOfServiceCarsQuery,
-    totalClientsQuery,
+    toCollectQuery,
     currentRevenueQuery,
     previousRevenueQuery,
-    newClientsQuery,
-    occupancyQuery,
     ...monthlyRevenueQueries,
   ];
   const isLoading = allQueries.some((q) => q.isLoading);
@@ -160,8 +106,7 @@ export function useDashboardData() {
     previousProfit !== 0 ? ((currentProfit - previousProfit) / Math.abs(previousProfit)) * 100 : null;
 
   // Both sides of the Revenus vs Dépenses chart come from the same
-  // per-month FinanceSummary already fetched above for the revenue trend —
-  // expenses.total was already in that response, just unused until now.
+  // per-month FinanceSummary already fetched above for the revenue trend.
   const monthlyFinance = monthRanges.map((range, i) => ({
     month: range.label,
     revenue: monthlyRevenueQueries[i]?.data?.revenue.total ?? 0,
@@ -176,23 +121,10 @@ export function useDashboardData() {
     isLoading,
     isError,
     refetch,
-    totalCars:
-      (totalCarsQuery.data?.meta.total ?? 0) - (outOfServiceCarsQuery.data?.meta.total ?? 0),
-    availableCars: availableCarsQuery.data?.meta.total ?? 0,
-    // RentalsRepository.getSummaryCounts' `active` deliberately excludes a
-    // late return (it's carved out into `overdueReturn`, both status
-    // ACTIVE) — for "cars currently out" the two need adding back together,
-    // otherwise a late return would vanish from this count entirely. Missed
-    // pickups (`overduePickup`, still RESERVED — the car never left) are a
-    // distinct problem and excluded here rather than inflating "en retard"
-    // past the active total itself.
-    activeRentals: (rentalSummaryQuery.data?.active ?? 0) + (rentalSummaryQuery.data?.overdueReturn ?? 0),
-    overdueRentals: rentalSummaryQuery.data?.overdueReturn ?? 0,
-    totalClients: totalClientsQuery.data?.meta.total ?? 0,
-    newClientsThisMonth: newClientsQuery.data?.meta.total ?? 0,
+    monthRevenue: currentRevenue,
     monthProfit: currentProfit,
     monthProfitTrend,
     monthlyFinance,
-    occupancy: occupancyQuery.data ?? [],
+    toCollect: toCollectQuery.data ?? { rentals: [], billedAmount: 0, collectedAmount: 0 },
   };
 }

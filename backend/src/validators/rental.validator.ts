@@ -28,26 +28,29 @@ export const rentalListQuerySchema = paginationQuerySchema.merge(includeArchived
 
 export type RentalListQuery = z.infer<typeof rentalListQuerySchema>;
 
-const MAX_OCCUPANCY_RANGE_DAYS = 400;
+// The dashboard's fleet planning shows at most a month at a time — a little
+// slack on top for the month view's leading/trailing days.
+const MAX_PLANNING_RANGE_DAYS = 62;
 
-// Backs the Dashboard's occupancy heatmap (RentalsService.getOccupancy) —
 // `from`/`to` are date-only strings, coerced the same way
 // financeSummaryQuerySchema does for the identical reason (see its comment).
-export const rentalOccupancyQuerySchema = z
-  .object({
-    from: z.coerce.date(),
-    to: z.coerce.date(),
-  })
-  .refine((data) => data.to >= data.from, {
-    message: 'La date de fin doit être postérieure ou égale à la date de début.',
-    path: ['to'],
-  })
-  .refine(
-    (data) => data.to.getTime() - data.from.getTime() <= MAX_OCCUPANCY_RANGE_DAYS * 24 * 60 * 60 * 1000,
-    {
-      message: `La période ne peut pas dépasser ${MAX_OCCUPANCY_RANGE_DAYS} jours.`,
+function dateRangeQuerySchema(maxDays: number) {
+  return z
+    .object({
+      from: z.coerce.date(),
+      to: z.coerce.date(),
+    })
+    .refine((data) => data.to >= data.from, {
+      message: 'La date de fin doit être postérieure ou égale à la date de début.',
       path: ['to'],
-    },
-  );
+    })
+    .refine((data) => data.to.getTime() - data.from.getTime() <= maxDays * 24 * 60 * 60 * 1000, {
+      message: `La période ne peut pas dépasser ${maxDays} jours.`,
+      path: ['to'],
+    });
+}
 
-export type RentalOccupancyQuery = z.infer<typeof rentalOccupancyQuerySchema>;
+// Backs the Dashboard's fleet planning (RentalsService.getPlanning).
+export const rentalPlanningQuerySchema = dateRangeQuerySchema(MAX_PLANNING_RANGE_DAYS);
+
+export type RentalPlanningQuery = z.infer<typeof rentalPlanningQuerySchema>;

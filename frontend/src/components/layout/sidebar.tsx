@@ -2,10 +2,10 @@ import { Link } from 'react-router-dom';
 import { CarFront, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/providers/auth-context';
 import { useSettings } from '@/providers/settings-context';
 import { Button } from '@/components/ui/button';
 import { SidebarNav } from '@/components/layout/sidebar-nav';
+import { SidebarUserCard } from '@/components/layout/sidebar-user-card';
 
 type SidebarProps = {
   collapsed: boolean;
@@ -13,9 +13,7 @@ type SidebarProps = {
 };
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
-  const { user } = useAuth();
   const { settings } = useSettings();
-  const initial = user?.fullName?.trim()?.charAt(0)?.toUpperCase() || 'A';
   const agencyName = settings?.agencyName ?? 'Agence de Location';
 
   return (
@@ -57,22 +55,9 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       <div className="relative border-t border-sidebar-border p-3">
         {!collapsed && (
-          <Link
-            to="/profile?tab=account"
-            className="mb-2 flex items-center gap-2.5 rounded-xl px-2 py-2 transition-colors hover:bg-sidebar-accent/60"
-          >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary-400 to-primary-700 text-xs font-bold text-primary-foreground shadow-sm">
-              {initial}
-            </div>
-            <div className="flex min-w-0 flex-col">
-              <span className="truncate text-xs font-semibold text-sidebar-foreground">
-                {user?.fullName ?? 'Administrateur'}
-              </span>
-              <span className="truncate text-[11px] text-sidebar-foreground/50">
-                Administrateur
-              </span>
-            </div>
-          </Link>
+          <div className="mb-2">
+            <SidebarUserCard />
+          </div>
         )}
         <Button
           variant="ghost"

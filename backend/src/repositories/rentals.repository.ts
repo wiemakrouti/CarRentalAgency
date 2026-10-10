@@ -22,6 +22,19 @@ const RENTAL_INCLUDE = {
   payments: { where: notDeleted({}), include: { attachments: true } },
 } as const;
 
+// The light rental shape the Dashboard's fleet planning draws from.
+const PLANNING_RENTAL_SELECT = {
+  id: true,
+  rentalNumber: true,
+  carId: true,
+  status: true,
+  pickupDate: true,
+  plannedReturnDate: true,
+  actualReturnDate: true,
+  client: { select: { firstName: true, lastName: true } },
+  _count: { select: { extensions: true } },
+} satisfies Prisma.RentalSelect;
+
 function buildWhere(agencyId: string, query: RentalListQuery): Prisma.RentalWhereInput {
   const where = notDeleted<Prisma.RentalWhereInput>(
     {
@@ -207,34 +220,65 @@ export const RentalsRepository = {
     return { active, overdueReturn, overduePickup, upcomingReservations };
   },
 
-  // Candidate rentals for the occupancy heatmap (RentalsService.getOccupancy)
-  // — every rental whose car was actually out at some point that could
-  // overlap [from, to] (both ends inclusive: the service's day-by-day loop
-  // gives `to` itself a bucket, most commonly "today"). RESERVED is excluded
-  // (the car never left) and so is CANCELLED (never happened); only
-  // ACTIVE/COMPLETED ever really occupied a day. `actualReturnDate: null`
-  // covers ACTIVE rentals still ongoing — plannedReturnDate is never used as
-  // their end here since an overdue return means it's already in the past
-  // while the car is still out.
-  // Day-by-day bucketing happens in the service, not here: Prisma has no
-  // clean way to "count per calendar day over a range" without raw SQL.
-  //
-  // pickupDate is compared against the *end* of `to`, not `to` itself: a
-  // rental activated today has a real handover timestamp (activate() sets
-  // pickupDate to `now`, e.g. 10:00), which is later than `to`'s midnight —
-  // a plain `lte: to` silently dropped every car handed over today from
-  // today's count.
-  findOccupancyRentals(agencyId: string, from: Date, to: Date, db: Db = prisma) {
+  // Candidates for the dashboard's "À encaisser" list: every rental still
+  // out, plus those returned recently enough that an unpaid balance is
+  // still worth chasing. The balance itself is computed in the service.
+  findBalanceCandidates(agencyId: string, returnedSince: Date, db: Db = prisma) {
     return db.rental.findMany({
       where: {
         agencyId,
         deletedAt: null,
-        status: { in: ['ACTIVE', 'COMPLETED'] },
-        pickupDate: { lt: endOfDayExclusive(to) },
-        OR: [{ actualReturnDate: null }, { actualReturnDate: { gt: from } }],
+        OR: [{ status: 'ACTIVE' }, { status: 'COMPLETED', actualReturnDate: { gte: returnedSince } }],
       },
-      select: { pickupDate: true, actualReturnDate: true },
+      include: RENTAL_INCLUDE,
+      orderBy: { pickupDate: 'asc' },
     });
+  },
+
+  // The Dashboard's fleet planning (RentalsService.getPlanning): every
+  // rental that holds, held or will hold a car somewhere in [from, to].
+  // CANCELLED never happened and is left out. Each kind ends differently:
+  // COMPLETED on its actual return, RESERVED on its planned one, and ACTIVE
+  // not before today (an overdue car is still out) — so ACTIVE is kept
+  // whatever its plannedReturnDate and the frontend clips it to the window.
+  // pickupDate is compared against the end of `to`: an activated
+  // pickupDate is a real handover timestamp, not a midnight.
+  // A light shape on purpose — the bars only need dates and a name; a click
+  // opens the rental's own detail sheet, which fetches the full record.
+  findForPlanning(agencyId: string, from: Date, to: Date, db: Db = prisma) {
+    return db.rental.findMany({
+      where: {
+        agencyId,
+        deletedAt: null,
+        pickupDate: { lt: endOfDayExclusive(to) },
+        OR: [
+          { status: 'ACTIVE' },
+          { status: 'RESERVED', plannedReturnDate: { gte: from } },
+          { status: 'COMPLETED', actualReturnDate: { gte: from } },
+        ],
+      },
+      select: PLANNING_RENTAL_SELECT,
+      orderBy: { pickupDate: 'asc' },
+    });
+  },
+
+  // What each car is doing *now*, whatever window the planning shows: every
+  // live rental (ongoing or still to be picked up — a handful per car at
+  // most), plus each car's last real return, for "libre depuis N j".
+  async findPlanningNow(agencyId: string, db: Db = prisma) {
+    const [live, lastReturns] = await Promise.all([
+      db.rental.findMany({
+        where: { agencyId, deletedAt: null, status: { in: ['ACTIVE', 'RESERVED'] } },
+        select: PLANNING_RENTAL_SELECT,
+        orderBy: { pickupDate: 'asc' },
+      }),
+      db.rental.groupBy({
+        by: ['carId'],
+        where: { agencyId, deletedAt: null, status: 'COMPLETED' },
+        _max: { actualReturnDate: true },
+      }),
+    ]);
+    return { live, lastReturns };
   },
 
   // Not status-guarded like the lifecycle transitions above: a deposit can

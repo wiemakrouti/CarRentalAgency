@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CreateCarInput, UpdateCarInput } from '@car-rental/shared';
 import { notificationKeys } from '@/features/notifications/api/notifications.keys';
+import { rentalKeys } from '@/features/rentals/api/rentals.keys';
 import { carsApi, type CarListParams, type ManualCarStatus } from '../api/cars.api';
 import { carKeys } from '../api/cars.keys';
 
@@ -62,6 +63,8 @@ export function useCreateCarMutation() {
     mutationFn: (input: CreateCarInput) => carsApi.create(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: carKeys.lists() });
+      // The dashboard's fleet planning lists every car with its status.
+      queryClient.invalidateQueries({ queryKey: rentalKeys.planningAll() });
       // A newly added car can already carry an expired/expiring document
       // date (e.g. a used car bought with its insurance about to lapse).
       queryClient.invalidateQueries({ queryKey: notificationKeys.all });
@@ -75,6 +78,8 @@ export function useUpdateCarMutation() {
     mutationFn: ({ id, input }: { id: string; input: UpdateCarInput }) => carsApi.update(id, input),
     onSuccess: (car) => {
       queryClient.invalidateQueries({ queryKey: carKeys.lists() });
+      // The dashboard's fleet planning lists every car with its status.
+      queryClient.invalidateQueries({ queryKey: rentalKeys.planningAll() });
       queryClient.invalidateQueries({ queryKey: carKeys.detail(car.id) });
       // Renewing an insurance/inspection/registration date (or setting one
       // for the first time) directly changes what the bell shows — without
@@ -91,6 +96,8 @@ export function useDeleteCarMutation() {
     mutationFn: (id: string) => carsApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: carKeys.lists() });
+      // The dashboard's fleet planning lists every car with its status.
+      queryClient.invalidateQueries({ queryKey: rentalKeys.planningAll() });
       // Deleting a car drops any reminder tied to its documents.
       queryClient.invalidateQueries({ queryKey: notificationKeys.all });
     },
@@ -104,6 +111,8 @@ export function useUpdateCarStatusMutation() {
       carsApi.updateStatus(id, status),
     onSuccess: (car) => {
       queryClient.invalidateQueries({ queryKey: carKeys.lists() });
+      // The dashboard's fleet planning lists every car with its status.
+      queryClient.invalidateQueries({ queryKey: rentalKeys.planningAll() });
       queryClient.invalidateQueries({ queryKey: carKeys.detail(car.id) });
     },
   });

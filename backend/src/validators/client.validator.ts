@@ -21,7 +21,7 @@ export const clientListQuerySchema = paginationQuerySchema.extend({
   city: z.string().trim().min(1).optional(),
   licenseStatus: z.enum(LICENSE_STATUSES).optional(),
   // Backs the Dashboard's "+X ce mois-ci" — date-only strings, coerced the
-  // same way rentalOccupancyQuerySchema/financeSummaryQuerySchema are.
+  // same way financeSummaryQuerySchema is.
   createdFrom: z.coerce.date().optional(),
   createdTo: z.coerce.date().optional(),
   sortBy: z.enum(CLIENT_SORT_FIELDS).default('createdAt'),

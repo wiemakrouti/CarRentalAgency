@@ -86,6 +86,17 @@ export const CarsRepository = {
     return { items: items.map(withActiveRental), total };
   },
 
+  // One row per car for the Dashboard's fleet planning — the whole fleet,
+  // unpaginated (an agency's fleet is tens of cars, not thousands), in a
+  // stable order so rows don't jump between refetches.
+  findForPlanning(agencyId: string, db: Db = prisma) {
+    return db.car.findMany({
+      where: { agencyId },
+      select: { id: true, brand: true, model: true, licensePlate: true, dailyRate: true, status: true },
+      orderBy: [{ brand: 'asc' }, { model: 'asc' }, { licensePlate: 'asc' }],
+    });
+  },
+
   async findById(agencyId: string, id: string, db: Db = prisma) {
     const car = await db.car.findFirst({
       where: { id, agencyId },

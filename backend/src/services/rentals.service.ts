@@ -17,7 +17,10 @@ import { ClientsService } from './clients.service.js';
 import { AuditService } from './audit.service.js';
 import { agencyDay, formatDateOnly } from '../lib/date-utils.js';
 import { BOOKABLE_CAR_STATUSES } from '../lib/rental-availability.js';
-import type { RentalListQuery, RentalOccupancyQuery } from '../validators/rental.validator.js';
+import type {
+  RentalListQuery,
+  RentalPlanningQuery,
+} from '../validators/rental.validator.js';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
@@ -33,6 +36,38 @@ const AUTO_CANCEL_REASON =
 // amount is owed but not actually collected. Corrected/settled in Phase 5.
 const AUTO_PAYMENT_METHOD = 'CASH';
 const AUTO_PAYMENT_STATUS = 'PENDING';
+
+// "À encaisser" on the dashboard: rentals returned up to this long ago still
+// count — older unpaid balances are a collections matter, not today's work.
+const UNPAID_LOOKBACK_DAYS = 60;
+
+// Payment types that settle the rental fee itself — deposits are a separate
+// refundable hold. Must match the frontend's buildBalance (rental-balance.ts)
+// so the dashboard and the rental's own sheet agree on what's owed.
+const RENTAL_FEE_PAYMENT_TYPES = ['RENTAL_PAYMENT', 'EXTENSION_PAYMENT', 'LATE_FEE', 'DAMAGE_FEE'];
+
+function rentalBalance(rental: {
+  totalAmount: Prisma.Decimal;
+  payments: { type: string; status: string; amount: Prisma.Decimal }[];
+}): { due: number; settled: number } {
+  const extraFees = rental.payments
+    .filter((p) => p.type === 'LATE_FEE' || p.type === 'DAMAGE_FEE')
+    .reduce((sum, p) => sum + Number(p.amount), 0);
+  const settled = rental.payments
+    .filter((p) => p.status === 'COMPLETED' && RENTAL_FEE_PAYMENT_TYPES.includes(p.type))
+    .reduce((sum, p) => sum + Number(p.amount), 0);
+  return { due: Number(rental.totalAmount) + extraFees, settled };
+}
+
+// Flattens a planning row's client and extension count into the light shape
+// the Dashboard's fleet planning draws.
+function toPlanningRental<T extends { client: { firstName: string; lastName: string }; _count: { extensions: number } }>({
+  client,
+  _count,
+  ...rental
+}: T) {
+  return { ...rental, clientName: `${client.firstName} ${client.lastName}`, extensionCount: _count.extensions };
+}
 
 function generateRentalNumber(): string {
   // The agency's own date (Tunis), not UTC's — otherwise a rental created
@@ -113,47 +148,53 @@ export const RentalsService = {
     return RentalsRepository.getSummaryCounts(agencyId);
   },
 
-  // Dashboard's occupancy heatmap: one { date, count } row per calendar day
-  // in [from, to], `count` being how many cars were actually out that day.
-  // Fetches the (small) set of candidate rentals once, then buckets them by
-  // day in application code rather than running one query per day — the
-  // range is at most MAX_OCCUPANCY_RANGE_DAYS (400) days, so this stays
-  // cheap without needing raw SQL for per-day aggregation.
-  async getOccupancy(agencyId: string, query: RentalOccupancyQuery) {
-    // Already UTC-midnight of a calendar day (z.coerce.date() of a
-    // "YYYY-MM-DD" query param) — the same representation pickupDate itself
-    // uses, so no truncation needed here. startOfDay (local midnight) must
-    // NOT be applied to these: on any server not running in UTC it shifts
-    // them by the server's own offset, which used to make `to` disagree
-    // with a rental's own `pickupDate` by up to a day (see startOfDayUTC's
-    // comment in date-utils.ts).
-    const { from, to } = query;
-    const rentals = await RentalsRepository.findOccupancyRentals(agencyId, from, to);
-    // An ongoing rental (no actualReturnDate yet) counts as occupying every
-    // day up to and including today — never plannedReturnDate, which for an
-    // overdue return already sits in the past while the car is still out.
-    const ongoingEnd = new Date(agencyDay().getTime() + MS_PER_DAY);
+  // Dashboard's "À encaisser" card: every rental still owing part of its
+  // fee — ongoing, or returned within UNPAID_LOOKBACK_DAYS — largest balance
+  // first, each in full (car, client, payments) so the dashboard can open
+  // the same payment form as the Rentals page without a second fetch.
+  // Unpaginated: for one agency this is a handful of rows.
+  // billedAmount/collectedAmount cover the same window *including* the
+  // rentals already fully paid, for the card's "% encaissé" — measured on
+  // the unpaid ones alone, the rate would always look low.
+  async getToCollect(agencyId: string) {
+    const returnedSince = new Date(agencyDay().getTime() - UNPAID_LOOKBACK_DAYS * MS_PER_DAY);
+    const candidates = await RentalsRepository.findBalanceCandidates(agencyId, returnedSince);
+    const rows = candidates.map((rental) => ({ rental, ...rentalBalance(rental) }));
+    return {
+      rentals: rows
+        .filter((row) => row.due - row.settled > 0)
+        .sort((a, b) => b.due - b.settled - (a.due - a.settled))
+        .map((row) => row.rental),
+      billedAmount: rows.reduce((sum, row) => sum + row.due, 0),
+      collectedAmount: rows.reduce((sum, row) => sum + Math.min(row.settled, row.due), 0),
+    };
+  },
 
-    const days: { date: string; count: number }[] = [];
-    for (
-      let cursor = from;
-      cursor.getTime() <= to.getTime();
-      cursor = new Date(cursor.getTime() + MS_PER_DAY)
-    ) {
-      const count = rentals.reduce((total, rental) => {
-        // Both truncated to their (Tunis) calendar day: actualReturnDate is
-        // always a real timestamp, and so is pickupDate once activate() has
-        // set it to the handover instant — compared raw, a car handed over
-        // at 10:00 didn't count as out on its own pickup day.
-        const pickup = agencyDay(rental.pickupDate);
-        const end = rental.actualReturnDate ? agencyDay(rental.actualReturnDate) : ongoingEnd;
-        return cursor.getTime() >= pickup.getTime() && cursor.getTime() < end.getTime()
-          ? total + 1
-          : total;
-      }, 0);
-      days.push({ date: formatDateOnly(cursor), count });
-    }
-    return days;
+  // Dashboard's fleet planning: the whole fleet plus every rental on it
+  // within [from, to], and — independently of that window — what each car
+  // is doing right now (its ongoing rental, its next reservation, its last
+  // return), which drives the planning's "maintenant" column and grouping.
+  // Runs the expired-reservation sweep first, like the list, so a no-show
+  // that already lapsed never draws as a live booking.
+  async getPlanning(agencyId: string, query: RentalPlanningQuery) {
+    await RentalsService.sweepExpiredReservations(agencyId);
+    const [cars, rentals, now] = await Promise.all([
+      CarsRepository.findForPlanning(agencyId),
+      RentalsRepository.findForPlanning(agencyId, query.from, query.to),
+      RentalsRepository.findPlanningNow(agencyId),
+    ]);
+    const live = now.live.map(toPlanningRental);
+    const lastReturnByCar = new Map(now.lastReturns.map((row) => [row.carId, row._max.actualReturnDate]));
+    return {
+      cars: cars.map((car) => ({
+        ...car,
+        // `live` is ordered by pickupDate, so the first RESERVED is the next one.
+        activeRental: live.find((r) => r.carId === car.id && r.status === 'ACTIVE') ?? null,
+        nextReservation: live.find((r) => r.carId === car.id && r.status === 'RESERVED') ?? null,
+        lastReturnDate: lastReturnByCar.get(car.id) ?? null,
+      })),
+      rentals: rentals.map(toPlanningRental),
+    };
   },
 
   async getById(agencyId: string, id: string, options?: { includeArchived?: boolean }) {

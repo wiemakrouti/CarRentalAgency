@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   ActivateRentalInput,
   CancelRentalInput,
@@ -28,18 +28,30 @@ export function useRentalsQuery(params: RentalListParams, options?: { enabled?: 
   });
 }
 
+export function useToCollectRentalsQuery() {
+  return useQuery({
+    queryKey: rentalKeys.toCollect(),
+    queryFn: () => rentalsApi.getToCollect(),
+    refetchInterval: RENTAL_SUMMARY_REFETCH_INTERVAL_MS,
+  });
+}
+
+// keepPreviousData: paging the planning to the next week keeps the current
+// one on screen until the new window arrives, instead of flashing a loader.
+export function useFleetPlanningQuery(from: string, to: string) {
+  return useQuery({
+    queryKey: rentalKeys.planning(from, to),
+    queryFn: () => rentalsApi.getPlanning(from, to),
+    placeholderData: keepPreviousData,
+    refetchInterval: RENTAL_SUMMARY_REFETCH_INTERVAL_MS,
+  });
+}
+
 export function useRentalSummaryQuery() {
   return useQuery({
     queryKey: rentalKeys.summary(),
     queryFn: () => rentalsApi.getSummary(),
     refetchInterval: RENTAL_SUMMARY_REFETCH_INTERVAL_MS,
-  });
-}
-
-export function useRentalOccupancyQuery(from: string, to: string) {
-  return useQuery({
-    queryKey: rentalKeys.occupancy(from, to),
-    queryFn: () => rentalsApi.getOccupancy(from, to),
   });
 }
 

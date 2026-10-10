@@ -14,7 +14,7 @@ import { RentalsController } from '../controllers/rentals.controller.js';
 import {
   rentalIdParamSchema,
   rentalListQuerySchema,
-  rentalOccupancyQuerySchema,
+  rentalPlanningQuerySchema,
 } from '../validators/rental.validator.js';
 
 export const rentalsRouter = Router();
@@ -26,12 +26,15 @@ rentalsRouter.post('/rentals', validate({ body: createRentalSchema }), asyncHand
 // Must come before /rentals/:id — otherwise "summary" is captured as :id
 // and fails UUID validation instead of reaching this handler.
 rentalsRouter.get('/rentals/summary', asyncHandler(RentalsController.getSummary));
-// Same reasoning as /rentals/summary above — "occupancy" would otherwise be
+// Same reasoning as /rentals/summary above — "to-collect" would otherwise be
+// captured as :id.
+rentalsRouter.get('/rentals/to-collect', asyncHandler(RentalsController.getToCollect));
+// Same reasoning as /rentals/summary above — "planning" would otherwise be
 // captured as :id.
 rentalsRouter.get(
-  '/rentals/occupancy',
-  validate({ query: rentalOccupancyQuerySchema }),
-  asyncHandler(RentalsController.getOccupancy),
+  '/rentals/planning',
+  validate({ query: rentalPlanningQuerySchema }),
+  asyncHandler(RentalsController.getPlanning),
 );
 rentalsRouter.get(
   '/rentals/:id',

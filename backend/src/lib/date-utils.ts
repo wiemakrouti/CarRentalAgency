@@ -12,11 +12,10 @@
 // Never use a *local*-midnight truncation for this (an earlier version of
 // this helper did, via `new Date(date.getFullYear(), ...)`) — on any server
 // not running in UTC, that silently shifts the result by the server's own
-// offset. That bug once made the occupancy heatmap
-// (RentalsService.getOccupancy) drop a rental picked up earlier today from
-// that very day's count, mis-flagged rentals as overdue up to an hour early,
-// and could mis-charge a late fee for a return made in the last stretch of
-// the planned day itself.
+// offset. That bug once made the (since removed) occupancy heatmap drop a
+// rental picked up earlier today from that very day's count, mis-flagged
+// rentals as overdue up to an hour early, and could mis-charge a late fee
+// for a return made in the last stretch of the planned day itself.
 export function startOfDayUTC(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }

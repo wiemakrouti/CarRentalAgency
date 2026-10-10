@@ -36,6 +36,16 @@ type RentalFormDialogProps = {
   // page jump straight to its detail sheet (see RentalsPage) instead of
   // making the admin find it in the list to then add a payment.
   onCreated?: (rental: Rental) => void;
+  // A head start applied each time the dialog opens — the dashboard's fleet
+  // planning passes the car and day that were clicked. The return date is
+  // left for the admin to choose; the car shows once both dates are set.
+  prefill?: RentalFormPrefill;
+};
+
+export type RentalFormPrefill = {
+  carId?: string;
+  // YYYY-MM-DD, local calendar day.
+  pickupDate?: string;
 };
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -97,7 +107,7 @@ function newClientPrefill(search: string): { firstName?: string; lastName?: stri
   return { firstName, lastName: rest.join(' ') || undefined };
 }
 
-export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDialogProps) {
+export function RentalFormDialog({ open, onOpenChange, onCreated, prefill }: RentalFormDialogProps) {
   const [pickupDate, setPickupDate] = useState(() => todayInputValue());
   const [plannedReturnDate, setPlannedReturnDate] = useState('');
   const [carId, setCarId] = useState<string | undefined>(undefined);
@@ -210,8 +220,15 @@ export function RentalFormDialog({ open, onOpenChange, onCreated }: RentalFormDi
 
   // The dialog stays mounted between openings — a pickup date left from a
   // page open overnight would now be in the past, so bring it back to today.
+  // A prefill (if any) replaces the dates and car from the last opening.
   useEffect(() => {
-    if (open && pickupDate < todayInputValue()) {
+    if (!open) return;
+    if (prefill) {
+      const today = todayInputValue();
+      setPickupDate(prefill.pickupDate && prefill.pickupDate > today ? prefill.pickupDate : today);
+      setPlannedReturnDate('');
+      setCarId(prefill.carId);
+    } else if (pickupDate < todayInputValue()) {
       setPickupDate(todayInputValue());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

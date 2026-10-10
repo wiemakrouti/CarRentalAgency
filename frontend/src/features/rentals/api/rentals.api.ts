@@ -3,6 +3,7 @@ import type {
   CancelRentalInput,
   CreateRentalInput,
   ExtendRentalInput,
+  CarStatus,
   RentalStatus,
   ReturnRentalInput,
 } from '@car-rental/shared';
@@ -61,11 +62,46 @@ export type RentalSummary = {
   upcomingReservations: number;
 };
 
-// Dashboard's occupancy heatmap — one row per calendar day in the
-// requested range, `count` being how many cars were actually out that day.
-export type RentalOccupancyDay = {
-  date: string;
-  count: number;
+// Dashboard's « À encaisser » card (GET /rentals/to-collect). billedAmount/
+// collectedAmount cover the same window *including* fully paid rentals —
+// the card's « % encaissé ».
+export type ToCollectSummary = {
+  rentals: Rental[];
+  billedAmount: number;
+  collectedAmount: number;
+};
+
+// The Dashboard's fleet planning (GET /rentals/planning) — the whole fleet
+// plus a light row per rental overlapping the requested window. A click on
+// a bar opens the rental's own sheet, which fetches the full record.
+export type PlanningCar = {
+  id: string;
+  brand: string;
+  model: string;
+  licensePlate: string;
+  dailyRate: string;
+  status: CarStatus;
+  // What the car is doing right now, independent of the window shown.
+  activeRental: PlanningRental | null;
+  nextReservation: PlanningRental | null;
+  lastReturnDate: string | null;
+};
+
+export type PlanningRental = {
+  id: string;
+  rentalNumber: string;
+  carId: string;
+  status: RentalStatus;
+  pickupDate: string;
+  plannedReturnDate: string;
+  actualReturnDate: string | null;
+  clientName: string;
+  extensionCount: number;
+};
+
+export type FleetPlanning = {
+  cars: PlanningCar[];
+  rentals: PlanningRental[];
 };
 
 export type RentalListParams = {
@@ -89,8 +125,9 @@ export type RentalListParams = {
 export const rentalsApi = {
   list: (params: RentalListParams) => apiClient.getPaginated<Rental>(`/rentals${buildQueryString(params)}`),
   getSummary: () => apiClient.get<RentalSummary>('/rentals/summary'),
-  getOccupancy: (from: string, to: string) =>
-    apiClient.get<RentalOccupancyDay[]>(`/rentals/occupancy${buildQueryString({ from, to })}`),
+  getToCollect: () => apiClient.get<ToCollectSummary>('/rentals/to-collect'),
+  getPlanning: (from: string, to: string) =>
+    apiClient.get<FleetPlanning>(`/rentals/planning${buildQueryString({ from, to })}`),
   getById: (id: string) => apiClient.get<Rental>(`/rentals/${id}`),
   create: (input: CreateRentalInput) => apiClient.post<Rental>('/rentals', input),
   activate: (id: string, input: ActivateRentalInput) => apiClient.post<Rental>(`/rentals/${id}/activate`, input),

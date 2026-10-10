@@ -7,7 +7,10 @@ import type {
   ReturnRentalInput,
 } from '@car-rental/shared';
 import { RentalsService } from '../services/rentals.service.js';
-import type { RentalListQuery, RentalOccupancyQuery } from '../validators/rental.validator.js';
+import type {
+  RentalListQuery,
+  RentalPlanningQuery,
+} from '../validators/rental.validator.js';
 
 export const RentalsController = {
   async list(req: Request, res: Response) {
@@ -25,10 +28,15 @@ export const RentalsController = {
     res.status(200).json({ success: true, data: summary });
   },
 
-  async getOccupancy(req: Request, res: Response) {
-    const query = req.query as unknown as RentalOccupancyQuery;
-    const days = await RentalsService.getOccupancy(req.user!.agencyId, query);
-    res.status(200).json({ success: true, data: days });
+  async getToCollect(req: Request, res: Response) {
+    const toCollect = await RentalsService.getToCollect(req.user!.agencyId);
+    res.status(200).json({ success: true, data: toCollect });
+  },
+
+  async getPlanning(req: Request, res: Response) {
+    const query = req.query as unknown as RentalPlanningQuery;
+    const planning = await RentalsService.getPlanning(req.user!.agencyId, query);
+    res.status(200).json({ success: true, data: planning });
   },
 
   async getById(req: Request, res: Response) {
