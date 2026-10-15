@@ -9,6 +9,7 @@ import type {
 } from '@car-rental/shared';
 import { apiClient } from '@/lib/api-client';
 import { buildQueryString } from '@/lib/query-string';
+import type { ApprovalRequest } from '@/features/approvals/api/approvals.api';
 
 // Only status a manual change (edit form's earlier status field, quick-change
 // menu, bulk action) may set — RENTED is exclusively set by the rental
@@ -109,7 +110,10 @@ export const carsApi = {
   getProfitability: (id: string) => apiClient.get<CarProfitability>(`/cars/${id}/profitability`),
   checkDeletable: (id: string) => apiClient.get<CarDeletable>(`/cars/${id}/deletable`),
   create: (input: CreateCarInput) => apiClient.post<Car>('/cars', input),
-  update: (id: string, input: UpdateCarInput) => apiClient.patch<Car>(`/cars/${id}`, input),
+  // An employee's new catalogue rate isn't applied: it comes back as a
+  // request, the other fields saved.
+  update: (id: string, input: UpdateCarInput) =>
+    apiClient.patch<Car & { approvalRequest: ApprovalRequest | null }>(`/cars/${id}`, input),
   delete: (id: string) => apiClient.delete<{ deleted: boolean }>(`/cars/${id}`),
   uploadImage: (id: string, file: File, isPrimary: boolean) => {
     const formData = new FormData();

@@ -11,7 +11,7 @@ import type {
   RentalListQuery,
   RentalPlanningQuery,
 } from '../validators/rental.validator.js';
-
+import { ApprovalsService } from '../services/approvals.service.js';
 export const RentalsController = {
   async list(req: Request, res: Response) {
     const query = req.query as unknown as RentalListQuery;
@@ -46,8 +46,12 @@ export const RentalsController = {
 
   async create(req: Request, res: Response) {
     const input = req.body as CreateRentalInput;
-    const rental = await RentalsService.create(req.user!.agencyId, input, req.user!.id, req.ip);
-    res.status(201).json({ success: true, data: rental });
+    const submission = await ApprovalsService.submitRental(req.user!.agencyId, input, req.user!, req.ip);
+    if (submission.approvalRequest) {
+      res.status(202).json({ success: true, data: { approvalRequest: submission.approvalRequest } });
+      return;
+    }
+    res.status(201).json({ success: true, data: submission.result });
   },
 
   async activate(req: Request, res: Response) {

@@ -55,6 +55,15 @@ export const updateSettingsSchema = z.object({
     .int('Doit être un nombre entier de jours')
     .min(1, 'Minimum 1 jour')
     .max(90, 'Maximum 90 jours'),
+  // An employee's expense at or above this amount, or a rental priced more
+  // than this percentage below the catalogue rate, waits for the director's
+  // approval.
+  largeExpenseThreshold: z.coerce.number().nonnegative('Le seuil doit être positif'),
+  largeDiscountThreshold: z.coerce
+    .number()
+    .int('Nombre entier attendu')
+    .min(1, 'Minimum 1 %')
+    .max(100, 'Maximum 100 %'),
 });
 
 export type UpdateSettingsInput = z.infer<typeof updateSettingsSchema>;

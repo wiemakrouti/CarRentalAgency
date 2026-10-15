@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CreateExpenseInput, UpdateExpenseInput } from '@car-rental/shared';
 import { financesApi, type ExpenseListParams } from '../api/finances.api';
 import { expenseKeys, financeSummaryKeys } from '../api/finances.keys';
+import { approvalKeys } from '@/features/approvals/api/approvals.keys';
+import { isPendingApproval } from '@/features/approvals/api/approvals.api';
 
 function invalidateExpenseEffects(queryClient: ReturnType<typeof useQueryClient>) {
   queryClient.invalidateQueries({ queryKey: expenseKeys.lists() });
@@ -28,7 +30,10 @@ export function useCreateExpenseMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateExpenseInput) => financesApi.createExpense(input),
-    onSuccess: () => invalidateExpenseEffects(queryClient),
+    onSuccess: (expense) =>
+      isPendingApproval(expense)
+        ? queryClient.invalidateQueries({ queryKey: approvalKeys.all })
+        : invalidateExpenseEffects(queryClient),
   });
 }
 
@@ -37,6 +42,10 @@ export function useUpdateExpenseMutation() {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateExpenseInput }) => financesApi.updateExpense(id, input),
     onSuccess: (expense) => {
+      if (isPendingApproval(expense)) {
+        queryClient.invalidateQueries({ queryKey: approvalKeys.all });
+        return;
+      }
       queryClient.setQueryData(expenseKeys.detail(expense.id), expense);
       invalidateExpenseEffects(queryClient);
     },

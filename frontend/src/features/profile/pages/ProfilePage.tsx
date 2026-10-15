@@ -14,8 +14,10 @@ import {
 import type { z } from 'zod';
 
 import { useAuth } from '@/providers/auth-context';
+import { useCan } from '@/hooks/use-can';
 import { useSettings } from '@/providers/settings-context';
 import { ApiClientError } from '@/lib/api-client';
+import { ROLE_LABELS } from '@/lib/role-labels';
 import { ErrorState } from '@/components/common/error-state';
 import { LoadingState } from '@/components/common/loading-state';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -35,7 +37,6 @@ import { useChangePasswordMutation, useUpdateProfileMutation } from '../hooks/us
 // Only ADMIN exists today (see @car-rental/shared's ROLES) — a lookup table
 // still reads better than a raw enum value and needs no changes if a second
 // role is ever introduced.
-const ROLE_LABELS: Record<string, string> = { ADMIN: 'Administrateur' };
 
 // This page only edits the agency's identity fields — the rest of Setting
 // (currency, contract/fiscal defaults, brand color) lives on Paramètres.
@@ -160,8 +161,11 @@ export function ProfilePage() {
   const updateProfileMutation = useUpdateProfileMutation();
   const changePasswordMutation = useChangePasswordMutation();
   const [searchParams, setSearchParams] = useSearchParams();
+  // The agency's identity is the director's to edit — an employee only gets
+  // their own account here.
+  const canEditAgency = useCan('settings.update');
   const [activeTab, setActiveTab] = useState<'agency' | 'account'>(
-    searchParams.get('tab') === 'account' ? 'account' : 'agency',
+    !canEditAgency || searchParams.get('tab') === 'account' ? 'account' : 'agency',
   );
 
   const agencyForm = useForm<AgencyIdentityInput>({
@@ -243,12 +247,14 @@ export function ProfilePage() {
           }}
         >
           <TabsList className="mb-6 h-auto w-full justify-start gap-9 rounded-none border-b border-border bg-transparent p-0">
-            <TabsTrigger value="agency" className={TAB_TRIGGER_CLASSES}>
-              <span className={TAB_ICON_CLASSES}>
-                <Building2 className="h-4 w-4" />
-              </span>
-              Profil de l'agence
-            </TabsTrigger>
+            {canEditAgency && (
+              <TabsTrigger value="agency" className={TAB_TRIGGER_CLASSES}>
+                <span className={TAB_ICON_CLASSES}>
+                  <Building2 className="h-4 w-4" />
+                </span>
+                Profil de l'agence
+              </TabsTrigger>
+            )}
             <TabsTrigger value="account" className={TAB_TRIGGER_CLASSES}>
               <span className={TAB_ICON_CLASSES}>
                 <User className="h-4 w-4" />
@@ -479,7 +485,7 @@ export function ProfilePage() {
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="text-lg font-bold text-foreground">{user.fullName}</h2>
-                      <Badge>{ROLE_LABELS[user.role] ?? user.role}</Badge>
+                      <Badge>{ROLE_LABELS[user.role]}</Badge>
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">{user.email}</p>
                   </div>

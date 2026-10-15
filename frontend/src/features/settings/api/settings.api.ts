@@ -17,6 +17,8 @@ export type Settings = {
   taxId: string | null;
   iban: string | null;
   reminderWindowDays: number;
+  largeExpenseThreshold: string;
+  largeDiscountThreshold: number;
   updatedAt: string;
 };
 

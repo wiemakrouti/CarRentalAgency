@@ -9,7 +9,7 @@ import type {
   CarExportQuery,
   CarListQuery,
 } from '../validators/car.validator.js';
-
+import { ApprovalsService } from '../services/approvals.service.js';
 export const CarsController = {
   async list(req: Request, res: Response) {
     const query = req.query as unknown as CarListQuery;
@@ -71,14 +71,16 @@ export const CarsController = {
 
   async update(req: Request, res: Response) {
     const input = req.body as UpdateCarInput;
-    const car = await CarsService.update(
+    // An employee's new catalogue rate waits for the director: the other
+    // fields are saved, and the response carries the request.
+    const { car, approvalRequest } = await ApprovalsService.submitCarUpdate(
       req.user!.agencyId,
       req.params.id!,
       input,
-      req.user!.id,
+      req.user!,
       req.ip,
     );
-    res.status(200).json({ success: true, data: car });
+    res.status(200).json({ success: true, data: { ...car, approvalRequest } });
   },
 
   async checkDeletable(req: Request, res: Response) {

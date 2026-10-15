@@ -34,6 +34,9 @@ interface SafeUser {
   email: string;
   fullName: string;
   role: Role;
+  // True while the account still runs on the director's temporary password
+  // — the frontend then shows only the "choose your password" screen.
+  mustChangePassword: boolean;
   lastLoginAt: Date | null;
   createdAt: Date;
 }
@@ -46,6 +49,7 @@ function toSafeUser(user: {
   email: string;
   fullName: string;
   role: Role;
+  mustChangePassword: boolean;
   lastLoginAt: Date | null;
   createdAt: Date;
 }): SafeUser {
@@ -54,6 +58,7 @@ function toSafeUser(user: {
     email: user.email,
     fullName: user.fullName,
     role: user.role,
+    mustChangePassword: user.mustChangePassword,
     lastLoginAt: user.lastLoginAt,
     createdAt: user.createdAt,
   };
@@ -299,6 +304,16 @@ export const AuthService = {
       );
     }
 
+    // Checked only once the password is known to be right, so a wrong
+    // password never reveals whether an account exists or is deactivated.
+    if (user.deactivatedAt) {
+      throw new AppError(
+        403,
+        'ACCOUNT_DEACTIVATED',
+        "Ce compte a été désactivé. Contactez le directeur de l'agence.",
+      );
+    }
+
     const accessToken = signAccessToken(user.id, user.role, user.agencyId);
     const rawRefreshToken = generateRawRefreshToken();
     const expiresAt = new Date(Date.now() + parseDurationMs(env.JWT_REFRESH_EXPIRES_IN));
@@ -346,7 +361,7 @@ export const AuthService = {
     }
 
     const user = await UsersRepository.findById(existing.userId);
-    if (!user) {
+    if (!user || user.deactivatedAt) {
       throw new AppError(401, 'UNAUTHENTICATED', 'Session invalide. Veuillez vous reconnecter.');
     }
 

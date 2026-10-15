@@ -3,6 +3,9 @@ import type { AuditAction } from '@car-rental/shared';
 
 interface RecordAuditEntryInput {
   userId: string | null;
+  // Required when there is no userId (automatic actions); otherwise taken
+  // from the author's account.
+  agencyId?: string;
   action: AuditAction | string;
   entityType?: string;
   entityId?: string;
@@ -23,9 +26,18 @@ export class AuditService {
     db: PrismaClient | Prisma.TransactionClient,
     entry: RecordAuditEntryInput,
   ): Promise<void> {
+    // Every row is scoped to its agency so the director's activity journal
+    // can filter on it — resolved from the author when the caller doesn't
+    // pass it (one indexed lookup, inside the same transaction).
+    const agencyId =
+      entry.agencyId ??
+      (entry.userId
+        ? (await db.user.findUnique({ where: { id: entry.userId }, select: { agencyId: true } }))?.agencyId
+        : undefined);
     await db.auditLog.create({
       data: {
         userId: entry.userId,
+        agencyId,
         action: entry.action,
         entityType: entry.entityType,
         entityId: entry.entityId,

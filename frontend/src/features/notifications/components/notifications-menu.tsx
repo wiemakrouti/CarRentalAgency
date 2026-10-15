@@ -23,7 +23,14 @@ import {
 import { LoadingState } from '@/components/common/loading-state';
 import { ErrorState } from '@/components/common/error-state';
 import { cn } from '@/lib/utils';
-import { REFETCH_INTERVAL_MS, useReminderWindowDays, useRemindersQuery } from '../hooks/use-notifications';
+import { useCan } from '@/hooks/use-can';
+import { MyRequestsPanel } from '@/features/approvals/components/my-requests-panel';
+import { useApprovalsQuery, useMarkDecisionsSeenMutation } from '@/features/approvals/hooks/use-approvals';
+import {
+  REFETCH_INTERVAL_MS,
+  useReminderWindowDays,
+  useRemindersQuery,
+} from '../hooks/use-notifications';
 import { getReminderLink } from '../lib/reminder-links';
 import type { Reminder } from '../api/notifications.api';
 
@@ -66,9 +73,24 @@ const CATEGORY_STYLES: Record<
   ReminderCategory,
   { text: string; bg: string; ring: string; border: string }
 > = {
-  overdue: { text: 'text-destructive', bg: 'bg-destructive/10', ring: 'ring-destructive/20', border: 'border-destructive/25' },
-  today: { text: 'text-warning', bg: 'bg-warning/10', ring: 'ring-warning/20', border: 'border-warning/25' },
-  upcoming: { text: 'text-primary', bg: 'bg-primary/10', ring: 'ring-primary/20', border: 'border-primary/25' },
+  overdue: {
+    text: 'text-destructive',
+    bg: 'bg-destructive/10',
+    ring: 'ring-destructive/20',
+    border: 'border-destructive/25',
+  },
+  today: {
+    text: 'text-warning',
+    bg: 'bg-warning/10',
+    ring: 'ring-warning/20',
+    border: 'border-warning/25',
+  },
+  upcoming: {
+    text: 'text-primary',
+    bg: 'bg-primary/10',
+    ring: 'ring-primary/20',
+    border: 'border-primary/25',
+  },
 };
 
 // A relative day count to scan quickly — the label itself already spells
@@ -89,7 +111,10 @@ function NotificationRow({ reminder }: { reminder: Reminder }) {
   const category = categorize(reminder);
   const style = CATEGORY_STYLES[category];
   return (
-    <DropdownMenuItem asChild className="group items-start gap-3 rounded-[14px] px-2 py-2.5 cursor-pointer">
+    <DropdownMenuItem
+      asChild
+      className="group items-start gap-3 rounded-[14px] px-2 py-2.5 cursor-pointer"
+    >
       <Link to={getReminderLink(reminder)}>
         <div
           className={cn(
@@ -103,7 +128,9 @@ function NotificationRow({ reminder }: { reminder: Reminder }) {
         </div>
         <div className="min-w-0 flex-1 whitespace-normal">
           <p className="text-[13.5px] leading-snug text-foreground">{reminder.label}</p>
-          <p className={cn('mt-[3px] text-xs font-semibold', style.text)}>{formatDueIn(reminder, category)}</p>
+          <p className={cn('mt-[3px] text-xs font-semibold', style.text)}>
+            {formatDueIn(reminder, category)}
+          </p>
         </div>
       </Link>
     </DropdownMenuItem>
@@ -123,18 +150,55 @@ export function NotificationsMenu() {
   const { data: reminders, isLoading, isError, refetch } = useRemindersQuery();
   const reminderWindowDays = useReminderWindowDays();
   const [tab, setTab] = useState<TabKey>('all');
+  // An employee's bell has a second view: the requests they sent the
+  // director (a car's rate, a large expense, a large discount) and his
+  // answer. Opening the bell marks new answers seen; `unseenIds` keeps them
+  // flagged "new" while it stays open. The director decides from the
+  // activity journal instead.
+  const isEmployee = !useCan('approval.decide');
+  const { data: requests } = useApprovalsQuery();
+  const myRequests = isEmployee ? (requests ?? []).slice(0, 20) : [];
+  const markSeen = useMarkDecisionsSeenMutation();
+  const [view, setView] = useState<'reminders' | 'requests'>('reminders');
+  const [unseenIds, setUnseenIds] = useState<Set<string>>(new Set());
+  const unseenDecisions = myRequests.filter(
+    (r) => (r.status === 'APPROVED' || r.status === 'REJECTED') && !r.requesterSeenAt,
+  );
 
-  const count = reminders?.length ?? 0;
-  const overdue = useMemo(() => reminders?.filter((r) => categorize(r) === 'overdue') ?? [], [reminders]);
-  const today = useMemo(() => reminders?.filter((r) => categorize(r) === 'today') ?? [], [reminders]);
-  const upcoming = useMemo(() => reminders?.filter((r) => categorize(r) === 'upcoming') ?? [], [reminders]);
+  function handleOpenChange(open: boolean) {
+    setTab('all');
+    if (!open || !isEmployee) return;
+    setUnseenIds(new Set(unseenDecisions.map((r) => r.id)));
+    setView(unseenDecisions.length > 0 ? 'requests' : 'reminders');
+    if (unseenDecisions.length > 0) markSeen.mutate();
+  }
+
+  const count = (reminders?.length ?? 0) + unseenDecisions.length;
+  const overdue = useMemo(
+    () => reminders?.filter((r) => categorize(r) === 'overdue') ?? [],
+    [reminders],
+  );
+  const today = useMemo(
+    () => reminders?.filter((r) => categorize(r) === 'today') ?? [],
+    [reminders],
+  );
+  const upcoming = useMemo(
+    () => reminders?.filter((r) => categorize(r) === 'upcoming') ?? [],
+    [reminders],
+  );
   const hasOverdue = overdue.length > 0;
 
   const visible =
-    tab === 'overdue' ? overdue : tab === 'today' ? today : tab === 'upcoming' ? upcoming : (reminders ?? []);
+    tab === 'overdue'
+      ? overdue
+      : tab === 'today'
+        ? today
+        : tab === 'upcoming'
+          ? upcoming
+          : (reminders ?? []);
 
   return (
-    <DropdownMenu onOpenChange={() => setTab('all')}>
+    <DropdownMenu onOpenChange={handleOpenChange}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
@@ -147,7 +211,9 @@ export function NotificationsMenu() {
             <span
               className={cn(
                 'absolute -right-0.5 -top-0.5 flex h-[17px] min-w-[17px] items-center justify-center rounded-full border-2 border-background px-1 text-[9.5px] font-bold',
-                hasOverdue ? 'bg-destructive text-destructive-foreground' : 'bg-warning text-warning-foreground',
+                hasOverdue || unseenDecisions.length > 0
+                  ? 'bg-destructive text-destructive-foreground'
+                  : 'bg-warning text-warning-foreground',
               )}
             >
               {count > 9 ? '9+' : count}
@@ -171,103 +237,138 @@ export function NotificationsMenu() {
           <div className="min-w-0 flex-1">
             <p className="text-base font-bold tracking-tight text-foreground">Notifications</p>
             <p className="mt-px text-xs text-muted-foreground">
-              Échéances des {reminderWindowDays} prochains jours
+              {view === 'requests'
+                ? 'Vos demandes de validation au directeur'
+                : `Échéances des ${reminderWindowDays} prochains jours`}
             </p>
           </div>
         </div>
 
-        {isLoading ? (
-          // Without this, the dropdown briefly shows the "Tout est sous
-          // contrôle" success state on every first open (reminders is still
-          // undefined, so count === 0) before flipping to the real count —
-          // a false all-clear that then immediately contradicts itself.
-          <LoadingState message="Chargement des notifications..." className="min-h-0 py-11" />
-        ) : isError ? (
-          <ErrorState
-            className="min-h-0 rounded-none border-0 bg-transparent px-8 py-11"
-            description="Impossible de charger les notifications."
-            onRetry={() => refetch()}
-          />
-        ) : count === 0 ? (
-          <div className="relative flex flex-col items-center gap-3 px-8 py-11 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-success/10">
-              <CheckCircle2 className="h-6 w-6 text-success" />
-            </div>
-            <p className="text-[15px] font-bold text-foreground">Tout est sous contrôle</p>
-            <p className="text-xs text-muted-foreground">Aucune échéance à signaler pour le moment.</p>
+        {isEmployee && (
+          <div className="relative mx-[22px] mt-4 grid grid-cols-2 gap-1 rounded-[11px] border border-border bg-muted p-[3px]">
+            {(['reminders', 'requests'] as const).map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setView(key)}
+                className={cn(
+                  'flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-[12px] font-semibold transition-colors',
+                  view === key
+                    ? 'bg-card text-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {key === 'reminders' ? 'Échéances' : 'Mes demandes'}
+                <span className="rounded-full bg-background/70 px-1.5 text-[10.5px] tabular-nums">
+                  {key === 'reminders' ? (reminders?.length ?? 0) : myRequests.length}
+                </span>
+              </button>
+            ))}
           </div>
+        )}
+
+        {view === 'requests' && isEmployee ? (
+          <MyRequestsPanel requests={myRequests} unseenIds={unseenIds} />
         ) : (
           <>
-            {/* Hero stats — only the groups that actually have items, so one
-                or two lone groups fill the row instead of leaving gaps. */}
-            <div className="relative flex gap-2 px-[22px] pt-[18px]">
-              {hasOverdue && (
-                <div className="flex-1 rounded-[14px] border border-destructive/25 bg-destructive/10 px-3.5 py-3.5">
-                  <div className="text-[24px] font-extrabold leading-none tabular-nums text-destructive">
-                    {overdue.length}
-                  </div>
-                  <div className="mt-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-destructive">
-                    <AlertTriangle className="h-3 w-3 shrink-0" />
-                    En retard
-                  </div>
+            {isLoading ? (
+              // Without this, the dropdown briefly shows the "Tout est sous
+              // contrôle" success state on every first open (reminders is still
+              // undefined, so count === 0) before flipping to the real count —
+              // a false all-clear that then immediately contradicts itself.
+              <LoadingState message="Chargement des notifications..." className="min-h-0 py-11" />
+            ) : isError ? (
+              <ErrorState
+                className="min-h-0 rounded-none border-0 bg-transparent px-8 py-11"
+                description="Impossible de charger les notifications."
+                onRetry={() => refetch()}
+              />
+            ) : (reminders?.length ?? 0) === 0 ? (
+              <div className="relative flex flex-col items-center gap-3 px-8 py-11 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-success/10">
+                  <CheckCircle2 className="h-6 w-6 text-success" />
                 </div>
-              )}
-              {today.length > 0 && (
-                <div className="flex-1 rounded-[14px] border border-warning/25 bg-warning/10 px-3.5 py-3.5">
-                  <div className="text-[24px] font-extrabold leading-none tabular-nums text-warning">
-                    {today.length}
-                  </div>
-                  <div className="mt-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-warning">
-                    <CalendarClock className="h-3 w-3 shrink-0" />
-                    Aujourd'hui
-                  </div>
-                </div>
-              )}
-              {upcoming.length > 0 && (
-                <div className="flex-1 rounded-[14px] border border-primary/25 bg-primary/10 px-3.5 py-3.5">
-                  <div className="text-[24px] font-extrabold leading-none tabular-nums text-primary">
-                    {upcoming.length}
-                  </div>
-                  <div className="mt-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-primary">
-                    <Clock className="h-3 w-3 shrink-0" />
-                    À venir
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Segmented filter */}
-            <div className="relative mx-[22px] mt-4 flex items-center gap-1 rounded-[11px] border border-border bg-muted p-[3px]">
-              {TABS.map(({ key, label }) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setTab(key)}
-                  className={cn(
-                    'flex-1 rounded-lg py-1.5 text-center text-[11.5px] font-semibold transition-colors',
-                    tab === key
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            <div className="relative mt-1 max-h-[400px] overflow-y-auto p-3">
-              {visible.length === 0 ? (
-                <p className="px-2 py-8 text-center text-sm text-muted-foreground">
-                  Aucune échéance dans cette catégorie.
+                <p className="text-[15px] font-bold text-foreground">Tout est sous contrôle</p>
+                <p className="text-xs text-muted-foreground">
+                  Aucune échéance à signaler pour le moment.
                 </p>
-              ) : (
-                <div className="space-y-0.5">
-                  {visible.map((reminder) => (
-                    <NotificationRow key={`${reminder.type}-${reminder.entityId}`} reminder={reminder} />
+              </div>
+            ) : (
+              <>
+                {/* Hero stats — only the groups that actually have items, so one
+                or two lone groups fill the row instead of leaving gaps. */}
+                <div className="relative flex gap-2 px-[22px] pt-[18px]">
+                  {hasOverdue && (
+                    <div className="flex-1 rounded-[14px] border border-destructive/25 bg-destructive/10 px-3.5 py-3.5">
+                      <div className="text-[24px] font-extrabold leading-none tabular-nums text-destructive">
+                        {overdue.length}
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-destructive">
+                        <AlertTriangle className="h-3 w-3 shrink-0" />
+                        En retard
+                      </div>
+                    </div>
+                  )}
+                  {today.length > 0 && (
+                    <div className="flex-1 rounded-[14px] border border-warning/25 bg-warning/10 px-3.5 py-3.5">
+                      <div className="text-[24px] font-extrabold leading-none tabular-nums text-warning">
+                        {today.length}
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-warning">
+                        <CalendarClock className="h-3 w-3 shrink-0" />
+                        Aujourd'hui
+                      </div>
+                    </div>
+                  )}
+                  {upcoming.length > 0 && (
+                    <div className="flex-1 rounded-[14px] border border-primary/25 bg-primary/10 px-3.5 py-3.5">
+                      <div className="text-[24px] font-extrabold leading-none tabular-nums text-primary">
+                        {upcoming.length}
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-primary">
+                        <Clock className="h-3 w-3 shrink-0" />À venir
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Segmented filter */}
+                <div className="relative mx-[22px] mt-4 flex items-center gap-1 rounded-[11px] border border-border bg-muted p-[3px]">
+                  {TABS.map(({ key, label }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setTab(key)}
+                      className={cn(
+                        'flex-1 rounded-lg py-1.5 text-center text-[11.5px] font-semibold transition-colors',
+                        tab === key
+                          ? 'bg-primary text-primary-foreground'
+                          : 'text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      {label}
+                    </button>
                   ))}
                 </div>
-              )}
-            </div>
+
+                <div className="relative mt-1 max-h-[400px] overflow-y-auto p-3">
+                  {visible.length === 0 ? (
+                    <p className="px-2 py-8 text-center text-sm text-muted-foreground">
+                      Aucune échéance dans cette catégorie.
+                    </p>
+                  ) : (
+                    <div className="space-y-0.5">
+                      {visible.map((reminder) => (
+                        <NotificationRow
+                          key={`${reminder.type}-${reminder.entityId}`}
+                          reminder={reminder}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </>
         )}
 

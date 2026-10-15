@@ -1,4 +1,5 @@
 export * from './enums.js';
+export * from './permissions.js';
 export * from './api-envelope.js';
 export * from './schemas/pagination.schema.js';
 export * from './schemas/auth.schema.js';
@@ -7,3 +8,6 @@ export * from './schemas/client.schema.js';
 export * from './schemas/rental.schema.js';
 export * from './schemas/finance.schema.js';
 export * from './schemas/settings.schema.js';
+export * from './schemas/user.schema.js';
+export * from './schemas/activity.schema.js';
+export * from './schemas/approval.schema.js';

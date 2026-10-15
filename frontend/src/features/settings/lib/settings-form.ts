@@ -19,5 +19,7 @@ export function toSettingsFormValues(settings: Settings): UpdateSettingsInput {
     taxId: settings.taxId,
     iban: settings.iban,
     reminderWindowDays: settings.reminderWindowDays,
+    largeExpenseThreshold: Number(settings.largeExpenseThreshold),
+    largeDiscountThreshold: settings.largeDiscountThreshold,
   };
 }

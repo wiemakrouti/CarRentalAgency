@@ -17,6 +17,8 @@ import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { isPendingApproval } from '@/features/approvals/api/approvals.api';
+import { APPROVAL_SENT_MESSAGE } from '@/features/approvals/lib/describe-approval';
 import {
   Dialog,
   DialogContent,
@@ -291,6 +293,11 @@ export function RentalFormDialog({ open, onOpenChange, onCreated, prefill }: Ren
     setFieldErrors({});
     try {
       const rental = await createMutation.mutateAsync(parsed.data);
+      if (isPendingApproval(rental)) {
+        toast.success(APPROVAL_SENT_MESSAGE);
+        onOpenChange(false);
+        return;
+      }
       toast.success(isImmediate ? 'Location créée et activée.' : 'Location créée.');
       onOpenChange(false);
       onCreated?.(rental);

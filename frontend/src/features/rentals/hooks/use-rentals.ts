@@ -10,6 +10,8 @@ import { carKeys } from '@/features/cars/api/cars.keys';
 import { clientKeys } from '@/features/clients/api/clients.keys';
 import { depositsKeys, financeSummaryKeys, paymentKeys } from '@/features/finances/api/finances.keys';
 import { notificationKeys } from '@/features/notifications/api/notifications.keys';
+import { approvalKeys } from '@/features/approvals/api/approvals.keys';
+import { isPendingApproval } from '@/features/approvals/api/approvals.api';
 import { rentalsApi, type RentalListParams } from '../api/rentals.api';
 import { rentalKeys } from '../api/rentals.keys';
 
@@ -68,6 +70,11 @@ export function useCreateRentalMutation() {
   return useMutation({
     mutationFn: (input: CreateRentalInput) => rentalsApi.create(input),
     onSuccess: (rental) => {
+      // A request for the director: nothing was booked yet.
+      if (isPendingApproval(rental)) {
+        queryClient.invalidateQueries({ queryKey: approvalKeys.all });
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: rentalKeys.lists() });
       // Every lifecycle transition (create/activate/return/extend/cancel)
       // can move a rental into or out of one of the KPI header's buckets.

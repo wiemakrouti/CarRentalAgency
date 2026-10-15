@@ -12,6 +12,7 @@ import type { Client } from '@/features/clients/api/clients.api';
 import type { Payment } from '@/features/finances/api/finances.api';
 import { apiClient } from '@/lib/api-client';
 import { buildQueryString } from '@/lib/query-string';
+import type { PendingApproval } from '@/features/approvals/api/approvals.api';
 
 export type RentalExtension = {
   id: string;
@@ -129,7 +130,8 @@ export const rentalsApi = {
   getPlanning: (from: string, to: string) =>
     apiClient.get<FleetPlanning>(`/rentals/planning${buildQueryString({ from, to })}`),
   getById: (id: string) => apiClient.get<Rental>(`/rentals/${id}`),
-  create: (input: CreateRentalInput) => apiClient.post<Rental>('/rentals', input),
+  // A large discount by an employee comes back as a request (HTTP 202).
+  create: (input: CreateRentalInput) => apiClient.post<Rental | PendingApproval>('/rentals', input),
   activate: (id: string, input: ActivateRentalInput) => apiClient.post<Rental>(`/rentals/${id}/activate`, input),
   returnRental: (id: string, input: ReturnRentalInput) => apiClient.post<Rental>(`/rentals/${id}/return`, input),
   extend: (id: string, input: ExtendRentalInput) => apiClient.post<Rental>(`/rentals/${id}/extend`, input),

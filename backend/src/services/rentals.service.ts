@@ -126,6 +126,7 @@ export const RentalsService = {
       for (const rental of expired) {
         await AuditService.record(tx, {
           userId: null,
+          agencyId,
           action: 'RENTAL_AUTO_CANCEL',
           entityType: 'Rental',
           entityId: rental.id,
@@ -322,8 +323,9 @@ export const RentalsService = {
           // "Location immédiate") — created here, in the same
           // transaction as the rental, so the two can never drift: either
           // both commit, or neither does.
+          let initialPayment: Awaited<ReturnType<typeof PaymentsRepository.create>> | null = null;
           if (input.initialPayment) {
-            await PaymentsRepository.create(
+            initialPayment = await PaymentsRepository.create(
               agencyId,
               {
                 rentalId: rental.id,
@@ -379,6 +381,10 @@ export const RentalsService = {
             }
           }
 
+          // One audit entry per real-world event, exactly as if each step had
+          // been done separately: the booking, then the payment collected,
+          // then the keys handed over — so the activity journal and the
+          // team summary count a "Location immédiate" like any other.
           await AuditService.record(tx, {
             userId,
             action: 'CREATE',
@@ -387,7 +393,29 @@ export const RentalsService = {
             after: rental,
             ipAddress,
           });
-          return RentalsRepository.findById(agencyId, rental.id, undefined, tx);
+          if (initialPayment) {
+            await AuditService.record(tx, {
+              userId,
+              action: 'CREATE',
+              entityType: 'Payment',
+              entityId: initialPayment.id,
+              after: initialPayment,
+              ipAddress,
+            });
+          }
+          const created = await RentalsRepository.findById(agencyId, rental.id, undefined, tx);
+          if (input.activation) {
+            await AuditService.record(tx, {
+              userId,
+              action: 'RENTAL_ACTIVATE',
+              entityType: 'Rental',
+              entityId: rental.id,
+              before: rental,
+              after: created,
+              ipAddress,
+            });
+          }
+          return created;
         }, LIFECYCLE_ISOLATION);
       } catch (err) {
         if (

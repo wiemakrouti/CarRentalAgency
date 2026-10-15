@@ -3,7 +3,8 @@ import type { LucideIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { CarFront, ClipboardList, FilePlus2, HandCoins, Loader2, Receipt, UserPlus, UserRound } from 'lucide-react';
 
-import { navItems } from '@/lib/navigation';
+import { navItemsFor } from '@/lib/navigation';
+import { useAuth } from '@/providers/auth-context';
 import { useQuickActions, type QuickAction } from '@/providers/quick-actions-context';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import {
@@ -40,6 +41,7 @@ function matches(label: string, search: string): boolean {
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const navigate = useNavigate();
   const { openQuickAction, openRental } = useQuickActions();
+  const { user } = useAuth();
   const [search, setSearch] = useState('');
   const results = useGlobalSearch(search, open);
 
@@ -64,7 +66,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     effect();
   };
 
-  const pages = navItems.filter((item) => matches(item.label, search));
+  const pages = navItemsFor(user?.role).filter((item) => matches(item.label, search));
   const actions = QUICK_ACTIONS.filter((item) => matches(item.label, search));
   const hasRecords = results.clients.length + results.cars.length + results.rentals.length > 0;
   const nothingFound = !results.isSearching && !hasRecords && pages.length === 0 && actions.length === 0;

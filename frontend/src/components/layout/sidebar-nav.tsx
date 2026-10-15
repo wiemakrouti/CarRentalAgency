@@ -1,8 +1,12 @@
 import { NavLink, useMatch } from 'react-router-dom';
 
-import { navItems, type NavItem } from '@/lib/navigation';
+import type { Role } from '@car-rental/shared';
+
+import { navItemsFor, type NavItem } from '@/lib/navigation';
+import { useAuth } from '@/providers/auth-context';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { usePendingApprovalsQuery } from '@/features/approvals/hooks/use-approvals';
 
 type SidebarNavProps = {
   collapsed?: boolean;
@@ -11,9 +15,10 @@ type SidebarNavProps = {
 
 // Purely visual grouping (see navItems' `group` field) — renders items under
 // their section label in the order groups first appear, no routing impact.
-function groupItems() {
-  const groups: { name: string; items: typeof navItems }[] = [];
-  for (const item of navItems) {
+// Links the role may not follow are left out.
+function groupItems(role: Role | undefined) {
+  const groups: { name: string; items: NavItem[] }[] = [];
+  for (const item of navItemsFor(role)) {
     const group = groups.find((g) => g.name === item.group);
     if (group) group.items.push(item);
     else groups.push({ name: item.group, items: [item] });
@@ -25,6 +30,9 @@ type SidebarNavLinkProps = {
   item: NavItem;
   collapsed: boolean;
   onNavigate?: () => void;
+  // A count shown on the icon — the requests waiting for the director, on
+  // "Journal d'activité".
+  badge?: number;
 };
 
 // Extracted so `isActive` can be resolved with `useMatch` — the same
@@ -37,7 +45,7 @@ type SidebarNavLinkProps = {
 // classes (active vs. inactive color) in favor of that stringified
 // gibberish. Resolving isActive up front lets className stay a plain
 // string, which Slot merges correctly either way.
-function SidebarNavLink({ item, collapsed, onNavigate }: SidebarNavLinkProps) {
+function SidebarNavLink({ item, collapsed, onNavigate, badge = 0 }: SidebarNavLinkProps) {
   const isActive = !!useMatch({ path: item.path, end: item.path === '/' });
 
   const link = (
@@ -45,7 +53,7 @@ function SidebarNavLink({ item, collapsed, onNavigate }: SidebarNavLinkProps) {
       to={item.path}
       end={item.path === '/'}
       onClick={onNavigate}
-      aria-label={collapsed ? item.label : undefined}
+      aria-label={collapsed || badge > 0 ? `${item.label}${badge > 0 ? ` (${badge} à valider)` : ''}` : undefined}
       className={cn(
         'flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-all',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar',
@@ -57,7 +65,14 @@ function SidebarNavLink({ item, collapsed, onNavigate }: SidebarNavLinkProps) {
             : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground',
       )}
     >
-      <item.icon className="h-4 w-4 shrink-0" />
+      <span className="relative shrink-0">
+        <item.icon className="h-4 w-4" />
+        {badge > 0 && (
+          <span className="absolute -right-2 -top-2 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-destructive px-[3px] text-[9px] font-bold leading-none text-destructive-foreground ring-2 ring-sidebar">
+            {badge > 9 ? '9+' : badge}
+          </span>
+        )}
+      </span>
       {!collapsed && <span className="truncate">{item.label}</span>}
     </NavLink>
   );
@@ -73,7 +88,10 @@ function SidebarNavLink({ item, collapsed, onNavigate }: SidebarNavLinkProps) {
 }
 
 export function SidebarNav({ collapsed = false, onNavigate }: SidebarNavProps) {
-  const groups = groupItems();
+  const { user } = useAuth();
+  const groups = groupItems(user?.role);
+  const { data: pending } = usePendingApprovalsQuery();
+  const badges: Record<string, number> = { '/activity': pending?.length ?? 0 };
 
   return (
     <nav className="flex flex-col gap-4 px-3" aria-label="Navigation principale">
@@ -85,7 +103,13 @@ export function SidebarNav({ collapsed = false, onNavigate }: SidebarNavProps) {
             </span>
           )}
           {group.items.map((item) => (
-            <SidebarNavLink key={item.path} item={item} collapsed={collapsed} onNavigate={onNavigate} />
+            <SidebarNavLink
+              key={item.path}
+              item={item}
+              collapsed={collapsed}
+              onNavigate={onNavigate}
+              badge={badges[item.path]}
+            />
           ))}
         </div>
       ))}

@@ -3,6 +3,7 @@ import { CalendarDays, MoreHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { ApiClientError } from '@/lib/api-client';
+import { useCan } from '@/hooks/use-can';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -32,6 +33,8 @@ type CarRowActionsProps = {
 export function CarRowActions({ car, onEdit, onViewDetails, onOpenCalendar }: CarRowActionsProps) {
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const deleteMutation = useDeleteCarMutation();
+  // Deleting erases a car's trace — the director's call only.
+  const canDelete = useCan('car.delete');
   // Checked as soon as the dialog opens so it can show the right content —
   // a destructive confirm, or an explanatory notice — before the admin ever
   // clicks anything, instead of only finding out after submitting.
@@ -64,12 +67,11 @@ export function CarRowActions({ car, onEdit, onViewDetails, onOpenCalendar }: Ca
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => onViewDetails(car)}>Voir les détails</DropdownMenuItem>
             <DropdownMenuItem onClick={() => onEdit(car)}>Modifier</DropdownMenuItem>
-            <DropdownMenuItem
-              className="text-destructive"
-              onClick={() => setConfirmDeleteOpen(true)}
-            >
-              Supprimer
-            </DropdownMenuItem>
+            {canDelete && (
+              <DropdownMenuItem className="text-destructive" onClick={() => setConfirmDeleteOpen(true)}>
+                Supprimer
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

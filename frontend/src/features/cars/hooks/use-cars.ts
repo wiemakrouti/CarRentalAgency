@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CreateCarInput, UpdateCarInput } from '@car-rental/shared';
 import { notificationKeys } from '@/features/notifications/api/notifications.keys';
 import { rentalKeys } from '@/features/rentals/api/rentals.keys';
+import { approvalKeys } from '@/features/approvals/api/approvals.keys';
 import { carsApi, type CarListParams, type ManualCarStatus } from '../api/cars.api';
 import { carKeys } from '../api/cars.keys';
 
@@ -86,6 +87,7 @@ export function useUpdateCarMutation() {
       // this it only catches up on useRemindersQuery's 5-minute interval,
       // reading as "I just fixed this, why is the notification still there".
       queryClient.invalidateQueries({ queryKey: notificationKeys.all });
+      if (car.approvalRequest) queryClient.invalidateQueries({ queryKey: approvalKeys.all });
     },
   });
 }

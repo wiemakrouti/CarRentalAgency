@@ -16,6 +16,9 @@ export type AuthUser = {
   email: string;
   fullName: string;
   role: Role;
+  // Still on the director's temporary password — ProtectedRoute then shows
+  // only the "choose your password" screen (the API refuses everything else).
+  mustChangePassword: boolean;
   lastLoginAt: string | null;
   createdAt: string;
 };

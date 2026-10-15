@@ -11,6 +11,9 @@ import { rentalsRouter } from './routes/rentals.routes.js';
 import { financesRouter } from './routes/finances.routes.js';
 import { remindersRouter } from './routes/reminders.routes.js';
 import { settingsRouter } from './routes/settings.routes.js';
+import { teamRouter } from './routes/team.routes.js';
+import { activityRouter } from './routes/activity.routes.js';
+import { approvalsRouter } from './routes/approvals.routes.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { AppError } from './utils/app-error.js';
 
@@ -31,8 +34,11 @@ export function createApp() {
   api.use(financesRouter);
   api.use(remindersRouter);
   api.use(settingsRouter);
-  // Remaining feature routers (maintenance, reports, audit-logs) are
-  // mounted here as their phases ship.
+  api.use(teamRouter);
+  api.use(activityRouter);
+  api.use(approvalsRouter);
+  // Remaining feature routers (maintenance, reports) are mounted here as
+  // their phases ship.
   app.use('/api/v1', api);
 
   app.use((_req, _res, next) => {

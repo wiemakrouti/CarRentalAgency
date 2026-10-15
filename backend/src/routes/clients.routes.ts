@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { createClientSchema, updateClientSchema } from '@car-rental/shared';
 import { authenticate } from '../middleware/authenticate.js';
-import { authorize } from '../middleware/authorize.js';
+import { authorizePermission } from '../middleware/authorize.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { uploadClientDocument } from '../middleware/upload.js';
@@ -16,7 +16,10 @@ import {
 
 export const clientsRouter = Router();
 
-clientsRouter.use('/clients', authenticate, authorize('ADMIN'));
+// Every member of the agency (director and employees) — `authenticate` scopes
+// each request to the caller's agency; director-only actions add
+// authorizePermission() below.
+clientsRouter.use('/clients', authenticate);
 
 // Must be registered before /clients/:id so "export"/"check-duplicates" aren't
 // matched as an id (mirrors /cars/export in cars.routes.ts).
@@ -60,6 +63,7 @@ clientsRouter.get(
 );
 clientsRouter.delete(
   '/clients/:id',
+  authorizePermission('client.delete'),
   validate({ params: clientIdParamSchema }),
   asyncHandler(ClientsController.delete),
 );

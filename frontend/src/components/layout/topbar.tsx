@@ -2,6 +2,7 @@ import { Link, useMatches, useNavigate } from 'react-router-dom';
 import { LogOut, Search, User } from 'lucide-react';
 
 import { useAuth } from '@/providers/auth-context';
+import { useCan } from '@/hooks/use-can';
 import { Button } from '@/components/ui/button';
 import {
   Breadcrumb,
@@ -24,7 +25,8 @@ import { MobileNav } from '@/components/layout/mobile-nav';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
 import { NotificationsMenu } from '@/features/notifications/components/notifications-menu';
 
-type RouteHandle = { breadcrumb?: string };
+// `employeeBreadcrumb`: a page an employee reaches under another name.
+type RouteHandle = { breadcrumb?: string; employeeBreadcrumb?: string };
 
 type TopbarProps = {
   onOpenCommandPalette: () => void;
@@ -32,6 +34,7 @@ type TopbarProps = {
 
 export function Topbar({ onOpenCommandPalette }: TopbarProps) {
   const { user, logout } = useAuth();
+  const canEditSettings = useCan('settings.update');
   const navigate = useNavigate();
   const matches = useMatches();
 
@@ -43,7 +46,9 @@ export function Topbar({ onOpenCommandPalette }: TopbarProps) {
     .filter((match) => (match.handle as RouteHandle | undefined)?.breadcrumb)
     .map((match) => ({
       path: match.pathname,
-      label: (match.handle as RouteHandle).breadcrumb as string,
+      label:
+        (user?.role === 'EMPLOYEE' && (match.handle as RouteHandle).employeeBreadcrumb) ||
+        ((match.handle as RouteHandle).breadcrumb as string),
     }));
 
   return (
@@ -115,9 +120,11 @@ export function Topbar({ onOpenCommandPalette }: TopbarProps) {
             <DropdownMenuItem asChild>
               <Link to="/profile">Profil</Link>
             </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link to="/settings">Paramètres</Link>
-            </DropdownMenuItem>
+            {canEditSettings && (
+              <DropdownMenuItem asChild>
+                <Link to="/settings">Paramètres</Link>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout} className="text-destructive">
               <LogOut className="h-4 w-4" />

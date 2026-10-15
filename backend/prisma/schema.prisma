@@ -18,8 +18,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ADMIN: the agency's director — every right, plus the team, the activity
+// journal and the agency settings. EMPLOYEE: runs the day-to-day work
+// (rentals, clients, cars, payments, expenses) under the director's eye.
 enum Role {
   ADMIN
+  EMPLOYEE
 }
 
 enum CarCategory {
@@ -118,32 +122,41 @@ model Agency {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users    User[]
-  cars     Car[]
-  clients  Client[]
-  rentals  Rental[]
-  payments Payment[]
-  expenses Expense[]
-  setting  Setting?
+  users            User[]
+  cars             Car[]
+  clients          Client[]
+  rentals          Rental[]
+  payments         Payment[]
+  expenses         Expense[]
+  setting          Setting?
+  auditLogs        AuditLog[]
+  approvalRequests ApprovalRequest[]
 
   @@map("agencies")
 }
 
 model User {
-  id              String    @id @default(uuid())
+  id                 String    @id @default(uuid())
   // Global, not per-agency: login has no agency-selection step, so an email
   // must resolve to exactly one account across the whole deployment.
-  email           String    @unique
-  passwordHash    String
-  fullName        String
-  role            Role      @default(ADMIN)
+  email              String    @unique
+  passwordHash       String
+  fullName           String
+  role               Role      @default(ADMIN)
   // Null until the verification email's link is clicked (AuthService.
   // verifyEmail) — non-blocking: an unverified admin can still log in and
   // use the app, this is only surfaced as a dismissible reminder banner.
-  emailVerifiedAt DateTime?
-  lastLoginAt     DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  emailVerifiedAt    DateTime?
+  lastLoginAt        DateTime?
+  // Set by the director to cut an employee off (login refused, sessions
+  // revoked) without deleting the account — their history stays attributed.
+  deactivatedAt      DateTime?
+  // True for an account created (or reset) by the director with a temporary
+  // password — every request but the password change itself is refused
+  // until the employee picks their own.
+  mustChangePassword Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   agencyId String
   agency   Agency @relation(fields: [agencyId], references: [id])
@@ -153,6 +166,8 @@ model User {
   refreshTokens           RefreshToken[]
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens     PasswordResetToken[]
+  approvalRequests        ApprovalRequest[]        @relation("ApprovalRequestedBy")
+  approvalDecisions       ApprovalRequest[]        @relation("ApprovalDecidedBy")
 
   @@index([agencyId])
   @@map("users")
@@ -350,9 +365,9 @@ model Rental {
   // negotiated price stays visible as such even after the car's own rate
   // changes.
   catalogDailyRate Decimal @db.Decimal(10, 3)
-  totalAmount     Decimal @db.Decimal(10, 3)
-  depositAmount   Decimal @db.Decimal(10, 3)
-  depositReturned Boolean @default(false)
+  totalAmount      Decimal @db.Decimal(10, 3)
+  depositAmount    Decimal @db.Decimal(10, 3)
+  depositReturned  Boolean @default(false)
 
   mileageAtPickup   Int?
   mileageAtReturn   Int?
@@ -506,33 +521,43 @@ model Setting {
   agencyId String @unique
   agency   Agency @relation(fields: [agencyId], references: [id])
 
-  agencyName           String
+  agencyName             String
   // When the agency itself was founded — purely informational (e.g. "since
   // 2015" on documents), unrelated to `createdAt` which is this row's own
   // creation timestamp.
-  foundedAt            DateTime?
-  address              String?
-  phone                String?
-  email                String?
-  logoUrl              String?
+  foundedAt              DateTime?
+  address                String?
+  phone                  String?
+  email                  String?
+  logoUrl                String?
   // IBAN (or Tunisian RIB) for bank transfers — deposit refunds, invoices.
-  iban                 String?
-  currencyCode         String    @default("TND")
-  defaultDepositAmount Decimal   @default(0) @db.Decimal(10, 3)
-  taxId                String?
+  iban                   String?
+  currencyCode           String    @default("TND")
+  defaultDepositAmount   Decimal   @default(0) @db.Decimal(10, 3)
+  taxId                  String?
   // How many days ahead the notification bell (RemindersService) looks for
   // upcoming expiries — previously the frontend's own hardcoded
   // REMINDERS_WITHIN_DAYS constant, now a per-agency setting.
-  reminderWindowDays   Int       @default(7)
-  updatedAt            DateTime  @updatedAt
+  reminderWindowDays     Int       @default(7)
+  // An expense at or above this amount, recorded by an employee, waits for
+  // the director's approval before it exists (ApprovalsService).
+  largeExpenseThreshold  Decimal   @default(500) @db.Decimal(10, 3)
+  // A rental priced more than this many percent below the car's catalogue
+  // rate, booked by an employee, waits for the director's approval.
+  largeDiscountThreshold Int       @default(15)
+  updatedAt              DateTime  @updatedAt
 
   @@map("settings")
 }
 
 model AuditLog {
-  id     String  @id @default(uuid())
-  userId String?
-  user   User?   @relation(fields: [userId], references: [id])
+  id       String  @id @default(uuid())
+  userId   String?
+  user     User?   @relation(fields: [userId], references: [id])
+  // The agency the action happened in — what the director's activity journal
+  // filters on. New rows always carry it (AuditService.record).
+  agencyId String?
+  agency   Agency? @relation(fields: [agencyId], references: [id])
 
   action         String
   entityType     String?
@@ -544,5 +569,55 @@ model AuditLog {
 
   @@index([entityType, entityId])
   @@index([userId, createdAt])
+  @@index([agencyId, createdAt])
   @@map("audit_logs")
+}
+
+// The three actions an employee can't do alone: changing a car's catalogue
+// rate, recording a large expense, booking at a large discount. The action
+// doesn't exist until the director approves — `payload` is the employee's
+// original, already-validated request, re-validated and executed on their
+// behalf at approval (ApprovalsService.approve).
+enum ApprovalType {
+  CAR_PRICE_CHANGE
+  LARGE_EXPENSE
+  LARGE_DISCOUNT
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+model ApprovalRequest {
+  id String @id @default(uuid())
+
+  agencyId String
+  agency   Agency @relation(fields: [agencyId], references: [id])
+
+  type     ApprovalType
+  status   ApprovalStatus @default(PENDING)
+  // The request body as the employee sent it (dates as ISO strings).
+  payload  Json
+  // What the director needs to decide, frozen at request time (car, client,
+  // amounts, rates) — shown as is, even if the records change since.
+  summary  Json
+  // The car whose rate would change; for the other types, the rental or
+  // expense created once approved.
+  entityId String?
+
+  requestedById   String
+  requestedBy     User      @relation("ApprovalRequestedBy", fields: [requestedById], references: [id])
+  decidedById     String?
+  decidedBy       User?     @relation("ApprovalDecidedBy", fields: [decidedById], references: [id])
+  decidedAt       DateTime?
+  // When the employee saw the decision (their notification bell).
+  requesterSeenAt DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([agencyId, status, createdAt])
+  @@index([requestedById, createdAt])
+  @@map("approval_requests")
 }

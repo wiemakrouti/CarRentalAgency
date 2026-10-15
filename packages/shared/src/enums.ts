@@ -5,7 +5,9 @@
  * for frontend/shared code; schema.prisma is the source of truth for the DB.
  */
 
-export const ROLES = ['ADMIN'] as const;
+// ADMIN: the agency's director. EMPLOYEE: runs the day-to-day work under
+// the director's supervision (see docs/architecture.md § Roles).
+export const ROLES = ['ADMIN', 'EMPLOYEE'] as const;
 export type Role = (typeof ROLES)[number];
 
 export const CAR_CATEGORIES = ['ECONOMY', 'COMPACT', 'SUV', 'LUXURY', 'VAN'] as const;
@@ -124,5 +126,24 @@ export const AUDIT_ACTIONS = [
   'EMAIL_VERIFY',
   'SESSION_REVOKE',
   'SESSIONS_REVOKE_OTHERS',
+  // The director's team management (TeamService).
+  'USER_CREATE',
+  'USER_UPDATE',
+  'USER_DEACTIVATE',
+  'USER_REACTIVATE',
+  'USER_PASSWORD_RESET',
+  // The director's approval of an employee's sensitive action (ApprovalsService).
+  'APPROVAL_REQUEST',
+  'APPROVAL_APPROVE',
+  'APPROVAL_REJECT',
+  'APPROVAL_WITHDRAW',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
+
+// The actions an employee can't do alone — see ApprovalRequest in the
+// Prisma schema.
+export const APPROVAL_TYPES = ['CAR_PRICE_CHANGE', 'LARGE_EXPENSE', 'LARGE_DISCOUNT'] as const;
+export type ApprovalType = (typeof APPROVAL_TYPES)[number];
+
+export const APPROVAL_STATUSES = ['PENDING', 'APPROVED', 'REJECTED', 'WITHDRAWN'] as const;
+export type ApprovalStatus = (typeof APPROVAL_STATUSES)[number];

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { createCarSchema, updateCarSchema } from '@car-rental/shared';
 import { authenticate } from '../middleware/authenticate.js';
-import { authorize } from '../middleware/authorize.js';
+import { authorizePermission } from '../middleware/authorize.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { uploadCarImage } from '../middleware/upload.js';
@@ -18,7 +18,10 @@ import {
 
 export const carsRouter = Router();
 
-carsRouter.use('/cars', authenticate, authorize('ADMIN'));
+// Every member of the agency (director and employees) — `authenticate` scopes
+// each request to the caller's agency; director-only actions add
+// authorizePermission() below.
+carsRouter.use('/cars', authenticate);
 
 // Must be registered before /cars/:id so "available"/"export" aren't matched as an id.
 carsRouter.get(
@@ -41,11 +44,13 @@ carsRouter.get(
 // regardless of registration order — unlike /available and /export above.
 carsRouter.post(
   '/cars/bulk/deletable',
+  authorizePermission('car.delete'),
   validate({ body: bulkCarIdsSchema }),
   asyncHandler(CarsController.checkBulkDeletable),
 );
 carsRouter.post(
   '/cars/bulk/delete',
+  authorizePermission('car.delete'),
   validate({ body: bulkCarIdsSchema }),
   asyncHandler(CarsController.bulkDelete),
 );
@@ -84,6 +89,7 @@ carsRouter.get(
 );
 carsRouter.delete(
   '/cars/:id',
+  authorizePermission('car.delete'),
   validate({ params: carIdParamSchema }),
   asyncHandler(CarsController.delete),
 );

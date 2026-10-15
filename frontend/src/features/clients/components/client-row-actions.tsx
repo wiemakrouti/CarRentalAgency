@@ -3,6 +3,7 @@ import { CalendarDays, MoreHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { ApiClientError } from '@/lib/api-client';
+import { useCan } from '@/hooks/use-can';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -36,6 +37,8 @@ type ClientRowActionsProps = {
 export function ClientRowActions({ client, onEdit, onViewProfile, onOpenCalendar }: ClientRowActionsProps) {
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const deleteMutation = useDeleteClientMutation();
+  // Deleting erases a client's trace — the director's call only.
+  const canDelete = useCan('client.delete');
   const deletableQuery = useClientDeletableQuery(client.id, confirmDeleteOpen);
   const blocked = deletableQuery.data?.canDelete === false;
 
@@ -65,9 +68,11 @@ export function ClientRowActions({ client, onEdit, onViewProfile, onOpenCalendar
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => onViewProfile(client)}>Voir la fiche</DropdownMenuItem>
             <DropdownMenuItem onClick={() => onEdit(client)}>Modifier</DropdownMenuItem>
-            <DropdownMenuItem className="text-destructive" onClick={() => setConfirmDeleteOpen(true)}>
-              Supprimer
-            </DropdownMenuItem>
+            {canDelete && (
+              <DropdownMenuItem className="text-destructive" onClick={() => setConfirmDeleteOpen(true)}>
+                Supprimer
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

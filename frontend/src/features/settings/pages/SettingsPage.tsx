@@ -63,6 +63,8 @@ function toFormValues(settings: Settings): OperationalSettingsInput {
     currencyCode: full.currencyCode,
     defaultDepositAmount: full.defaultDepositAmount,
     reminderWindowDays: full.reminderWindowDays,
+    largeExpenseThreshold: full.largeExpenseThreshold,
+    largeDiscountThreshold: full.largeDiscountThreshold,
   };
 }
 
@@ -153,9 +155,11 @@ export function SettingsPage() {
         />
       )}
 
+      {/* Side by side on wide screens, stacked below xl where each half
+          would be too narrow for the fields and the session rows. */}
       {settings && (
-        <>
-          <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6">
+        <div className="grid items-start gap-6 xl:grid-cols-2 xl:items-stretch">
+          <form onSubmit={handleSubmit(onSubmit)} className="flex min-w-0 flex-col gap-6">
             <Card className="min-w-0">
               <CardHeader className="flex flex-row items-center gap-3.5 space-y-0">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary-400 to-primary-700 text-primary-foreground shadow-[0_4px_10px_-4px_hsl(var(--primary-500)/0.5)]">
@@ -169,7 +173,7 @@ export function SettingsPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="grid gap-4 sm:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="currencyCode" required>
                       Devise
@@ -246,6 +250,48 @@ export function SettingsPage() {
                       </p>
                     )}
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="largeExpenseThreshold" required>
+                      Seuil des dépenses
+                    </Label>
+                    <Input
+                      id="largeExpenseThreshold"
+                      type="number"
+                      step="0.001"
+                      min="0"
+                      {...register('largeExpenseThreshold', { setValueAs: Number })}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Une dépense d'un employé à partir de ce montant attend votre validation.
+                    </p>
+                    {errors.largeExpenseThreshold && (
+                      <p className="text-sm text-destructive">
+                        {errors.largeExpenseThreshold.message}
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="largeDiscountThreshold" required>
+                      Seuil de remise (%)
+                    </Label>
+                    <Input
+                      id="largeDiscountThreshold"
+                      type="number"
+                      step="1"
+                      min="1"
+                      max="100"
+                      {...register('largeDiscountThreshold', { setValueAs: Number })}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Une location d'un employé avec une remise au-delà de ce pourcentage du tarif
+                      catalogue attend votre validation.
+                    </p>
+                    {errors.largeDiscountThreshold && (
+                      <p className="text-sm text-destructive">
+                        {errors.largeDiscountThreshold.message}
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 <div className="mt-6 flex justify-end">
@@ -258,7 +304,7 @@ export function SettingsPage() {
             </Card>
           </form>
 
-          <Card>
+          <Card className="flex min-w-0 flex-col">
             <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 space-y-0">
               <div className="flex items-center gap-3.5">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-400 to-slate-600 text-white shadow-[0_4px_10px_-4px_rgba(51,102,232,0.5)]">
@@ -283,79 +329,84 @@ export function SettingsPage() {
                 Déconnecter les autres appareils
               </Button>
             </CardHeader>
-            <CardContent>
-              <div className="relative">
-                {/* Timeline connector running behind the icon column — visible
+            {/* Next to the settings form (xl) the list takes whatever height
+                that card leaves and scrolls inside, so a long list of devices
+                never stretches the row; stacked, it's simply capped. */}
+            <CardContent className="xl:relative xl:min-h-[200px] xl:flex-1">
+              <div className="-mx-1 max-h-[420px] overflow-y-auto px-1 xl:absolute xl:inset-x-6 xl:bottom-6 xl:top-0 xl:mx-0 xl:max-h-none xl:px-0">
+                <div className="relative">
+                  {/* Timeline connector running behind the icon column — visible
                   only in the gaps between rows, since each row's own
                   background covers it everywhere else. */}
-                {(sessionsQuery.data?.length ?? 0) > 1 && (
-                  <div className="pointer-events-none absolute bottom-5 left-[30px] top-5 w-px bg-primary/15 dark:bg-primary/25" />
-                )}
-                <div className="space-y-2.5">
-                  {sessionsQuery.isLoading && (
-                    <>
-                      <Skeleton className="h-16 w-full rounded-xl" />
-                      <Skeleton className="h-16 w-full rounded-xl" />
-                    </>
+                  {(sessionsQuery.data?.length ?? 0) > 1 && (
+                    <div className="pointer-events-none absolute bottom-5 left-[30px] top-5 w-px bg-primary/15 dark:bg-primary/25" />
                   )}
-                  {sessionsQuery.isError && (
-                    <p className="text-sm text-destructive">
-                      Impossible de charger vos sessions actives.
-                    </p>
-                  )}
-                  {sessionsQuery.data?.length === 0 && (
-                    <p className="text-sm text-muted-foreground">Aucune session active.</p>
-                  )}
-                  {sessionsQuery.data?.map((session) => (
-                    <div
-                      key={session.id}
-                      className="relative flex items-center gap-3 rounded-xl border border-border bg-card/60 p-3"
-                    >
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                        {isMobileUserAgent(session.userAgent) ? (
-                          <Smartphone className="h-4 w-4" />
-                        ) : (
-                          <Monitor className="h-4 w-4" />
-                        )}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-foreground">
-                          {parseUserAgent(session.userAgent)}
-                        </p>
-                        <div className="mt-1 flex flex-wrap items-center gap-2">
-                          {session.isCurrent ? (
-                            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700 dark:text-success">
-                              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" />
-                              Actif maintenant
-                            </span>
+                  <div className="space-y-2.5">
+                    {sessionsQuery.isLoading && (
+                      <>
+                        <Skeleton className="h-16 w-full rounded-xl" />
+                        <Skeleton className="h-16 w-full rounded-xl" />
+                      </>
+                    )}
+                    {sessionsQuery.isError && (
+                      <p className="text-sm text-destructive">
+                        Impossible de charger vos sessions actives.
+                      </p>
+                    )}
+                    {sessionsQuery.data?.length === 0 && (
+                      <p className="text-sm text-muted-foreground">Aucune session active.</p>
+                    )}
+                    {sessionsQuery.data?.map((session) => (
+                      <div
+                        key={session.id}
+                        className="relative flex items-center gap-3 rounded-xl border border-border bg-card/60 p-3"
+                      >
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                          {isMobileUserAgent(session.userAgent) ? (
+                            <Smartphone className="h-4 w-4" />
                           ) : (
-                            <span className="text-xs text-muted-foreground">
-                              Connecté {formatRelativeTime(session.createdAt)}
-                            </span>
+                            <Monitor className="h-4 w-4" />
                           )}
-                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-                            {session.ipAddress ?? 'IP inconnue'}
-                          </span>
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-foreground">
+                            {parseUserAgent(session.userAgent)}
+                          </p>
+                          <div className="mt-1 flex flex-wrap items-center gap-2">
+                            {session.isCurrent ? (
+                              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700 dark:text-success">
+                                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" />
+                                Actif maintenant
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                Connecté {formatRelativeTime(session.createdAt)}
+                              </span>
+                            )}
+                            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                              {session.ipAddress ?? 'IP inconnue'}
+                            </span>
+                          </div>
                         </div>
+                        {!session.isCurrent && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => setSessionToRevoke(session.id)}
+                          >
+                            Déconnecter
+                          </Button>
+                        )}
                       </div>
-                      {!session.isCurrent && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          onClick={() => setSessionToRevoke(session.id)}
-                        >
-                          Déconnecter
-                        </Button>
-                      )}
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </div>
             </CardContent>
           </Card>
-        </>
+        </div>
       )}
 
       <ConfirmDialog

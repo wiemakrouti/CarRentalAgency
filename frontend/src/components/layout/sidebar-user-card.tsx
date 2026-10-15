@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom';
 
 import { useAuth } from '@/providers/auth-context';
+import { ROLE_LABELS } from '@/lib/role-labels';
 
-// The signed-in admin at the foot of the navigation — the desktop sidebar
+// The signed-in user (director or employee) at the foot of the navigation — the desktop sidebar
 // and the mobile menu both show it, and it opens the account settings.
 export function SidebarUserCard({ onNavigate }: { onNavigate?: () => void }) {
   const { user } = useAuth();
@@ -19,7 +20,9 @@ export function SidebarUserCard({ onNavigate }: { onNavigate?: () => void }) {
       </div>
       <div className="flex min-w-0 flex-col">
         <span className="truncate text-xs font-semibold text-sidebar-foreground">{user?.fullName ?? 'Administrateur'}</span>
-        <span className="truncate text-[11px] text-sidebar-foreground/50">Administrateur</span>
+        <span className="truncate text-[11px] text-sidebar-foreground/50">
+          {ROLE_LABELS[user?.role ?? 'ADMIN']}
+        </span>
       </div>
     </Link>
   );

@@ -13,6 +13,7 @@ import type { Car } from '@/features/cars/api/cars.api';
 import type { Client } from '@/features/clients/api/clients.api';
 import { apiClient } from '@/lib/api-client';
 import { buildQueryString } from '@/lib/query-string';
+import type { PendingApproval } from '@/features/approvals/api/approvals.api';
 
 export type PaymentAttachment = {
   id: string;
@@ -134,9 +135,11 @@ export const financesApi = {
   listExpenses: (params: ExpenseListParams) =>
     apiClient.getPaginated<Expense>(`/finances/expenses${buildQueryString(params)}`),
   getExpenseById: (id: string) => apiClient.get<Expense>(`/finances/expenses/${id}`),
-  createExpense: (input: CreateExpenseInput) => apiClient.post<Expense>('/finances/expenses', input),
+  // A large expense by an employee comes back as a request (HTTP 202).
+  createExpense: (input: CreateExpenseInput) =>
+    apiClient.post<Expense | PendingApproval>('/finances/expenses', input),
   updateExpense: (id: string, input: UpdateExpenseInput) =>
-    apiClient.patch<Expense>(`/finances/expenses/${id}`, input),
+    apiClient.patch<Expense | PendingApproval>(`/finances/expenses/${id}`, input),
   archiveExpense: (id: string) => apiClient.delete<Expense>(`/finances/expenses/${id}`),
   restoreExpense: (id: string) => apiClient.post<Expense>(`/finances/expenses/${id}/restore`),
 

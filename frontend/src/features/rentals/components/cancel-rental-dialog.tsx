@@ -35,6 +35,8 @@ function errorMessage(err: unknown, fallback: string): string {
 //   handover is called off on the spot — the car comes back to
 //   "Disponible" and everything collected is refunded in full (agency
 //   rule), so the reason is required for the record.
+// Both ask for the reason — optional for a reservation — since it's what
+// the director reads in the activity journal and the team alerts.
 export function CancelRentalDialog({ open, onOpenChange, rental }: CancelRentalDialogProps) {
   const cancelMutation = useCancelRentalMutation();
   const isHandover = rental.status === 'ACTIVE';
@@ -78,25 +80,23 @@ export function CancelRentalDialog({ open, onOpenChange, rental }: CancelRentalD
         </DialogHeader>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
-          {isHandover && (
-            <div className="space-y-2">
-              <Label htmlFor="cancelledReason" required>
-                Motif
-              </Label>
-              <Textarea
-                id="cancelledReason"
-                placeholder="Ex. Essai de conduite non concluant"
-                className="min-h-16 resize-none"
-                rows={2}
-                value={reason}
-                onChange={(e) => {
-                  setReason(e.target.value);
-                  if (reasonError) setReasonError(null);
-                }}
-              />
-              {reasonError && <p className="text-sm text-destructive">{reasonError}</p>}
-            </div>
-          )}
+          <div className="space-y-2">
+            <Label htmlFor="cancelledReason" required={isHandover}>
+              Motif
+            </Label>
+            <Textarea
+              id="cancelledReason"
+              placeholder={isHandover ? 'Ex. Essai de conduite non concluant' : 'Ex. Le client a changé ses dates'}
+              className="min-h-16 resize-none"
+              rows={2}
+              value={reason}
+              onChange={(e) => {
+                setReason(e.target.value);
+                if (reasonError) setReasonError(null);
+              }}
+            />
+            {reasonError && <p className="text-sm text-destructive">{reasonError}</p>}
+          </div>
 
           {paidAmount > 0 && (
             <div className="flex items-start gap-2.5 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">

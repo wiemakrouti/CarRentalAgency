@@ -36,7 +36,12 @@ database), registers itself as the sole agency on that instance, and pays for it
 infrastructure. Never assume a shared/central deployment serving many agencies at once — that is
 not the business model, even though the code would technically support it.
 
-Within a single agency, there is only one administrator. No employee management is required.
+Within a single agency there is one administrator — the director — and any number of employees.
+The employees run the day-to-day work (rentals, clients, cars, payments, expenses); the director
+mainly supervises: they manage the team (create, deactivate, reset passwords), review an activity
+journal of what each employee did, and validate the three actions an employee can only request
+(a car's catalogue rate, a large expense, a large discount). Each person has their own
+account; accounts are never shared. See `docs/architecture.md` § Roles.
 
 ---
 

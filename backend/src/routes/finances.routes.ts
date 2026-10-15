@@ -7,7 +7,7 @@ import {
   updatePaymentSchema,
 } from '@car-rental/shared';
 import { authenticate } from '../middleware/authenticate.js';
-import { authorize } from '../middleware/authorize.js';
+import { authorizePermission } from '../middleware/authorize.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { uploadPaymentAttachment } from '../middleware/upload.js';
@@ -23,7 +23,10 @@ import {
 
 export const financesRouter = Router();
 
-financesRouter.use('/finances', authenticate, authorize('ADMIN'));
+// Every member of the agency (director and employees) — `authenticate` scopes
+// each request to the caller's agency; director-only actions add
+// authorizePermission() below.
+financesRouter.use('/finances', authenticate);
 
 financesRouter.get(
   '/finances/summary',
@@ -59,11 +62,13 @@ financesRouter.patch(
 );
 financesRouter.delete(
   '/finances/payments/:id',
+  authorizePermission('payment.archive'),
   validate({ params: paymentIdParamSchema }),
   asyncHandler(FinancesController.archivePayment),
 );
 financesRouter.post(
   '/finances/payments/:id/restore',
+  authorizePermission('payment.archive'),
   validate({ params: paymentIdParamSchema }),
   asyncHandler(FinancesController.restorePayment),
 );
@@ -102,11 +107,13 @@ financesRouter.patch(
 );
 financesRouter.delete(
   '/finances/expenses/:id',
+  authorizePermission('expense.archive'),
   validate({ params: expenseIdParamSchema }),
   asyncHandler(FinancesController.archiveExpense),
 );
 financesRouter.post(
   '/finances/expenses/:id/restore',
+  authorizePermission('expense.archive'),
   validate({ params: expenseIdParamSchema }),
   asyncHandler(FinancesController.restoreExpense),
 );

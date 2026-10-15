@@ -10,7 +10,7 @@ import {
   verifyEmailSchema,
 } from '@car-rental/shared';
 import { validate } from '../middleware/validate.js';
-import { authenticate } from '../middleware/authenticate.js';
+import { authenticate, authenticateAccount } from '../middleware/authenticate.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { AuthController } from '../controllers/auth.controller.js';
 import { sessionIdParamSchema } from '../validators/auth.validator.js';
@@ -44,8 +44,9 @@ authRouter.post(
 );
 authRouter.post('/auth/login', validate({ body: loginSchema }), asyncHandler(AuthController.login));
 authRouter.post('/auth/refresh', asyncHandler(AuthController.refresh));
-authRouter.post('/auth/logout', authenticate, asyncHandler(AuthController.logout));
-authRouter.get('/auth/me', authenticate, asyncHandler(AuthController.me));
+// authenticateAccount: still reachable while a temporary password is pending.
+authRouter.post('/auth/logout', authenticateAccount, asyncHandler(AuthController.logout));
+authRouter.get('/auth/me', authenticateAccount, asyncHandler(AuthController.me));
 authRouter.patch(
   '/auth/me',
   authenticate,
@@ -54,7 +55,7 @@ authRouter.patch(
 );
 authRouter.patch(
   '/auth/me/password',
-  authenticate,
+  authenticateAccount,
   validate({ body: changePasswordSchema }),
   asyncHandler(AuthController.changePassword),
 );

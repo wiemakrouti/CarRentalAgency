@@ -18,6 +18,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { isPendingApproval } from '@/features/approvals/api/approvals.api';
+import { APPROVAL_SENT_MESSAGE } from '@/features/approvals/lib/describe-approval';
 import {
   Dialog,
   DialogContent,
@@ -112,11 +114,11 @@ export function ExpenseFormDialog({ open, onOpenChange, expense, defaultCarId }:
   async function onSubmit(values: UpdateExpenseInput) {
     try {
       if (isEdit && expense) {
-        await updateMutation.mutateAsync({ id: expense.id, input: values });
-        toast.success('Dépense mise à jour.');
+        const result = await updateMutation.mutateAsync({ id: expense.id, input: values });
+        toast.success(isPendingApproval(result) ? APPROVAL_SENT_MESSAGE : 'Dépense mise à jour.');
       } else {
-        await createMutation.mutateAsync(values as CreateExpenseInput);
-        toast.success('Dépense ajoutée.');
+        const result = await createMutation.mutateAsync(values as CreateExpenseInput);
+        toast.success(isPendingApproval(result) ? APPROVAL_SENT_MESSAGE : 'Dépense ajoutée.');
       }
       onOpenChange(false);
     } catch (err) {

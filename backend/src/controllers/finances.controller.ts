@@ -15,7 +15,7 @@ import type {
   PaymentListQuery,
 } from '../validators/finance.validator.js';
 import type { FinanceSummaryQuery } from '@car-rental/shared';
-
+import { ApprovalsService } from '../services/approvals.service.js';
 export const FinancesController = {
   async listPayments(req: Request, res: Response) {
     const query = req.query as unknown as PaymentListQuery;
@@ -112,20 +112,28 @@ export const FinancesController = {
 
   async createExpense(req: Request, res: Response) {
     const input = req.body as CreateExpenseInput;
-    const expense = await ExpensesService.create(req.user!.agencyId, input, req.user!.id, req.ip);
-    res.status(201).json({ success: true, data: expense });
+    const submission = await ApprovalsService.submitExpense(req.user!.agencyId, input, req.user!, req.ip);
+    if (submission.approvalRequest) {
+      res.status(202).json({ success: true, data: { approvalRequest: submission.approvalRequest } });
+      return;
+    }
+    res.status(201).json({ success: true, data: submission.result });
   },
 
   async updateExpense(req: Request, res: Response) {
     const input = req.body as UpdateExpenseInput;
-    const expense = await ExpensesService.update(
+    const submission = await ApprovalsService.submitExpenseUpdate(
       req.user!.agencyId,
       req.params.id!,
       input,
-      req.user!.id,
+      req.user!,
       req.ip,
     );
-    res.status(200).json({ success: true, data: expense });
+    if (submission.approvalRequest) {
+      res.status(202).json({ success: true, data: { approvalRequest: submission.approvalRequest } });
+      return;
+    }
+    res.status(200).json({ success: true, data: submission.result });
   },
 
   async archiveExpense(req: Request, res: Response) {

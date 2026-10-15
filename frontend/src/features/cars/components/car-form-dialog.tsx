@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { CAR_RATE_SENT_MESSAGE } from '@/features/approvals/lib/describe-approval';
 import {
   Dialog,
   DialogContent,
@@ -167,8 +168,9 @@ export function CarFormDialog({ open, onOpenChange, car, focusField }: CarFormDi
     let savedCar: Car;
     try {
       if (isEdit && car) {
-        savedCar = await updateMutation.mutateAsync({ id: car.id, input: values });
-        toast.success('Voiture mise à jour.');
+        const updated = await updateMutation.mutateAsync({ id: car.id, input: values });
+        savedCar = updated;
+        toast.success(updated.approvalRequest ? CAR_RATE_SENT_MESSAGE : 'Voiture mise à jour.');
       } else {
         savedCar = await createMutation.mutateAsync(values as CreateCarInput);
         toast.success('Voiture ajoutée.');
