@@ -72,9 +72,10 @@ export function ActivityFiltersPopover({ value, onApply, activeCount, team, ownO
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
-        <Button variant="outline" className="gap-1.5">
+        <Button variant="outline" className="gap-1.5" aria-label="Filtrer">
           <Filter className="h-4 w-4" />
-          Filtrer
+          {/* Just the icon and the count on a phone, beside the title. */}
+          <span className={activeCount > 0 ? 'max-sm:hidden' : undefined}>Filtrer</span>
           {activeCount > 0 && <span className="text-muted-foreground">({activeCount})</span>}
         </Button>
       </PopoverTrigger>

@@ -118,10 +118,10 @@ export function ReturnRentalDialog({ open, onOpenChange, rental }: ReturnRentalD
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85vh] max-w-md flex-col">
+      <DialogContent className="flex max-h-[85dvh] max-w-md flex-col">
         <DialogHeader>
           <DialogTitle>Clôturer la location</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="sr-only">
             Enregistrez l&apos;état du véhicule {rental.car.brand} {rental.car.model} au retour.
           </DialogDescription>
         </DialogHeader>
@@ -131,7 +131,7 @@ export function ReturnRentalDialog({ open, onOpenChange, rental }: ReturnRentalD
             pulled up over whatever hasn't scrolled past it yet, overlapping
             it instead of floating cleanly above it (see rental-form-dialog). */}
         <form onSubmit={handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col" noValidate>
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+          <div className="-m-1 min-h-0 flex-1 space-y-4 overflow-y-auto p-1">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="mileageAtReturn" required>
@@ -152,7 +152,7 @@ export function ReturnRentalDialog({ open, onOpenChange, rental }: ReturnRentalD
                 </Label>
                 <Input
                   id="fuelLevelAtReturn"
-                  placeholder="Ex. Plein, 3/4, Moitié..."
+                  placeholder="Plein, 3/4…"
                   {...register('fuelLevelAtReturn')}
                 />
                 {errors.fuelLevelAtReturn && (

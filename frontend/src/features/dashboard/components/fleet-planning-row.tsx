@@ -1,62 +1,32 @@
-import type { LucideIcon } from 'lucide-react';
-import { CalendarPlus, CarFront, KeyRound, Plus, Undo2, Wrench } from 'lucide-react';
+import { CarFront, Plus } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { toDateParam } from '@/lib/date-range';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { PlanningCar } from '@/features/rentals/api/rentals.api';
-import { apiDateToLocalDay, DISPLAY_RENTAL_STATUS_CALENDAR_CLASSES } from '@/features/rentals/lib/rental-calendar';
+import {
+  apiDateToLocalDay,
+  DISPLAY_RENTAL_STATUS_CALENDAR_CLASSES,
+} from '@/features/rentals/lib/rental-calendar';
 import { DISPLAY_RENTAL_STATUS_LABELS } from '@/features/rentals/lib/rental-labels';
 
+import {
+  ACTION_ICONS,
+  ACTION_LABELS,
+  NOW_ICON_CLASSES,
+  NOW_TEXT_CLASSES,
+} from '../lib/car-now-display';
 import {
   dayDiff,
   type CarNow,
   type CarNowAction,
-  type CarNowKind,
   type PlanningBar,
   type PlanningLayout,
 } from '../lib/fleet-planning';
 
-const LANE_HEIGHT: Record<PlanningLayout, number> = { full: 44, compact: 40, stacked: 36 };
-
-// Icon tint per state — the same status families as the bars and badges:
-// late in amber, a return in green, a departure in blue.
-const NOW_ICON_CLASSES: Record<CarNowKind, string> = {
-  OVERDUE_RETURN: 'bg-warning/15 text-warning-foreground dark:text-warning',
-  OVERDUE_PICKUP: 'bg-warning/15 text-warning-foreground dark:text-warning',
-  RETURN_TODAY: 'bg-success/15 text-green-700 dark:text-success',
-  DEPARTURE_TODAY: 'bg-primary/15 text-primary-700 dark:text-primary',
-  OUT: 'bg-success/15 text-green-700 dark:text-success',
-  FREE: 'bg-secondary text-secondary-foreground',
-  UNAVAILABLE: 'bg-muted text-muted-foreground',
-};
-
-const NOW_TEXT_CLASSES: Record<CarNowKind, string> = {
-  OVERDUE_RETURN: 'font-semibold text-warning-foreground dark:text-warning',
-  OVERDUE_PICKUP: 'font-semibold text-warning-foreground dark:text-warning',
-  RETURN_TODAY: 'font-medium text-green-700 dark:text-success',
-  DEPARTURE_TODAY: 'font-medium text-primary-700 dark:text-primary',
-  OUT: 'text-foreground/80',
-  FREE: 'text-foreground/80',
-  UNAVAILABLE: 'text-muted-foreground',
-};
-
-const ACTION_ICONS: Record<CarNowAction['kind'], LucideIcon> = {
-  return: Undo2,
-  activate: KeyRound,
-  extend: CalendarPlus,
-  rent: Plus,
-  restore: Wrench,
-};
-
-const ACTION_LABELS: Record<CarNowAction['kind'], string> = {
-  return: 'Clôturer',
-  activate: 'Remettre les clés',
-  extend: 'Prolonger',
-  rent: 'Louer',
-  restore: 'Remettre en service',
-};
+// Phone lanes stay tall enough to tap a bar with a finger.
+const LANE_HEIGHT: Record<PlanningLayout, number> = { full: 44, compact: 40, stacked: 40 };
 
 function shortDate(date: Date): string {
   return date.toLocaleDateString('fr-TN', { day: 'numeric', month: 'short' });
@@ -78,9 +48,13 @@ function barDetail(bar: PlanningBar, today: Date): string {
     case 'PICKUP_OVERDUE':
       return 'Clés non remises';
     case 'ACTIVE':
-      return planned.getTime() === today.getTime() ? "Retour aujourd'hui" : `Retour ${shortDate(planned)}`;
+      return planned.getTime() === today.getTime()
+        ? "Retour aujourd'hui"
+        : `Retour ${shortDate(planned)}`;
     case 'RESERVED':
-      return pickup.getTime() === today.getTime() ? "Départ aujourd'hui" : `${dayDiff(pickup, planned)} j`;
+      return pickup.getTime() === today.getTime()
+        ? "Départ aujourd'hui"
+        : `${dayDiff(pickup, planned)} j`;
     default:
       return 'Rendue';
   }
@@ -172,7 +146,7 @@ export function PlanningCarRow({
         <Button
           size="sm"
           variant={urgent ? 'default' : 'outline'}
-          className={cn('shrink-0', stacked && 'h-7 px-2.5')}
+          className={cn('shrink-0', stacked && 'h-9 px-3')}
           disabled={now.action.kind === 'restore' && actionPending}
           onClick={() => onAction(car, now.action)}
         >
@@ -185,11 +159,17 @@ export function PlanningCarRow({
   const grid = (
     <div
       className="grid"
-      style={{ gridTemplateColumns, gridTemplateRows: `repeat(${laneCount}, ${LANE_HEIGHT[layout]}px)` }}
+      style={{
+        gridTemplateColumns,
+        gridTemplateRows: `repeat(${laneCount}, ${LANE_HEIGHT[layout]}px)`,
+      }}
     >
       {!stacked && (
         <div
-          className={cn('flex min-w-0 items-center border-r border-border py-2 pr-3', layout === 'full' ? 'gap-3 pl-5' : 'gap-2.5 pl-4')}
+          className={cn(
+            'flex min-w-0 items-center border-r border-border py-2 pr-3',
+            layout === 'full' ? 'gap-3 pl-5' : 'gap-2.5 pl-4',
+          )}
           style={{ gridColumn: 1, gridRow: '1 / -1' }}
         >
           {carInfo}
@@ -210,7 +190,10 @@ export function PlanningCarRow({
         );
         const style = { gridColumn: index + firstDayColumn, gridRow: '1 / -1' };
         const todayLine = isToday && (
-          <span aria-hidden="true" className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-primary/30" />
+          <span
+            aria-hidden="true"
+            className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-primary/30"
+          />
         );
         const free = !unavailable && index >= todayIndex && !booked.has(index);
         if (!free) {
@@ -233,7 +216,9 @@ export function PlanningCarRow({
             style={style}
           >
             {todayLine}
-            <Plus className="relative h-3.5 w-3.5 text-primary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+            {/* Touch screens have no hover to reveal it — a faint "+" there
+                says the day can be booked. */}
+            <Plus className="relative h-3.5 w-3.5 text-primary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 [@media(hover:none)]:opacity-40" />
           </button>
         );
       })}
@@ -269,7 +254,13 @@ type PlanningBarButtonProps = {
   onOpen: (rentalId: string) => void;
 };
 
-function PlanningBarButton({ bar, today, compact, firstDayColumn, onOpen }: PlanningBarButtonProps) {
+function PlanningBarButton({
+  bar,
+  today,
+  compact,
+  firstDayColumn,
+  onOpen,
+}: PlanningBarButtonProps) {
   const { rental } = bar;
   const detail = barDetail(bar, today);
 
@@ -286,7 +277,10 @@ function PlanningBarButton({ bar, today, compact, firstDayColumn, onOpen }: Plan
             bar.clippedStart && 'ml-0 rounded-l-none border-l-0',
             bar.clippedEnd && 'mr-0 rounded-r-none border-r-0',
           )}
-          style={{ gridColumn: `${bar.start + firstDayColumn} / ${bar.end + firstDayColumn + 1}`, gridRow: bar.lane + 1 }}
+          style={{
+            gridColumn: `${bar.start + firstDayColumn} / ${bar.end + firstDayColumn + 1}`,
+            gridRow: bar.lane + 1,
+          }}
         >
           <span className="truncate font-semibold">{rental.clientName}</span>
           {!compact && <span className="truncate opacity-80">· {detail}</span>}
@@ -302,7 +296,9 @@ function PlanningBarButton({ bar, today, compact, firstDayColumn, onOpen }: Plan
           {DISPLAY_RENTAL_STATUS_LABELS[bar.status]}
         </p>
         <p>{detail}</p>
-        {rental.extensionCount > 0 && <p className="opacity-80">Prolongée {rental.extensionCount} fois</p>}
+        {rental.extensionCount > 0 && (
+          <p className="opacity-80">Prolongée {rental.extensionCount} fois</p>
+        )}
       </TooltipContent>
     </Tooltip>
   );

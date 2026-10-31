@@ -84,7 +84,7 @@ export function CarImageManagerDialog({ open, onOpenChange, carId }: CarImageMan
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col">
+        <DialogContent className="flex max-h-[85dvh] max-w-2xl flex-col">
           <DialogHeader>
             <DialogTitle>Images{car ? ` — ${car.brand} ${car.model}` : ''}</DialogTitle>
             <DialogDescription>

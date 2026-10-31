@@ -60,11 +60,13 @@ export function Pagination({ page, pageCount, onPageChange, siblingCount = 1, cl
           <ChevronLeft className="h-4 w-4" />
         </Button>
 
+        {/* The page numbers don't fit a phone — the arrows and "Page x sur
+            y" are enough there. */}
         {tokens.map((token, index) =>
           token === 'ellipsis' ? (
             <span
               key={`ellipsis-${index}`}
-              className="flex h-9 w-9 items-center justify-center text-muted-foreground"
+              className="flex h-9 w-9 items-center justify-center text-muted-foreground max-sm:hidden"
             >
               <MoreHorizontal className="h-4 w-4" />
             </span>
@@ -73,7 +75,7 @@ export function Pagination({ page, pageCount, onPageChange, siblingCount = 1, cl
               key={token}
               variant={token === page ? 'default' : 'ghost'}
               size="icon"
-              className="rounded-full"
+              className="rounded-full max-sm:hidden"
               onClick={() => onPageChange(token)}
               aria-current={token === page ? 'page' : undefined}
             >

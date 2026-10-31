@@ -99,16 +99,16 @@ export function ActivateRentalDialog({ open, onOpenChange, rental }: ActivateRen
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85vh] max-w-md flex-col">
+      <DialogContent className="flex max-h-[85dvh] max-w-md flex-col">
         <DialogHeader>
           <DialogTitle>Activer la location</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="sr-only">
             Enregistrez l&apos;état du véhicule {rental.car.brand} {rental.car.model} à la remise des clés.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col" noValidate>
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+          <div className="-m-1 min-h-0 flex-1 space-y-4 overflow-y-auto p-1">
             <div className="space-y-2">
               <Label htmlFor="mileageAtPickup" required>
                 Kilométrage au départ
@@ -129,7 +129,7 @@ export function ActivateRentalDialog({ open, onOpenChange, rental }: ActivateRen
               </Label>
               <Input
                 id="fuelLevelAtPickup"
-                placeholder="Ex. Plein, 3/4, Moitié..."
+                placeholder="Plein, 3/4…"
                 {...register('fuelLevelAtPickup')}
               />
               {errors.fuelLevelAtPickup && (

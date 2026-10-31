@@ -73,7 +73,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl gap-0 overflow-hidden p-0">
+      <DialogContent mobileSheet={false} className="max-w-xl gap-0 overflow-hidden p-0">
         <DialogTitle className="sr-only">Recherche globale</DialogTitle>
         <Command shouldFilter={false}>
           <CommandInput

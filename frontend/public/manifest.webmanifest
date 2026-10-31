@@ -1,0 +1,17 @@
+{
+  "name": "Gestion Location de Voitures",
+  "short_name": "Location",
+  "description": "Tableau de bord de l'agence : flotte, locations, clients et finances.",
+  "lang": "fr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#FAFBFD",
+  "theme_color": "#FAFBFD",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

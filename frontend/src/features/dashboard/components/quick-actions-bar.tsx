@@ -42,7 +42,9 @@ export function QuickActionsBar() {
             <span
               className={cn(
                 'text-[12.5px] leading-tight',
-                primary ? 'font-bold text-primary-700 dark:text-primary' : 'font-semibold text-foreground/80',
+                primary
+                  ? 'font-bold text-primary-700 dark:text-primary'
+                  : 'font-semibold text-foreground/80',
               )}
             >
               {label}

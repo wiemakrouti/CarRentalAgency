@@ -258,10 +258,10 @@ export function ClientFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col">
+      <DialogContent className="flex max-h-[85dvh] max-w-2xl flex-col">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Modifier le client' : 'Ajouter un client'}</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="sr-only">
             {isEdit ? 'Mettez à jour les informations de ce client.' : 'Renseignez les informations du nouveau client.'}
           </DialogDescription>
         </DialogHeader>
@@ -271,7 +271,7 @@ export function ClientFormDialog({
             pulled up over whatever hasn't scrolled past it yet, overlapping
             it instead of floating cleanly above it (see rental-form-dialog). */}
         <form onSubmit={handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col" noValidate>
-          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto">
+          <div className="-m-1 min-h-0 flex-1 space-y-6 overflow-y-auto p-1">
           <div className="space-y-4">
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Informations personnelles

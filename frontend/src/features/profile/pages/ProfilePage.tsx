@@ -17,6 +17,7 @@ import { useAuth } from '@/providers/auth-context';
 import { useCan } from '@/hooks/use-can';
 import { useSettings } from '@/providers/settings-context';
 import { ApiClientError } from '@/lib/api-client';
+import { cn } from '@/lib/utils';
 import { ROLE_LABELS } from '@/lib/role-labels';
 import { ErrorState } from '@/components/common/error-state';
 import { LoadingState } from '@/components/common/loading-state';
@@ -140,8 +141,20 @@ function pickIdentity(settings: Settings): AgencyIdentityInput {
 // (see FinancesPage.tsx) — scoped here via className overrides rather than
 // touching ui/tabs.tsx, which other call sites still use as a plain
 // segmented control.
+// On a phone a form's buttons go full width and, once something has
+// changed, follow the scroll at the bottom of the screen (pb-7 clears the
+// bottom bar's raised "+") — same as the Settings page.
+function formActionsClass(dirty: boolean): string {
+  return cn(
+    'mt-6 flex justify-end gap-2 max-sm:-mx-4 max-sm:mt-5 max-sm:px-4 max-sm:[&>button:last-child]:h-11 max-sm:[&>button:last-child]:flex-1',
+    dirty &&
+      'max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:border-t max-sm:border-border max-sm:bg-card/95 max-sm:pb-7 max-sm:pt-3 max-sm:backdrop-blur',
+  );
+}
+
+// On a phone the two tabs share the width.
 const TAB_TRIGGER_CLASSES =
-  'group h-auto shrink-0 gap-2.5 rounded-none border-b-2 border-transparent px-1 py-3 text-sm font-medium text-muted-foreground shadow-none transition-colors hover:text-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-foreground data-[state=active]:shadow-none';
+  'group h-auto shrink-0 gap-2.5 max-sm:flex-1 rounded-none border-b-2 border-transparent px-1 py-3 text-sm font-medium text-muted-foreground shadow-none transition-colors hover:text-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-foreground data-[state=active]:shadow-none';
 
 const TAB_ICON_CLASSES =
   'flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-all group-hover:text-foreground ' +
@@ -237,7 +250,7 @@ export function ProfilePage() {
 
   return (
     <div className="relative flex-1 bg-primary-50 dark:bg-background">
-      <div className="relative mx-auto w-full max-w-5xl px-4 py-8 sm:px-8 sm:py-10">
+      <div className="relative mx-auto w-full max-w-5xl px-4 py-5 sm:px-8 sm:py-10">
         <Tabs
           value={activeTab}
           onValueChange={(value) => {
@@ -246,13 +259,14 @@ export function ProfilePage() {
             setSearchParams(tab === 'account' ? { tab: 'account' } : {}, { replace: true });
           }}
         >
-          <TabsList className="mb-6 h-auto w-full justify-start gap-9 rounded-none border-b border-border bg-transparent p-0">
+          <TabsList className="mb-4 h-auto w-full justify-start gap-9 rounded-none border-b border-border bg-transparent p-0 max-sm:gap-0 sm:mb-6">
             {canEditAgency && (
               <TabsTrigger value="agency" className={TAB_TRIGGER_CLASSES}>
                 <span className={TAB_ICON_CLASSES}>
                   <Building2 className="h-4 w-4" />
                 </span>
-                Profil de l'agence
+                <span className="sm:hidden">Agence</span>
+                <span className="max-sm:hidden">Profil de l'agence</span>
               </TabsTrigger>
             )}
             <TabsTrigger value="account" className={TAB_TRIGGER_CLASSES}>
@@ -274,10 +288,10 @@ export function ProfilePage() {
 
             {settings && (
               <form onSubmit={agencyForm.handleSubmit(onSubmitAgency)}>
-                <Panel className="overflow-hidden p-0">
+                <Panel className="p-0">
                   <div className="grid lg:grid-cols-[260px_1fr]">
                     {/* Identity sidebar */}
-                    <div className="flex flex-col items-center border-b border-border p-8 text-center lg:border-b-0 lg:border-r">
+                    <div className="flex flex-col items-center border-b border-border p-8 text-center max-sm:px-4 max-sm:py-6 lg:border-b-0 lg:border-r">
                       <AgencyLogoField
                         settings={settings}
                         onUpdated={setSettings}
@@ -291,8 +305,9 @@ export function ProfilePage() {
                           'Aucune coordonnée renseignée'}
                       </p>
 
-                      <div className="mt-6 flex w-full flex-col divide-y divide-border">
-                        <div className="flex flex-col gap-0.5 py-3">
+                      {/* Three figures side by side on a phone, not a column of rows. */}
+                      <div className="mt-6 flex w-full flex-col divide-y divide-border max-sm:mt-5 max-sm:grid max-sm:grid-cols-3 max-sm:divide-x max-sm:divide-y-0 max-sm:rounded-xl max-sm:border max-sm:border-border max-sm:bg-card/60">
+                        <div className="flex flex-col gap-0.5 py-3 max-sm:px-2">
                           <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                             Devise
                           </span>
@@ -300,15 +315,16 @@ export function ProfilePage() {
                             {settings.currencyCode}
                           </span>
                         </div>
-                        <div className="flex flex-col gap-0.5 py-3">
+                        <div className="flex flex-col gap-0.5 py-3 max-sm:px-2">
                           <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                            Dernière mise à jour
+                            <span className="sm:hidden">Mise à jour</span>
+                            <span className="max-sm:hidden">Dernière mise à jour</span>
                           </span>
-                          <span className="text-sm font-semibold text-foreground">
+                          <span className="text-sm font-semibold text-foreground max-sm:text-xs">
                             {formatDate(settings.updatedAt)}
                           </span>
                         </div>
-                        <div className="flex flex-col gap-0.5 py-3">
+                        <div className="flex flex-col gap-0.5 py-3 max-sm:px-2">
                           <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                             Profil complété
                           </span>
@@ -326,9 +342,9 @@ export function ProfilePage() {
                     </div>
 
                     {/* Form */}
-                    <div className="p-6 sm:p-8">
+                    <div className="p-4 pb-0 sm:p-8">
                       <SectionTitle>Informations de l'agence</SectionTitle>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground max-sm:hidden">
                         Renseignez les coordonnées et informations de votre agence.
                       </p>
                       <div className="mt-5 space-y-4">
@@ -442,7 +458,12 @@ export function ProfilePage() {
                           </Field>
                         </div>
                       </div>
-                      <div className="mt-6 flex justify-end gap-2">
+                      <div
+                        className={cn(
+                          formActionsClass(agencyForm.formState.isDirty),
+                          'max-sm:pb-4',
+                        )}
+                      >
                         <Button
                           type="button"
                           variant="ghost"
@@ -450,9 +471,11 @@ export function ProfilePage() {
                             updateSettingsMutation.isPending || !agencyForm.formState.isDirty
                           }
                           onClick={() => agencyForm.reset(pickIdentity(settings))}
+                          aria-label="Réinitialiser"
+                          className="max-sm:h-11 max-sm:w-11 max-sm:p-0"
                         >
                           <RotateCcw className="h-4 w-4" />
-                          Réinitialiser
+                          <span className="max-sm:hidden">Réinitialiser</span>
                         </Button>
                         <Button
                           type="submit"
@@ -474,7 +497,7 @@ export function ProfilePage() {
           </TabsContent>
 
           <TabsContent value="account" className="mt-0">
-            <Panel className="mb-6 p-6 sm:p-8">
+            <Panel className="mb-4 p-5 sm:mb-6 sm:p-8">
               <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-4">
                   <Avatar className="h-16 w-16 shrink-0">
@@ -490,7 +513,7 @@ export function ProfilePage() {
                     <p className="mt-1 text-sm text-muted-foreground">{user.email}</p>
                   </div>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex gap-3 max-sm:grid max-sm:grid-cols-2">
                   <div className="rounded-xl border border-border bg-card/60 px-4 py-2.5 text-center">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                       Membre depuis
@@ -511,11 +534,11 @@ export function ProfilePage() {
               </div>
             </Panel>
 
-            <div className="grid gap-6 lg:grid-cols-2">
+            <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
               <form onSubmit={profileForm.handleSubmit(onSubmitProfile)}>
-                <Panel className="h-full p-6 sm:p-7">
+                <Panel className="h-full p-4 sm:p-7">
                   <SectionTitle>Informations de connexion</SectionTitle>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground max-sm:hidden">
                     Votre nom et votre adresse email de connexion.
                   </p>
                   <div className="mt-5 space-y-4">
@@ -536,7 +559,7 @@ export function ProfilePage() {
                       )}
                     </Field>
                   </div>
-                  <div className="mt-6 flex justify-end">
+                  <div className={formActionsClass(profileForm.formState.isDirty)}>
                     <Button
                       type="submit"
                       disabled={updateProfileMutation.isPending || !profileForm.formState.isDirty}
@@ -551,7 +574,7 @@ export function ProfilePage() {
               </form>
 
               <form onSubmit={passwordForm.handleSubmit(onSubmitPassword)}>
-                <Panel className="h-full p-6 sm:p-7">
+                <Panel className="h-full p-4 sm:p-7">
                   <SectionTitle>Changer le mot de passe</SectionTitle>
                   <p className="text-xs text-muted-foreground">
                     Vous serez déconnecté de vos autres appareils après ce changement.
@@ -594,7 +617,7 @@ export function ProfilePage() {
                       )}
                     </Field>
                   </div>
-                  <div className="mt-6 flex justify-end">
+                  <div className={formActionsClass(passwordForm.formState.isDirty)}>
                     <Button
                       type="submit"
                       variant="outline"

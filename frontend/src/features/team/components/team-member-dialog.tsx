@@ -87,7 +87,7 @@ export function TeamMemberDialog({ open, onOpenChange, member }: TeamMemberDialo
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Modifier l’employé' : 'Ajouter un employé'}</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="sr-only">
             {isEdit
               ? 'Le nom et l’adresse email avec laquelle il se connecte.'
               : 'Créez un accès personnel pour un membre de votre équipe.'}

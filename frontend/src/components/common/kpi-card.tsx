@@ -58,20 +58,20 @@ export function KpiCard({ label, value, icon: Icon, trend, description, classNam
           className="pointer-events-none absolute inset-0 bg-[linear-gradient(125deg,transparent_40%,rgba(255,255,255,.55)_50%,transparent_60%)] dark:bg-[linear-gradient(125deg,transparent_40%,rgba(255,255,255,.06)_50%,transparent_60%)]"
         />
       )}
-      <CardHeader className="relative flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-        <p className={cn('text-sm font-medium', isSatin ? 'text-foreground/70' : 'text-muted-foreground')}>{label}</p>
+      <CardHeader className="relative flex flex-row items-center justify-between gap-2 space-y-0 pb-2 max-sm:p-3.5 max-sm:pb-1.5">
+        <p className={cn('text-sm font-medium max-sm:text-xs max-sm:leading-tight', isSatin ? 'text-foreground/70' : 'text-muted-foreground')}>{label}</p>
         {Icon &&
           (isSatin ? (
             <Icon className="h-4 w-4 text-primary-700 dark:text-primary" />
           ) : (
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-50 shadow-[0_0_0_1px_hsl(var(--primary-100)),0_6px_16px_-6px_hsl(var(--primary)/0.45)] dark:bg-primary/15 dark:shadow-[0_0_0_1px_hsl(var(--primary)/0.25),0_6px_16px_-6px_hsl(var(--primary)/0.35)]">
+            <div className="flex h-9 w-9 shrink-0 max-sm:h-7 max-sm:w-7 items-center justify-center rounded-lg bg-primary-50 shadow-[0_0_0_1px_hsl(var(--primary-100)),0_6px_16px_-6px_hsl(var(--primary)/0.45)] dark:bg-primary/15 dark:shadow-[0_0_0_1px_hsl(var(--primary)/0.25),0_6px_16px_-6px_hsl(var(--primary)/0.35)]">
               <Icon className="h-4 w-4 text-primary" />
             </div>
           ))}
       </CardHeader>
-      <CardContent className="relative">
-        <div className="text-[27px] font-extrabold tracking-tight tabular-nums text-foreground">{value}</div>
-        <div className="mt-2.5 flex items-center gap-1.5">
+      <CardContent className="relative max-sm:p-3.5 max-sm:pt-0">
+        <div className="text-lg sm:text-[27px] font-extrabold tracking-tight tabular-nums text-foreground">{value}</div>
+        <div className="mt-2.5 flex items-center gap-1.5 max-sm:mt-1.5">
           {trend && TrendIcon && (
             <span
               className={cn(
@@ -84,7 +84,7 @@ export function KpiCard({ label, value, icon: Icon, trend, description, classNam
             </span>
           )}
           {description && (
-            <span className={cn('text-xs', isSatin ? 'text-foreground/60' : 'text-muted-foreground')}>{description}</span>
+            <span className={cn('text-xs max-sm:hidden', isSatin ? 'text-foreground/60' : 'text-muted-foreground')}>{description}</span>
           )}
         </div>
       </CardContent>

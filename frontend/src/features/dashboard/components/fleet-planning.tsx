@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { CarFront, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -43,7 +43,18 @@ import {
 import { useElementWidth } from '../hooks/use-element-width';
 import { useTimelinePan } from '../hooks/use-timeline-pan';
 import { PlanningCarRow } from './fleet-planning-row';
-import { PlanningRentalActionDialog, type PlanningRentalAction } from './planning-rental-action-dialog';
+import { FleetTodayRow } from './fleet-today-row';
+import {
+  PhoneFleetSummary,
+  PhoneStatusTiles,
+  PhoneViewSwitch,
+  PhoneWeekNav,
+  type PhoneView,
+} from './fleet-phone-controls';
+import {
+  PlanningRentalActionDialog,
+  type PlanningRentalAction,
+} from './planning-rental-action-dialog';
 
 // Narrower days on longer views, so four weeks still fit a laptop screen;
 // below that the planning scrolls sideways instead of squeezing.
@@ -74,7 +85,13 @@ function fittedDayCount(layout: PlanningLayout, width: number, view: PlanningVie
   }
   return PLANNING_VIEW_DAYS[view];
 }
-const LEGEND: DisplayRentalStatus[] = ['RESERVED', 'ACTIVE', 'PICKUP_OVERDUE', 'OVERDUE', 'COMPLETED'];
+const LEGEND: DisplayRentalStatus[] = [
+  'RESERVED',
+  'ACTIVE',
+  'PICKUP_OVERDUE',
+  'OVERDUE',
+  'COMPLETED',
+];
 
 const GROUP_DOT_CLASSES: Record<CarGroup, string> = {
   todo: 'bg-warning',
@@ -87,10 +104,20 @@ type Filter = CarGroup | 'all';
 
 // The day's work stays open; the calmer groups start folded to their
 // header and count, one click away — keeps the dashboard short.
-const DEFAULT_COLLAPSED: Record<CarGroup, boolean> = { todo: false, out: false, free: true, off: true };
+const DEFAULT_COLLAPSED: Record<CarGroup, boolean> = {
+  todo: false,
+  out: false,
+  free: true,
+  off: true,
+};
 // Looking back in time is looking for history, which mostly sits on cars
 // that are free today — so every group starts open there.
-const PAST_COLLAPSED: Record<CarGroup, boolean> = { todo: false, out: false, free: false, off: false };
+const PAST_COLLAPSED: Record<CarGroup, boolean> = {
+  todo: false,
+  out: false,
+  free: false,
+  off: false,
+};
 
 function shortDate(date: Date): string {
   return date.toLocaleDateString('fr-TN', { day: 'numeric', month: 'short' });
@@ -120,6 +147,9 @@ export function FleetPlanning() {
   const [view, setView] = useState<PlanningView>('twoWeeks');
   const [windowStart, setWindowStart] = useState(() => startOfWeek(new Date()));
   const [filter, setFilter] = useState<Filter>('all');
+  // On a phone the timeline is too narrow to be the default: "Aujourd'hui"
+  // lists each car's state and next step instead, the grid one tap away.
+  const [phoneView, setPhoneView] = useState<PhoneView>('today');
   // Two independent fold states: the usual one, and the one used while the
   // window lies entirely in the past — returning to today finds the groups
   // folded exactly as they were left.
@@ -128,6 +158,7 @@ export function FleetPlanning() {
   const [pendingAction, setPendingAction] = useState<PlanningRentalAction | null>(null);
   const [measureRef, contentWidth] = useElementWidth();
   const layout = pickLayout(contentWidth);
+  const showToday = layout === 'stacked' && phoneView === 'today';
 
   // Keyed by its date string so the memos below only recompute when the
   // day actually changes, not on every render's fresh Date.
@@ -168,18 +199,24 @@ export function FleetPlanning() {
 
   const totalCars = data?.cars.length ?? 0;
   const carsOut = data?.cars.filter((car) => car.activeRental).length ?? 0;
-  const visibleGroups = groups.filter((g) => g.rows.length > 0 && (filter === 'all' || g.group === filter));
+  const visibleGroups = groups.filter(
+    (g) => g.rows.length > 0 && (filter === 'all' || g.group === filter),
+  );
 
-  const minDayWidth = layout === 'full' ? MIN_DAY_WIDTH[view] : layout === 'compact' ? COMPACT_DAY_WIDTH : 0;
+  const minDayWidth =
+    layout === 'full' ? MIN_DAY_WIDTH[view] : layout === 'compact' ? COMPACT_DAY_WIDTH : 0;
   const gridTemplateColumns =
     layout === 'stacked'
       ? `repeat(${dayCount}, minmax(0, 1fr))`
       : `${NOW_COLUMN_WIDTH[layout]}px repeat(${dayCount}, minmax(${minDayWidth}px, 1fr))`;
   const minWidth = NOW_COLUMN_WIDTH[layout] + dayCount * minDayWidth;
   const todayIndex = dayDiff(windowStart, today);
+  const rangeLabel = `${shortDate(days[0]!)} – ${shortDate(days[days.length - 1]!)}`;
   const viewingPast = todayIndex >= dayCount;
-  const collapsed = viewingPast ? pastCollapsed : presentCollapsed;
-  const setCollapsed = viewingPast ? setPastCollapsed : setPresentCollapsed;
+  // The "Aujourd'hui" list is about today whatever window the grid shows.
+  const usePastFolds = viewingPast && !showToday;
+  const collapsed = usePastFolds ? pastCollapsed : presentCollapsed;
+  const setCollapsed = usePastFolds ? setPastCollapsed : setPresentCollapsed;
 
   const closeAction = useCallback(() => setPendingAction(null), []);
 
@@ -191,7 +228,8 @@ export function FleetPlanning() {
         { id: car.id, status: 'AVAILABLE' },
         {
           onSuccess: () => toast.success(`${car.brand} ${car.model} est de nouveau disponible.`),
-          onError: (err) => toast.error(errorMessage(err, 'Erreur lors de la mise à jour du statut.')),
+          onError: (err) =>
+            toast.error(errorMessage(err, 'Erreur lors de la mise à jour du statut.')),
         },
       );
     } else {
@@ -199,55 +237,118 @@ export function FleetPlanning() {
     }
   }
 
+  type Row = (typeof groups)[number]['rows'][number];
+
+  // The groups with their fold headers — the same in both views, only the
+  // car's row differs.
+  function renderGroups(renderRow: (row: Row) => ReactNode) {
+    if (visibleGroups.length === 0) {
+      return (
+        <p className="px-5 py-8 text-center text-sm text-muted-foreground">
+          Aucune voiture dans ce groupe.
+        </p>
+      );
+    }
+    return visibleGroups.map(({ group, rows }) => {
+      // A group picked in the filters is always shown open.
+      const open = filter === group || !collapsed[group];
+      return (
+        <section key={group} aria-label={CAR_GROUP_LABELS[group]}>
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => setCollapsed({ ...collapsed, [group]: open })}
+            className="flex w-full items-center gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-5 sm:py-2"
+          >
+            <ChevronDown
+              className={cn(
+                'h-3.5 w-3.5 text-muted-foreground transition-transform',
+                !open && '-rotate-90',
+              )}
+            />
+            <span className={cn('h-2 w-2 rounded-full', GROUP_DOT_CLASSES[group])} />
+            <h3 className="text-xs font-semibold">{CAR_GROUP_LABELS[group]}</h3>
+            <span className="text-xs font-semibold text-muted-foreground tabular-nums">
+              {rows.length}
+            </span>
+          </button>
+          {open && rows.map(renderRow)}
+        </section>
+      );
+    });
+  }
+
   return (
     <Card>
-      <CardHeader className="flex flex-col gap-3 pb-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-1">
-          <CardTitle className="text-base">Flotte</CardTitle>
-          <CardDescription>
-            {shortDate(days[0]!)} – {shortDate(days[days.length - 1]!)} {days[days.length - 1]!.getFullYear()}
-          </CardDescription>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="Période précédente"
-              onClick={() => setWindowStart(addDays(windowStart, -dayCount))}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" onClick={() => setWindowStart(startOfWeek(new Date()))}>
-              Aujourd'hui
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="Période suivante"
-              onClick={() => setWindowStart(addDays(windowStart, dayCount))}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-          {/* On smaller screens the number of days follows the space instead. */}
-          {layout === 'full' && (
-            <Tabs value={view} onValueChange={(value) => setView(value as PlanningView)}>
-              <TabsList>
-                {(Object.keys(PLANNING_VIEW_LABELS) as PlanningView[]).map((key) => (
-                  <TabsTrigger key={key} value={key}>
-                    {PLANNING_VIEW_LABELS[key]}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
+      {layout === 'stacked' ? (
+        <CardHeader className="space-y-4 p-4 pb-3">
+          {totalCars > 0 ? (
+            <PhoneFleetSummary carsOut={carsOut} totalCars={totalCars} />
+          ) : (
+            <CardTitle className="text-lg">Flotte</CardTitle>
           )}
-        </div>
-      </CardHeader>
+          <PhoneViewSwitch value={phoneView} onChange={setPhoneView} />
+          {!showToday && (
+            <PhoneWeekNav
+              label={rangeLabel}
+              showsToday={todayIndex >= 0 && todayIndex < dayCount}
+              onPrevious={() => setWindowStart(addDays(windowStart, -dayCount))}
+              onNext={() => setWindowStart(addDays(windowStart, dayCount))}
+              onToday={() => setWindowStart(startOfWeek(new Date()))}
+            />
+          )}
+        </CardHeader>
+      ) : (
+        <CardHeader className="flex flex-col gap-3 p-4 pb-3 sm:p-6 sm:pb-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-1">
+            <CardTitle className="text-base">Flotte</CardTitle>
+            <CardDescription>
+              {rangeLabel} {days[days.length - 1]!.getFullYear()}
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Période précédente"
+                onClick={() => setWindowStart(addDays(windowStart, -dayCount))}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" onClick={() => setWindowStart(startOfWeek(new Date()))}>
+                Aujourd'hui
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Période suivante"
+                onClick={() => setWindowStart(addDays(windowStart, dayCount))}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+            {/* On smaller screens the number of days follows the space instead. */}
+            {layout === 'full' && (
+              <Tabs value={view} onValueChange={(value) => setView(value as PlanningView)}>
+                <TabsList>
+                  {(Object.keys(PLANNING_VIEW_LABELS) as PlanningView[]).map((key) => (
+                    <TabsTrigger key={key} value={key}>
+                      {PLANNING_VIEW_LABELS[key]}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            )}
+          </div>
+        </CardHeader>
+      )}
 
-      <CardContent ref={measureRef} className="space-y-3">
+      <CardContent ref={measureRef} className="space-y-3 p-4 pt-0 sm:p-6 sm:pt-0">
         {isLoading && <Skeleton className="h-80 rounded-xl" />}
-        {isError && !data && <ErrorState title="Impossible de charger la flotte" onRetry={() => refetch()} />}
+        {isError && !data && (
+          <ErrorState title="Impossible de charger la flotte" onRetry={() => refetch()} />
+        )}
 
         {data && totalCars === 0 && (
           <EmptyState
@@ -260,126 +361,159 @@ export function FleetPlanning() {
 
         {data && totalCars > 0 && (
           <>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrer les voitures">
-                <FilterChip label="Toutes" count={totalCars} active={filter === 'all'} onClick={() => setFilter('all')} />
-                {groups.map(({ group, rows }) => (
+            {layout === 'stacked' ? (
+              <PhoneStatusTiles
+                groups={groups.map(({ group, rows }) => ({ group, count: rows.length }))}
+                active={filter}
+                onChange={setFilter}
+              />
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div
+                  className="flex flex-wrap gap-2"
+                  role="group"
+                  aria-label="Filtrer les voitures"
+                >
                   <FilterChip
-                    key={group}
-                    label={group === 'todo' ? 'À traiter' : CAR_GROUP_LABELS[group]}
-                    count={rows.length}
-                    dotClassName={GROUP_DOT_CLASSES[group]}
-                    active={filter === group}
-                    onClick={() => setFilter(group)}
+                    label="Toutes"
+                    count={totalCars}
+                    active={filter === 'all'}
+                    onClick={() => setFilter('all')}
+                  />
+                  {groups.map(({ group, rows }) => (
+                    <FilterChip
+                      key={group}
+                      label={group === 'todo' ? 'À traiter' : CAR_GROUP_LABELS[group]}
+                      count={rows.length}
+                      dotClassName={GROUP_DOT_CLASSES[group]}
+                      active={filter === group}
+                      onClick={() => setFilter(group)}
+                    />
+                  ))}
+                </div>
+                <Occupancy carsOut={carsOut} totalCars={totalCars} />
+              </div>
+            )}
+
+            {showToday ? (
+              <div className="overflow-hidden rounded-xl border border-border">
+                {renderGroups((row) => (
+                  <FleetTodayRow
+                    key={row.car.id}
+                    car={row.car}
+                    now={row.now}
+                    actionPending={updateCarStatus.isPending}
+                    onAction={handleAction}
+                    onOpenRental={openRental}
                   />
                 ))}
               </div>
-              <div className="flex items-center gap-3">
-                <span className="whitespace-nowrap text-xs text-muted-foreground">Occupation aujourd'hui</span>
-                <div className="h-2 w-28 overflow-hidden rounded-full bg-muted">
-                  <div className="h-full rounded-full bg-primary" style={{ width: `${(carsOut / totalCars) * 100}%` }} />
-                </div>
-                <span className="whitespace-nowrap text-sm font-semibold tabular-nums">
-                  {carsOut} / {totalCars}
-                </span>
-              </div>
-            </div>
-
-            <div
-              ref={setTimeline}
-              className="touch-pan-y select-none overflow-x-auto rounded-xl border border-border data-[panning=true]:cursor-grabbing"
-            >
-              <div style={{ minWidth }}>
-                <div className="grid border-b border-border bg-muted/30" style={{ gridTemplateColumns }}>
-                  {layout !== 'stacked' && (
-                    <div className="flex items-end px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Voiture · maintenant
-                    </div>
-                  )}
-                  {days.map((day, index) => (
-                    <div
-                      key={index}
-                      className={cn(
-                        'flex flex-col items-center gap-1 border-border/60 py-2',
-                        (index > 0 || layout !== 'stacked') && 'border-l',
-                        isWeekend(day) && 'bg-muted/50',
-                        index === todayIndex && 'bg-primary/5',
-                      )}
-                    >
-                      <span className="text-[11px] font-medium capitalize text-muted-foreground">
-                        {view === 'month' ? weekdayLabel(day).charAt(0) : weekdayLabel(day)}
-                      </span>
-                      <span
+            ) : (
+              <div
+                ref={setTimeline}
+                className="touch-pan-y select-none overflow-x-auto rounded-xl border border-border data-[panning=true]:cursor-grabbing"
+              >
+                <div style={{ minWidth }}>
+                  <div
+                    className="grid border-b border-border bg-muted/30"
+                    style={{ gridTemplateColumns }}
+                  >
+                    {layout !== 'stacked' && (
+                      <div className="flex items-end px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Voiture · maintenant
+                      </div>
+                    )}
+                    {days.map((day, index) => (
+                      <div
+                        key={index}
                         className={cn(
-                          'flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums',
-                          index === todayIndex && 'bg-primary text-primary-foreground',
+                          'flex flex-col items-center gap-1 border-border/60 py-2',
+                          (index > 0 || layout !== 'stacked') && 'border-l',
+                          isWeekend(day) && 'bg-muted/50',
+                          index === todayIndex && 'bg-primary/5',
                         )}
                       >
-                        {day.getDate()}
-                      </span>
-                    </div>
+                        <span className="text-[11px] font-medium capitalize text-muted-foreground">
+                          {view === 'month' ? weekdayLabel(day).charAt(0) : weekdayLabel(day)}
+                        </span>
+                        <span
+                          className={cn(
+                            'flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums',
+                            index === todayIndex && 'bg-primary text-primary-foreground',
+                          )}
+                        >
+                          {day.getDate()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {renderGroups((row) => (
+                    <PlanningCarRow
+                      key={row.car.id}
+                      {...row}
+                      days={days}
+                      todayIndex={todayIndex}
+                      today={today}
+                      gridTemplateColumns={gridTemplateColumns}
+                      layout={layout}
+                      compact={layout !== 'full' || view === 'month'}
+                      actionPending={updateCarStatus.isPending}
+                      onAction={handleAction}
+                      onOpenRental={openRental}
+                      onBookDay={(car, pickupDate) => openNewRental({ carId: car.id, pickupDate })}
+                    />
                   ))}
                 </div>
-
-                {visibleGroups.map(({ group, rows }) => {
-                  // A group picked in the filters is always shown open.
-                  const open = filter === group || !collapsed[group];
-                  return (
-                    <section key={group} aria-label={CAR_GROUP_LABELS[group]}>
-                      <button
-                        type="button"
-                        aria-expanded={open}
-                        onClick={() => setCollapsed({ ...collapsed, [group]: open })}
-                        className="flex w-full items-center gap-2.5 border-b border-border/60 bg-muted/30 px-5 py-2 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                      >
-                        <ChevronDown
-                          className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform', !open && '-rotate-90')}
-                        />
-                        <span className={cn('h-2 w-2 rounded-full', GROUP_DOT_CLASSES[group])} />
-                        <h3 className="text-xs font-semibold">{CAR_GROUP_LABELS[group]}</h3>
-                        <span className="text-xs font-semibold text-muted-foreground tabular-nums">{rows.length}</span>
-                      </button>
-                      {open &&
-                        rows.map((row) => (
-                          <PlanningCarRow
-                            key={row.car.id}
-                            {...row}
-                            days={days}
-                            todayIndex={todayIndex}
-                            today={today}
-                            gridTemplateColumns={gridTemplateColumns}
-                            layout={layout}
-                            compact={layout !== 'full' || view === 'month'}
-                            actionPending={updateCarStatus.isPending}
-                            onAction={handleAction}
-                            onOpenRental={openRental}
-                            onBookDay={(car, pickupDate) => openNewRental({ carId: car.id, pickupDate })}
-                          />
-                        ))}
-                    </section>
-                  );
-                })}
-
-                {visibleGroups.length === 0 && (
-                  <p className="px-5 py-8 text-center text-sm text-muted-foreground">Aucune voiture dans ce groupe.</p>
-                )}
               </div>
-            </div>
+            )}
 
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              {LEGEND.map((status) => (
-                <span key={status} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <span className={cn('h-2.5 w-2.5 rounded-full', DISPLAY_RENTAL_STATUS_DOT_CLASSES[status])} />
-                  {DISPLAY_RENTAL_STATUS_LABELS[status]}
-                </span>
-              ))}
-            </div>
+            {/* The colour key only means something next to the bars. */}
+            {!showToday && (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                {LEGEND.map((status) => (
+                  <span
+                    key={status}
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                  >
+                    <span
+                      className={cn(
+                        'h-2.5 w-2.5 rounded-full',
+                        DISPLAY_RENTAL_STATUS_DOT_CLASSES[status],
+                      )}
+                    />
+                    {DISPLAY_RENTAL_STATUS_LABELS[status]}
+                  </span>
+                ))}
+              </div>
+            )}
           </>
         )}
       </CardContent>
 
       {pendingAction && <PlanningRentalActionDialog action={pendingAction} onClose={closeAction} />}
     </Card>
+  );
+}
+
+// Share of the fleet out today, beside the filters — the phone shows it as
+// a ring instead (PhoneFleetSummary).
+function Occupancy({ carsOut, totalCars }: { carsOut: number; totalCars: number }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="whitespace-nowrap text-xs text-muted-foreground">
+        Occupation aujourd'hui
+      </span>
+      <div className="h-2 w-28 overflow-hidden rounded-full bg-muted">
+        <div
+          className="h-full rounded-full bg-primary"
+          style={{ width: `${(carsOut / totalCars) * 100}%` }}
+        />
+      </div>
+      <span className="whitespace-nowrap text-sm font-semibold tabular-nums">
+        {carsOut} / {totalCars}
+      </span>
+    </div>
   );
 }
 

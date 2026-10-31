@@ -25,13 +25,17 @@ Other scales in the same two files: `radius` (sm/md/lg/xl), elevation shadows (`
 
 `frontend/src/providers/theme-provider.tsx` (`ThemeProvider`) + `theme-context.ts` (`useTheme()`). Three modes: `light` / `dark` / `system`, persisted to `localStorage` (`car-rental-theme`), live-updates on OS preference change when in `system` mode. A blocking inline script in `index.html` applies the `dark` class before first paint to prevent a flash of the wrong theme. The `ThemeToggle` (`components/layout/theme-toggle.tsx`) in the topbar exposes all three modes via a dropdown.
 
+`.dark` also sets `color-scheme: dark` (`index.css`), so the browser's own controls — the date inputs' calendar icon and picker, autofill — follow the theme instead of staying black-on-dark. The `<meta name="theme-color">` (browser/OS chrome on phones) is kept in sync with the applied theme: by the inline script on first paint, then by `ThemeProvider` (`THEME_COLORS`).
+
 ## Component inventory
 
 ### `components/ui/` — shadcn/Radix primitives (generated, installed via `npx shadcn add`)
 
 accordion, alert, alert-dialog, avatar, badge, breadcrumb, button, card, checkbox, collapsible, command, context-menu, dialog, dropdown-menu, form, input, label, popover, radio-group, scroll-area, select, separator, sheet, skeleton, sonner (toast), switch, table, tabs, tooltip.
 
-`badge` and `alert` have `success`/`warning` variants added on top of the shadcn defaults.
+`badge` and `alert` have `success`/`warning` variants added on top of the shadcn defaults. `Badge` renders a `<span>` (not shadcn's `<div>`): badges sit inside sentences and headings, where a `<div>` is invalid HTML.
+
+`dialog` takes a `mobileSheet` prop (default `true`): below `sm` the dialog becomes a bottom sheet (full width, rounded top, slides up), a centered dialog from `sm` up. `CommandPalette` opts out (`mobileSheet={false}`). The close button's screen-reader label is French ("Fermer") in both `dialog` and `sheet`.
 
 ### `components/common/` — composite building blocks used across feature pages
 
@@ -41,13 +45,14 @@ accordion, alert, alert-dialog, avatar, badge, breadcrumb, button, card, checkbo
 | `LoadingState` | Centered spinner + message |
 | `ErrorState` | Destructive-tinted error block with optional retry |
 | `ConfirmDialog` | Controlled confirm-before-destructive-action dialog, handles async `onConfirm` with a pending/spinner state |
-| `PageHeader` | Title + description + right-aligned actions row |
+| `PageHeader` | Title + description + right-aligned actions row (description hidden on phones) |
 | `PageContainer` | Consistent page padding/gap wrapper |
-| `KpiCard` | Label + big value + icon + up/down/neutral trend |
+| `KpiCard` | Label + big value + icon + up/down/neutral trend (compact below `sm`, two per row) |
 | `ChartCard` | `Card` wrapper with header + sized content slot for a chart |
 | `SearchBar` | Controlled search input with icon + clear button (no search logic wired) |
-| `FilterBar` | Horizontal row for filter controls + "clear filters" action |
-| `Pagination` | Prev/next + numbered pages with ellipsis collapsing for large page counts |
+| `FilterBar` | Horizontal row for filter controls + "clear filters" action (icon-only cross on phones) |
+| `Pagination` | Prev/next + numbered pages with ellipsis collapsing for large page counts (arrows + "Page x sur y" only on phones) |
+| `DateRangeFilter` | Period preset + from/to dates (preset on its own line, dates sharing the next, on phones) |
 
 ### `components/layout/` — application shell
 
@@ -57,9 +62,28 @@ accordion, alert, alert-dialog, avatar, badge, breadcrumb, button, card, checkbo
 | `Sidebar` | Desktop collapsible nav rail (`w-64` ↔ `w-16`, collapse state persisted via `hooks/use-sidebar-collapsed.ts`) |
 | `SidebarNav` | Shared nav list (desktop sidebar + mobile drawer), active-route highlighting |
 | `MobileNav` | Hamburger-triggered `Sheet` drawer, reuses `SidebarNav` |
+| `BottomNav` | Phones and tablets (below `lg`): Accueil · Locations · [+] · Voitures · Clients, filtered by role via `navItemsFor`; the raised "+" opens a bottom sheet of quick creations (`CreateSheetActions`) |
+| `CreateSheetActions` | Content of the "+" sheet: "Nouvelle location" as one wide button, client / voiture / paiement / dépense in a 2×2 grid; each opens its form in place through `QuickActionsProvider` |
 | `Topbar` | Mobile nav trigger, route breadcrumb, search trigger, notifications, theme toggle, user menu |
 | `ThemeToggle` | Light/Dark/System dropdown |
 | `CommandPalette` | Ctrl/Cmd+K global palette |
+
+## Phones (below `sm`, 640 px)
+
+The app is desktop-first (`CLAUDE.md`), with a dedicated phone layout rather than a squeezed desktop one. Breakpoints: `sm` switches most phone-specific layouts, `md` swaps card lists for tables, `lg` swaps the bottom bar for the sidebar.
+
+**Shell** — `AppShell` uses `h-dvh` (follows the mobile URL bar), `index.html` has `viewport-fit=cover`, and fixed bars pad for `env(safe-area-inset-bottom)`. `BottomNav` sits on its own layer (`relative z-30`) since its raised "+" overlaps the bottom of `<main>`. The page is also installable (PWA): `public/manifest.webmanifest` + `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`.
+
+**Patterns every list page follows**
+
+- Header: title and round icon buttons (`h-11 w-11`, `aria-label`) on one line — the text labels come back from `sm`.
+- Search and filter on one line: `SearchBar` flex-1, filter as a button beside it.
+- Below `md`, a card per row instead of the table: `RentalCard`, `CarListCard`, `ClientListCard`, `FinanceListCard` (shared by Paiements / Dépenses / Cautions). A card is tappable as a whole through a stretched button (`after:absolute after:inset-0`); its own controls (status badge, "…" menu) sit above it with `relative z-10`, since a `<button>` can't contain another.
+- Secondary information (document alerts, payment status, license expiry) shows on a card only when there is a problem.
+
+**Overlays** — dialogs are bottom sheets (`mobileSheet`), height-capped with `max-h-[85dvh]` (shrinks when the keyboard opens; `vh` doesn't). Scrollable form bodies carry `-m-1 p-1` so a focused input's ring isn't clipped at the scroll edge. Detail sheets (rental, car, client) are full width and each draws its own visible close button (none left to tap around them). Sheets that would otherwise open with a focus ring on their first control use `onOpenAutoFocus={(e) => e.preventDefault()}`. Where a phone needs a different component, not just different classes — the notifications bell is a bottom sheet on phones, a dropdown elsewhere — `hooks/use-media-query.ts` decides.
+
+**Page-specific layouts** — dashboard fleet "Aujourd'hui" view and status tiles (`fleet-phone-controls.tsx`, `fleet-today-row.tsx`); Locations 2×2 status cards filled with their color when selected; Finances tabs as four equal columns; Équipe cards (`team-mobile-list.tsx`); Journal as a timeline with sticky day headers; Paramètres as a settings list (`settings-number-field.tsx`, units inside the inputs); sticky "Enregistrer" bar on Paramètres and Profil once a form is dirty.
 
 ## Navigation & routing
 

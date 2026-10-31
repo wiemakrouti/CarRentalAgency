@@ -2,12 +2,13 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { flexRender, getCoreRowModel, useReactTable, createColumnHelper } from '@tanstack/react-table';
 import { RENTAL_STATUSES } from '@car-rental/shared';
-import { ClipboardList, Plus } from 'lucide-react';
+import { ClipboardList, Plus, SlidersHorizontal } from 'lucide-react';
 
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useFormatMoney } from '@/hooks/use-format-money';
 import { PageContainer } from '@/components/common/page-container';
 import { PageHeader } from '@/components/common/page-header';
+import { cn } from '@/lib/utils';
 import { PageHero } from '@/components/common/page-hero';
 import { EmptyState } from '@/components/common/empty-state';
 import { LoadingState } from '@/components/common/loading-state';
@@ -27,6 +28,7 @@ import { RentalFormDialog } from '../components/rental-form-dialog';
 import { RentalRowActions } from '../components/rental-row-actions';
 import { RentalDetailSheet } from '../components/rental-detail-sheet';
 import { RentalStatusCards } from '../components/rental-status-cards';
+import { RentalCard } from '../components/rental-card';
 import { ReturnRentalDialog } from '../components/return-rental-dialog';
 import type { Rental } from '../api/rentals.api';
 import { getDisplayRentalStatusSummary } from '../lib/rental-calendar';
@@ -250,13 +252,19 @@ export function RentalsPage() {
   return (
     <PageContainer>
       <PageHero>
+        {/* On a phone the button shrinks to a round "+" beside the title. */}
         <PageHeader
           title="Gestion des locations"
           description="Créez et suivez les contrats de location en cours et passés."
+          className="flex-row items-center justify-between"
           actions={
-            <Button onClick={() => setFormOpen(true)}>
+            <Button
+              onClick={() => setFormOpen(true)}
+              aria-label="Nouvelle location"
+              className="h-11 w-11 rounded-full p-0 sm:h-9 sm:w-auto sm:rounded-lg sm:px-4"
+            >
               <Plus className="h-4 w-4" />
-              Nouvelle location
+              <span className="hidden sm:inline">Nouvelle location</span>
             </Button>
           }
         />
@@ -267,24 +275,35 @@ export function RentalsPage() {
             attention" summary before the table itself. Silently omitted on
             error since it's a supplementary widget, not the page's job. */}
         {isSummaryLoading && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-[152px] rounded-[20px]" />
+              <Skeleton key={i} className="h-[82px] rounded-2xl sm:h-[152px] sm:rounded-[20px]" />
             ))}
           </div>
         )}
         {!isSummaryLoading && !isSummaryError && summary && (
-          <RentalStatusCards summary={summary} onSelect={selectStatusFilter} />
+          <RentalStatusCards
+            summary={summary}
+            active={status ? { status, pickupOverdue } : undefined}
+            onSelect={selectStatusFilter}
+            onClear={clearAllFilters}
+          />
         )}
 
-        <div className="flex flex-wrap items-center gap-3">
+        {/* One line on a phone: the search, then the status filter as an
+            icon button (a dot when a status is picked) and its clear cross. */}
+        <div className="flex items-center gap-2 sm:flex-wrap sm:gap-3">
           <SearchBar
             value={searchInput}
             onChange={setSearchInput}
             placeholder="Rechercher par n° location, voiture ou client..."
-            className="w-80"
+            className="min-w-0 flex-1 sm:w-80 sm:flex-none"
           />
-          <FilterBar activeCount={activeFilterCount} onClearAll={clearAllFilters}>
+          <FilterBar
+            activeCount={activeFilterCount}
+            onClearAll={clearAllFilters}
+            className="shrink-0 flex-nowrap"
+          >
             <Select
               value={status === 'RESERVED' && pickupOverdue === true ? PICKUP_OVERDUE_VALUE : (status ?? ALL_VALUE)}
               onValueChange={(value) => {
@@ -295,8 +314,22 @@ export function RentalsPage() {
                 }
               }}
             >
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="Statut" />
+              <SelectTrigger
+                aria-label="Statut"
+                className={cn(
+                  'relative sm:w-48 max-sm:h-10 max-sm:w-10 max-sm:justify-center max-sm:rounded-full max-sm:px-0 max-sm:[&>svg:last-child]:hidden',
+                  status && 'max-sm:border-primary max-sm:text-primary',
+                )}
+              >
+                <SlidersHorizontal className="h-4 w-4 sm:hidden" />
+                {status && (
+                  <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary sm:hidden" />
+                )}
+                {/* !hidden: the trigger's own [&>span]:line-clamp-1 sets a
+                    display that would otherwise win. */}
+                <span className="max-sm:!hidden">
+                  <SelectValue placeholder="Statut" />
+                </span>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL_VALUE}>Tous les statuts</SelectItem>
@@ -331,7 +364,14 @@ export function RentalsPage() {
 
       {!isLoading && !isError && data && data.items.length > 0 && (
         <>
-          <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-elevation">
+          {/* Phones get the rows as cards; the table from md up. */}
+          <div className="space-y-3 md:hidden">
+            {data.items.map((rental) => (
+              <RentalCard key={rental.id} rental={rental} onOpen={setDetailRentalId} />
+            ))}
+          </div>
+
+          <div className="hidden overflow-x-auto rounded-2xl border border-border bg-card shadow-elevation md:block">
             <Table>
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (

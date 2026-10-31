@@ -178,6 +178,9 @@
 }
 
 .dark {
+  /* Native controls (the date inputs' calendar icon and picker, autofill)
+     follow the theme — otherwise they keep their light, black-on-dark look. */
+  color-scheme: dark;
   scrollbar-color: hsl(var(--primary) / 0.4) hsl(var(--muted) / 0.5);
 }
 

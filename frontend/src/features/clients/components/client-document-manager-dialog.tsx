@@ -74,7 +74,7 @@ export function ClientDocumentManagerDialog({ open, onOpenChange, clientId }: Cl
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col">
+        <DialogContent className="flex max-h-[85dvh] max-w-2xl flex-col">
           <DialogHeader>
             <DialogTitle>
               Documents{client ? ` — ${client.firstName} ${client.lastName}` : ''}

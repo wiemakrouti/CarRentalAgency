@@ -57,7 +57,7 @@ export function ToCollectDialog({ open, onOpenChange, rows, onCollect, onOpenRen
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col gap-0 p-0">
+      <DialogContent className="flex max-h-[85dvh] max-w-2xl flex-col gap-0 p-0">
         <div className="space-y-5 px-6 pb-4 pt-6">
           <div className="flex items-start gap-3 pr-8">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-warning/15 text-warning-foreground dark:text-warning">

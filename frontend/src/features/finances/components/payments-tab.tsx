@@ -11,6 +11,7 @@ import { ErrorState } from '@/components/common/error-state';
 import { SearchBar } from '@/components/common/search-bar';
 import { FilterBar } from '@/components/common/filter-bar';
 import { Pagination } from '@/components/common/pagination';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
@@ -19,7 +20,13 @@ import type { Payment } from '../api/finances.api';
 import { PaymentRowActions } from './payment-row-actions';
 import { PaymentFormDialog } from './payment-form-dialog';
 import { PaymentFiltersPopover, type PaymentFilters } from './payment-filters-popover';
-import { PAYMENT_METHOD_LABELS, PAYMENT_TYPE_LABELS } from '../lib/finance-labels';
+import {
+  PAYMENT_METHOD_LABELS,
+  PAYMENT_STATUS_BADGE_VARIANT,
+  PAYMENT_STATUS_LABELS,
+  PAYMENT_TYPE_LABELS,
+} from '../lib/finance-labels';
+import { FinanceListCard } from './finance-list-card';
 
 const PAGE_SIZE = 20;
 
@@ -105,8 +112,8 @@ export function PaymentsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="flex items-center justify-between gap-2 sm:flex-wrap sm:gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:flex-wrap sm:gap-3">
           <SearchBar
             value={searchInput}
             onChange={(value) => {
@@ -114,15 +121,20 @@ export function PaymentsTab() {
               setPage(1);
             }}
             placeholder="Rechercher par n° location ou client..."
-            className="w-72"
+            className="min-w-0 flex-1 sm:w-72 sm:flex-none"
           />
-          <FilterBar activeCount={activeFilterCount} onClearAll={clearAllFilters}>
+          <FilterBar activeCount={activeFilterCount} onClearAll={clearAllFilters} className="flex-nowrap">
             <PaymentFiltersPopover value={filters} onApply={applyFilters} activeCount={activeFilterCount} />
           </FilterBar>
         </div>
-        <Button onClick={() => setFormOpen(true)}>
+        {/* A round "+" on a phone, beside the search. */}
+        <Button
+          onClick={() => setFormOpen(true)}
+          aria-label="Nouveau paiement"
+          className="h-11 w-11 shrink-0 rounded-full p-0 sm:h-9 sm:w-auto sm:rounded-lg sm:px-4"
+        >
           <Plus className="h-4 w-4" />
-          Nouveau paiement
+          <span className="hidden sm:inline">Nouveau paiement</span>
         </Button>
       </div>
 
@@ -140,7 +152,36 @@ export function PaymentsTab() {
 
       {!isLoading && !isError && data && data.items.length > 0 && (
         <>
-          <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-elevation">
+          <div className="space-y-2.5 md:hidden">
+            {data.items.map((payment) => (
+              <FinanceListCard
+                key={payment.id}
+                icon={Wallet}
+                title={
+                  payment.rental
+                    ? `${payment.rental.client.firstName} ${payment.rental.client.lastName}`
+                    : PAYMENT_TYPE_LABELS[payment.type]
+                }
+                details={[
+                  `${PAYMENT_TYPE_LABELS[payment.type]} · ${PAYMENT_METHOD_LABELS[payment.method]}`,
+                  `${payment.rental?.rentalNumber ?? '—'} · ${formatDate(payment.paidAt)}`,
+                ]}
+                amount={formatMoney(Number(payment.amount))}
+                // Encaissé is the normal case — only the others get a badge.
+                badge={
+                  payment.status !== 'COMPLETED' && (
+                    <Badge variant={PAYMENT_STATUS_BADGE_VARIANT[payment.status]}>
+                      {PAYMENT_STATUS_LABELS[payment.status]}
+                    </Badge>
+                  )
+                }
+                actions={<PaymentRowActions payment={payment} />}
+                onOpen={() => navigate(`/rentals?openId=${payment.rentalId}`)}
+              />
+            ))}
+          </div>
+
+          <div className="hidden overflow-x-auto rounded-2xl border border-border bg-card shadow-elevation md:block">
             <Table>
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (

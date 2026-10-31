@@ -16,9 +16,16 @@ export function FilterBar({ children, activeCount = 0, onClearAll, className }: 
     <div className={cn('flex flex-wrap items-center gap-2', className)}>
       {children}
       {onClearAll && activeCount > 0 && (
-        <Button variant="ghost" size="sm" onClick={onClearAll} className="gap-1.5 text-muted-foreground">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onClearAll}
+          aria-label={`Effacer les filtres (${activeCount})`}
+          className="gap-1.5 text-muted-foreground max-sm:h-9 max-sm:w-9 max-sm:p-0"
+        >
           <X className="h-3.5 w-3.5" />
-          Effacer les filtres ({activeCount})
+          {/* Just the cross on a phone, beside a search box that needs the width. */}
+          <span className="max-sm:hidden">Effacer les filtres ({activeCount})</span>
         </Button>
       )}
     </div>

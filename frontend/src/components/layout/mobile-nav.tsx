@@ -19,7 +19,13 @@ export function MobileNav() {
           <Menu className="h-5 w-5" />
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="flex w-64 flex-col bg-sidebar p-0 text-sidebar-foreground">
+      {/* No focus jump onto the close button: it would open ringed, as if
+          already chosen. */}
+      <SheetContent
+        side="left"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        className="flex w-64 flex-col bg-sidebar p-0 text-sidebar-foreground"
+      >
         <SheetHeader className="flex h-16 flex-row items-center gap-2 space-y-0 border-b border-sidebar-border px-4">
           {settings?.logoUrl ? (
             <img src={settings.logoUrl} alt={agencyName} className="h-8 w-8 shrink-0 rounded-lg object-cover" />

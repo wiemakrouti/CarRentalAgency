@@ -1,4 +1,5 @@
 import { CarFront, ChevronRight, Cog, Fuel, Users } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
 import type { Car } from '../api/cars.api';
 import { CarRowActions } from './car-row-actions';
@@ -15,11 +16,12 @@ type CarGridProps = {
   onEdit: (car: Car) => void;
   onViewDetails: (car: Car) => void;
   onOpenCalendar: (car: Car) => void;
+  className?: string;
 };
 
-export function CarGrid({ cars, onEdit, onViewDetails, onOpenCalendar }: CarGridProps) {
+export function CarGrid({ cars, onEdit, onViewDetails, onOpenCalendar, className }: CarGridProps) {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div className={cn('grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4', className)}>
       {cars.map((car) => {
         const primary = car.images.find((img) => img.isPrimary) ?? car.images[0];
         const outOfService = car.status === 'OUT_OF_SERVICE';

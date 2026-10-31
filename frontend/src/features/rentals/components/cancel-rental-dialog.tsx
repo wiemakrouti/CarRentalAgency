@@ -69,7 +69,7 @@ export function CancelRentalDialog({ open, onOpenChange, rental }: CancelRentalD
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85vh] max-w-md flex-col">
+      <DialogContent className="flex max-h-[85dvh] max-w-md flex-col">
         <DialogHeader>
           <DialogTitle>{isHandover ? 'Annuler la remise des clés ?' : 'Annuler cette location ?'}</DialogTitle>
           <DialogDescription>
@@ -79,7 +79,7 @@ export function CancelRentalDialog({ open, onOpenChange, rental }: CancelRentalD
           </DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+        <div className="-m-1 min-h-0 flex-1 space-y-4 overflow-y-auto p-1">
           <div className="space-y-2">
             <Label htmlFor="cancelledReason" required={isHandover}>
               Motif

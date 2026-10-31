@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { flexRender, getCoreRowModel, useReactTable, createColumnHelper } from '@tanstack/react-table';
 import { ChevronRight, ShieldCheck } from 'lucide-react';
 
@@ -17,6 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useDepositsQuery } from '../hooks/use-finance-summary';
 import type { Deposit } from '../api/finances.api';
 import { DepositFiltersPopover, type DepositFilters } from './deposit-filters-popover';
+import { FinanceListCard } from './finance-list-card';
 
 const PAGE_SIZE = 20;
 
@@ -76,6 +77,7 @@ function buildColumns(formatMoney: (amount: number) => string) {
 }
 
 export function DepositsTab() {
+  const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
   // Status + date range in one object, applied together from the
@@ -119,7 +121,7 @@ export function DepositsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex items-center gap-2 sm:flex-wrap sm:gap-3">
         <SearchBar
           value={searchInput}
           onChange={(value) => {
@@ -127,9 +129,9 @@ export function DepositsTab() {
             setPage(1);
           }}
           placeholder="Rechercher par client, voiture, n° location..."
-          className="w-80"
+          className="min-w-0 flex-1 sm:w-80 sm:flex-none"
         />
-        <FilterBar activeCount={activeFilterCount} onClearAll={clearAllFilters}>
+        <FilterBar activeCount={activeFilterCount} onClearAll={clearAllFilters} className="flex-nowrap">
           <DepositFiltersPopover value={filters} onApply={applyFilters} activeCount={activeFilterCount} />
         </FilterBar>
       </div>
@@ -148,7 +150,32 @@ export function DepositsTab() {
 
       {!isLoading && !isError && data && data.items.length > 0 && (
         <>
-          <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-elevation">
+          <div className="space-y-2.5 md:hidden">
+            {data.items.map((deposit) => (
+              <FinanceListCard
+                key={deposit.rentalId}
+                icon={ShieldCheck}
+                title={`${deposit.client.firstName} ${deposit.client.lastName}`}
+                details={[
+                  `${deposit.car.brand} ${deposit.car.model} · ${deposit.rentalNumber}`,
+                  deposit.refundedAt
+                    ? `Remboursée le ${formatDate(deposit.refundedAt)}`
+                    : `Encaissée le ${formatDate(deposit.collectedAt)}`,
+                ]}
+                amount={formatMoney(deposit.amount)}
+                badge={
+                  deposit.refundedAt ? (
+                    <Badge variant="success">Remboursée</Badge>
+                  ) : (
+                    <Badge variant="warning">En cours</Badge>
+                  )
+                }
+                onOpen={() => navigate(`/rentals?openId=${deposit.rentalId}`)}
+              />
+            ))}
+          </div>
+
+          <div className="hidden overflow-x-auto rounded-2xl border border-border bg-card shadow-elevation md:block">
             <Table>
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (

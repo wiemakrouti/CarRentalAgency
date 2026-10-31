@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Hourglass, ScrollText } from 'lucide-react';
+import { ChevronRight, Hourglass, ScrollText } from 'lucide-react';
 import type { ApprovalStatus } from '@car-rental/shared';
 
 import { useFormatMoney } from '@/hooks/use-format-money';
@@ -36,7 +36,13 @@ function dayLabel(value: string): string {
   yesterday.setDate(today.getDate() - 1);
   if (day.toDateString() === today.toDateString()) return "Aujourd'hui";
   if (day.toDateString() === yesterday.toDateString()) return 'Hier';
-  return day.toLocaleDateString('fr-TN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  // The year only when it isn't this one.
+  return day.toLocaleDateString('fr-TN', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: day.getFullYear() === today.getFullYear() ? undefined : 'numeric',
+  });
 }
 
 function groupByDay(entries: ActivityEntry[]) {
@@ -119,8 +125,15 @@ export function ActivityPage() {
           description={
             canViewAll ? "Consultez l'historique des actions de votre équipe." : "Retrouvez l'historique de vos actions."
           }
+          className="flex-row items-center justify-between"
           actions={
-            <FilterBar activeCount={activeFilterCount} onClearAll={() => applyFilters({})} className="flex-row-reverse">
+            // The clear cross stays off a phone, where the title needs the
+            // room — the popover's own "Réinitialiser" does the same.
+            <FilterBar
+              activeCount={activeFilterCount}
+              onClearAll={() => applyFilters({})}
+              className="flex-row-reverse max-sm:[&>button+button]:hidden"
+            >
               <ActivityFiltersPopover value={filters} onApply={applyFilters} activeCount={activeFilterCount} team={team ?? []} ownOnly={!canViewAll} />
             </FilterBar>
           }
@@ -128,17 +141,34 @@ export function ActivityPage() {
       </PageHero>
 
       {pendingIds.size > 0 && filters.category !== 'approvals' && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-warning/30 bg-warning/10 px-5 py-3.5">
-          <p className="flex items-center gap-2.5 text-sm font-medium">
-            <Hourglass className="h-4 w-4 shrink-0 text-warning" />
-            {pendingIds.size === 1
-              ? '1 demande attend votre validation.'
-              : `${pendingIds.size} demandes attendent votre validation.`}
-          </p>
-          <Button size="sm" variant="outline" onClick={() => applyFilters({ category: 'approvals' })}>
-            Afficher les demandes
-          </Button>
-        </div>
+        <>
+          {/* On a phone the whole banner is the button — one line, not a
+              sentence over a button. */}
+          <button
+            type="button"
+            onClick={() => applyFilters({ category: 'approvals' })}
+            className="flex w-full items-center gap-3 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-left text-sm font-medium transition-colors active:bg-warning/20 sm:hidden"
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-warning/20">
+              <Hourglass className="h-4 w-4 text-warning" />
+            </span>
+            <span className="min-w-0 flex-1">
+              {pendingIds.size === 1 ? '1 demande à valider' : `${pendingIds.size} demandes à valider`}
+            </span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+          </button>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-warning/30 bg-warning/10 px-5 py-3.5 max-sm:hidden">
+            <p className="flex items-center gap-2.5 text-sm font-medium">
+              <Hourglass className="h-4 w-4 shrink-0 text-warning" />
+              {pendingIds.size === 1
+                ? '1 demande attend votre validation.'
+                : `${pendingIds.size} demandes attendent votre validation.`}
+            </p>
+            <Button size="sm" variant="outline" onClick={() => applyFilters({ category: 'approvals' })}>
+              Afficher les demandes
+            </Button>
+          </div>
+        </>
       )}
 
       {isLoading && <LoadingState message="Chargement du journal..." />}
@@ -154,14 +184,21 @@ export function ActivityPage() {
 
       {data && data.items.length > 0 && (
         <>
-          <div className="space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             {groups.map((group) => (
               <Card key={group.label}>
-                <div className="border-b border-border px-5 py-2.5 text-xs font-semibold capitalize text-muted-foreground">
-                  {group.label}
+                {/* Stays pinned while its day scrolls by on a phone, so a
+                    long day never loses its date. */}
+                <div className="flex items-center justify-between gap-3 rounded-t-2xl border-b border-border px-4 py-2.5 text-xs font-semibold text-muted-foreground max-sm:sticky max-sm:top-0 max-sm:z-10 max-sm:bg-card/95 max-sm:backdrop-blur sm:px-5">
+                  <span className="first-letter:uppercase">{group.label}</span>
+                  <span className="rounded-full bg-muted px-2 py-0.5 tabular-nums sm:hidden">
+                    {group.entries.length}
+                  </span>
                 </div>
                 <CardContent className="p-0">
-                  <ul className="divide-y divide-border">
+                  {/* A timeline on a phone — the icons threaded on one line —
+                      instead of rows ruled off from each other. */}
+                  <ul className="divide-y divide-border max-sm:divide-y-0 max-sm:py-1">
                     {group.entries.map((entry) => (
                       <ActivityRow
                         key={entry.id}

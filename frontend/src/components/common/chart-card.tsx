@@ -29,14 +29,16 @@ export function ChartCard({
     // the dashboard page along with it) wider than the viewport on narrow
     // screens instead of the chart simply resizing down to fit.
     <Card className={cn('min-w-0 shadow-xs', className)}>
-      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-x-4 gap-y-3 space-y-0">
+      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-x-4 gap-y-3 space-y-0 p-4 sm:p-6">
         <div>
           <CardTitle className="text-base font-semibold">{title}</CardTitle>
           {description && <CardDescription>{description}</CardDescription>}
         </div>
         {actions}
       </CardHeader>
-      <CardContent className={cn('h-72', contentClassName)}>{children}</CardContent>
+      <CardContent className={cn('h-72 p-4 pt-0 sm:p-6 sm:pt-0', contentClassName)}>
+        {children}
+      </CardContent>
     </Card>
   );
 }

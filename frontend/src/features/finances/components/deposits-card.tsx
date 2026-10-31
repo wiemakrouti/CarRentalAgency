@@ -21,20 +21,20 @@ export function DepositsCard({ collected, refunded, onViewDetails }: DepositsCar
 
   return (
     <Card className="shadow-xs">
-      <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+      <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0 max-sm:p-4">
         <div className="space-y-1.5">
           <CardTitle className="flex items-center gap-2 text-base">
             <ShieldCheck className="h-4 w-4 text-muted-foreground" />
             Cautions
           </CardTitle>
-          <CardDescription>Retenues temporaires remboursables, distinctes du chiffre d'affaires.</CardDescription>
+          <CardDescription className="max-sm:hidden">Retenues temporaires remboursables, distinctes du chiffre d'affaires.</CardDescription>
         </div>
         <Button variant="outline" size="sm" className="shrink-0" onClick={onViewDetails}>
           Voir le détail
           <ArrowRight className="h-4 w-4" />
         </Button>
       </CardHeader>
-      <CardContent>
+      <CardContent className="max-sm:p-4 max-sm:pt-0">
         {collected <= 0 ? (
           <p className="py-4 text-sm text-muted-foreground">Aucune caution encaissée pour l'instant.</p>
         ) : (

@@ -54,7 +54,7 @@ export function DateRangeFilter({ value, onChange, allowAllTime = false, classNa
           else if (next !== 'custom') onChange(computeDateRangePreset(next as BoundedPreset));
         }}
       >
-        <SelectTrigger className="w-40" aria-label="Période">
+        <SelectTrigger className="w-full sm:w-40" aria-label="Période">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -68,7 +68,7 @@ export function DateRangeFilter({ value, onChange, allowAllTime = false, classNa
       <Input
         type="date"
         aria-label="Du"
-        className="w-[150px]"
+        className="min-w-0 flex-1 sm:w-[150px] sm:flex-none"
         value={value.from ?? ''}
         max={value.to}
         onChange={(e) => onChange({ from: e.target.value || undefined, to: value.to })}
@@ -77,7 +77,7 @@ export function DateRangeFilter({ value, onChange, allowAllTime = false, classNa
       <Input
         type="date"
         aria-label="Au"
-        className="w-[150px]"
+        className="min-w-0 flex-1 sm:w-[150px] sm:flex-none"
         value={value.to ?? ''}
         min={value.from}
         onChange={(e) => onChange({ from: value.from, to: e.target.value || undefined })}

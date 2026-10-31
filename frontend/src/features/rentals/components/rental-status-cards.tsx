@@ -67,6 +67,15 @@ const TONE_DOT: Record<Tone, string> = {
   green: 'bg-success',
 };
 
+// The card whose rentals the table shows right now: ringed from sm up; on
+// a phone the whole tile fills with its color instead — a ring around a
+// tile a quarter of the screen wide barely reads.
+const TONE_ACTIVE: Record<Tone, string> = {
+  blue: 'sm:ring-2 sm:ring-primary max-sm:border-primary max-sm:bg-primary max-sm:bg-none max-sm:shadow-[0_10px_22px_-10px_hsl(var(--primary)/0.8)]',
+  red: 'sm:ring-2 sm:ring-destructive max-sm:border-destructive max-sm:bg-destructive max-sm:bg-none max-sm:shadow-[0_10px_22px_-10px_hsl(var(--destructive)/0.8)]',
+  green: 'sm:ring-2 sm:ring-success max-sm:border-success max-sm:bg-success max-sm:bg-none max-sm:shadow-[0_10px_22px_-10px_hsl(var(--success)/0.8)]',
+};
+
 const TONE_STATUS_TEXT: Record<Tone, string> = {
   blue: 'text-muted-foreground',
   red: 'font-semibold text-destructive',
@@ -114,42 +123,92 @@ function buildSegments(summary: RentalSummary): Segment[] {
   ];
 }
 
+function sameFilter(a: CardFilter, b: CardFilter | undefined): boolean {
+  return !!b && a.status === b.status && a.pickupOverdue === b.pickupOverdue;
+}
+
 type RentalStatusCardsProps = {
   summary: RentalSummary;
+  // The table's current filter, so its card shows as selected.
+  active?: CardFilter;
   // Filters the table below to just this card's rentals — see
   // RentalsPage's selectStatusFilter, which owns the actual URL/query-param
   // logic; this component only reports which card was clicked.
   onSelect: (filter: CardFilter) => void;
+  // Clicking the selected card again: back to every rental.
+  onClear: () => void;
 };
 
-export function RentalStatusCards({ summary, onSelect }: RentalStatusCardsProps) {
+export function RentalStatusCards({ summary, active, onSelect, onClear }: RentalStatusCardsProps) {
   const segments = buildSegments(summary);
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    // Two by two on phones and tablets, one row on desktop.
+    <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-4">
       {segments.map((segment) => {
         const Icon = segment.icon;
+        const selected = sameFilter(segment.filter, active);
         return (
           <button
             key={segment.label}
             type="button"
-            onClick={() => onSelect(segment.filter)}
+            aria-pressed={selected}
+            onClick={() => (selected ? onClear() : onSelect(segment.filter))}
             className={cn(
-              'relative grid gap-2.5 overflow-hidden rounded-2xl border px-4 py-3.5 text-left transition-transform duration-150 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+              'relative grid content-start overflow-hidden rounded-2xl border px-3 pb-3 pt-3.5 text-left transition-transform duration-150 hover:-translate-y-0.5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:gap-2.5 sm:px-4 sm:py-3.5',
               TONE_CARD[segment.tone],
+              selected && TONE_ACTIVE[segment.tone],
             )}
           >
-            <span aria-hidden className={cn('absolute inset-x-0 top-0 h-[3px]', TONE_BAR[segment.tone])} />
+            <span
+              aria-hidden
+              className={cn('absolute inset-x-0 top-0 h-[3px]', TONE_BAR[segment.tone])}
+            />
             {/* Oversized, near-invisible icon in the corner — texture, not
                 information; purely decorative so it's aria-hidden. */}
             <Icon
               aria-hidden
-              className={cn('pointer-events-none absolute -bottom-3 -right-2 h-[72px] w-[72px] -rotate-[8deg]', TONE_WATERMARK[segment.tone])}
+              className={cn(
+                'pointer-events-none absolute -bottom-3 -right-2 hidden h-[72px] w-[72px] -rotate-[8deg] sm:block',
+                TONE_WATERMARK[segment.tone],
+              )}
             />
+            {/* Phone: the icon on the left, the count large beside it and
+                the name under the count — two lines at most, min-h keeping
+                the four tiles the same height whether a name wraps or not. */}
+            <span className="relative flex items-center gap-3 sm:hidden">
+              <span
+                className={cn(
+                  'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
+                  selected ? 'bg-white/20 text-white' : TONE_ICON_BOX[segment.tone],
+                )}
+              >
+                <Icon className="h-[18px] w-[18px]" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span
+                  className={cn(
+                    'block font-mono text-2xl font-extrabold leading-none tracking-tight tabular-nums',
+                    selected ? 'text-white' : TONE_VALUE[segment.tone],
+                  )}
+                >
+                  {segment.value}
+                </span>
+                <span
+                  className={cn(
+                    'mt-1 line-clamp-2 min-h-[2lh] text-[10.5px] font-bold uppercase leading-tight tracking-wide',
+                    selected ? 'text-white/90' : 'text-muted-foreground',
+                  )}
+                >
+                  {segment.label}
+                </span>
+              </span>
+            </span>
+
             {/* Icon, name and number on one row — the number pinned right so
                 it lines up across the four cards; the name takes what's left
                 and wraps (up to two lines) when a 4-column row gets narrow. */}
-            <div className="relative flex items-center gap-3">
+            <div className="relative flex items-center justify-between gap-3 max-sm:hidden">
               <div
                 className={cn(
                   'flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]',
@@ -170,7 +229,7 @@ export function RentalStatusCards({ summary, onSelect }: RentalStatusCardsProps)
                 {segment.value}
               </p>
             </div>
-            <div className="relative flex min-w-0 items-center gap-1.5 text-xs">
+            <div className="relative hidden min-w-0 items-center gap-1.5 text-xs sm:flex">
               <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', TONE_DOT[segment.tone])} />
               <span className={TONE_STATUS_TEXT[segment.tone]}>{segment.status}</span>
             </div>

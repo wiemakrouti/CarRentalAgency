@@ -108,10 +108,10 @@ function BreakdownCard<Key extends string>({
 
   return (
     <Card className="shadow-xs">
-      <CardHeader>
+      <CardHeader className="max-sm:p-4">
         <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col gap-6 lg:flex-row lg:items-center">
+      <CardContent className="flex flex-col gap-4 sm:gap-6 lg:flex-row lg:items-center max-sm:p-4 max-sm:pt-0">
         {total > 0 ? (
           <div className="relative mx-auto h-36 w-36 shrink-0 lg:mx-0">
             <ResponsiveContainer width="100%" height="100%">
@@ -154,7 +154,9 @@ function BreakdownCard<Key extends string>({
           </div>
         )}
         <Table className="flex-1">
-          <TableHeader>
+          {/* The dots already pair each line with the donut — headers are
+              noise on a phone. */}
+          <TableHeader className="max-sm:hidden">
             <TableRow>
               <TableHead>{columnLabel}</TableHead>
               <TableHead className="text-right">Montant</TableHead>
@@ -218,7 +220,7 @@ export function FinanceSummaryTab({ onViewDeposits }: FinanceSummaryTabProps) {
     previousData && data ? computeTrend(data.pendingTotal, previousData.pendingTotal, true) : undefined;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <DateRangeFilter value={range} onChange={setRange} />
 
       {isLoading && <LoadingState message="Calcul du résumé..." />}
@@ -226,7 +228,7 @@ export function FinanceSummaryTab({ onViewDeposits }: FinanceSummaryTabProps) {
 
       {!isLoading && !isError && data && (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-4">
             <KpiCard
               label="Revenus"
               value={formatMoney(data.revenue.total)}

@@ -1,18 +1,11 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { KeyRound, MoreHorizontal, Pencil, Power, UserPlus, Users } from 'lucide-react';
+import { UserPlus, Users } from 'lucide-react';
 
 import { ApiClientError } from '@/lib/api-client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { ConfirmDialog } from '@/components/common/confirm-dialog';
 import { EmptyState } from '@/components/common/empty-state';
 import { ErrorState } from '@/components/common/error-state';
@@ -24,6 +17,9 @@ import { PageHero } from '@/components/common/page-hero';
 import type { TeamMember } from '../api/team.api';
 import { ResetPasswordDialog } from '../components/reset-password-dialog';
 import { TeamMemberDialog } from '../components/team-member-dialog';
+import { TeamMemberActions } from '../components/team-member-actions';
+import { StatusBadge } from '../components/team-member-status';
+import { TeamMobileList } from '../components/team-mobile-list';
 import { useSetEmployeeActiveMutation, useTeamQuery } from '../hooks/use-team';
 
 function lastLogin(member: TeamMember): string {
@@ -35,12 +31,6 @@ function lastLogin(member: TeamMember): string {
     minute: '2-digit',
     hourCycle: 'h23',
   })}`;
-}
-
-function StatusBadge({ member }: { member: TeamMember }) {
-  if (member.deactivatedAt) return <Badge variant="destructive">Désactivé</Badge>;
-  if (member.mustChangePassword) return <Badge variant="warning">Mot de passe à choisir</Badge>;
-  return <Badge variant="success">Actif</Badge>;
 }
 
 // The director's team: who can sign in to the agency, with what role, and
@@ -70,16 +60,32 @@ export function TeamPage() {
     }
   }
 
+  const memberActions = {
+    onEdit: (member: TeamMember) => {
+      setEditing(member);
+      setFormOpen(true);
+    },
+    onResetPassword: setResetting,
+    onDeactivate: setDeactivating,
+    onReactivate: (member: TeamMember) => changeActive(member, true),
+  };
+
   return (
     <PageContainer>
       <PageHero>
         <PageHeader
           title="Équipe"
           description="Gérez les comptes et les accès de votre équipe."
+          className="flex-row items-center justify-between"
           actions={
-            <Button onClick={openCreate}>
+            // A round icon button beside the title on a phone.
+            <Button
+              onClick={openCreate}
+              aria-label="Ajouter un employé"
+              className="h-11 w-11 rounded-full p-0 sm:h-9 sm:w-auto sm:rounded-lg sm:px-4"
+            >
               <UserPlus className="h-4 w-4" />
-              Ajouter un employé
+              <span className="hidden sm:inline">Ajouter un employé</span>
             </Button>
           }
         />
@@ -89,74 +95,45 @@ export function TeamPage() {
       {isError && <ErrorState onRetry={() => refetch()} />}
 
       {data && (
-        <Card>
-          <CardContent className="divide-y divide-border p-0">
-            {data.map((member) => {
-              const isEmployee = member.role === 'EMPLOYEE';
-              return (
-                <div key={member.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4">
-                  <span
-                    className={
-                      member.deactivatedAt
-                        ? 'flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-semibold text-muted-foreground'
-                        : 'flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary-400 to-primary-700 text-sm font-bold text-primary-foreground'
-                    }
-                  >
-                    {member.fullName.trim().charAt(0).toUpperCase()}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
-                      <span className="truncate">{member.fullName}</span>
-                      <Badge variant={isEmployee ? 'secondary' : 'default'}>{isEmployee ? 'Employé' : 'Directeur'}</Badge>
-                    </p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {member.email} · {lastLogin(member)}
-                    </p>
+        <>
+          <TeamMobileList members={data} {...memberActions} />
+
+          <Card className="max-sm:hidden">
+            <CardContent className="divide-y divide-border p-0">
+              {data.map((member) => {
+                const isEmployee = member.role === 'EMPLOYEE';
+                return (
+                  <div key={member.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4">
+                    <span
+                      className={
+                        member.deactivatedAt
+                          ? 'flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-semibold text-muted-foreground'
+                          : 'flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary-400 to-primary-700 text-sm font-bold text-primary-foreground'
+                      }
+                    >
+                      {member.fullName.trim().charAt(0).toUpperCase()}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+                        <span className="truncate">{member.fullName}</span>
+                        <Badge variant={isEmployee ? 'secondary' : 'default'}>{isEmployee ? 'Employé' : 'Directeur'}</Badge>
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {member.email} · {lastLogin(member)}
+                      </p>
+                    </div>
+                    <StatusBadge member={member} />
+                    {isEmployee ? (
+                      <TeamMemberActions member={member} {...memberActions} />
+                    ) : (
+                      <span className="w-9" aria-hidden="true" />
+                    )}
                   </div>
-                  <StatusBadge member={member} />
-                  {isEmployee ? (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" aria-label={`Actions pour ${member.fullName}`}>
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onSelect={() => {
-                            setEditing(member);
-                            setFormOpen(true);
-                          }}
-                        >
-                          <Pencil className="h-4 w-4" />
-                          Modifier
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => setResetting(member)}>
-                          <KeyRound className="h-4 w-4" />
-                          Réinitialiser le mot de passe
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        {member.deactivatedAt ? (
-                          <DropdownMenuItem onSelect={() => changeActive(member, true)}>
-                            <Power className="h-4 w-4" />
-                            Réactiver
-                          </DropdownMenuItem>
-                        ) : (
-                          <DropdownMenuItem className="text-destructive" onSelect={() => setDeactivating(member)}>
-                            <Power className="h-4 w-4" />
-                            Désactiver
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  ) : (
-                    <span className="w-9" aria-hidden="true" />
-                  )}
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
+                );
+              })}
+            </CardContent>
+          </Card>
+        </>
       )}
 
       {data && employees.length === 0 && (

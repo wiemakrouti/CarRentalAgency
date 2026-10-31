@@ -65,7 +65,7 @@ npm workspaces: `backend/`, `frontend/`, `packages/shared/` (enums + Zod schemas
 
 ## Frontend
 
-Feature-based folders (`frontend/src/features/{cars,clients,rentals,finances,maintenance,reports,settings,auth,dashboard}`), not type-based — each module owns its API calls, hooks, and pages. Shared UI lives in `frontend/src/components`: `ui/` (shadcn/Radix primitives), `common/` (composite building blocks — empty/loading/error states, page header/container, KPI/chart cards, search/filter/pagination), `layout/` (app shell — sidebar, topbar, mobile nav, command palette). Theme state lives in `frontend/src/providers`; the nav config (`frontend/src/lib/navigation.ts`) drives both the sidebar and the command palette. Full token/component reference: `docs/design-system.md`.
+Feature-based folders (`frontend/src/features/{cars,clients,rentals,finances,maintenance,reports,settings,auth,dashboard}`), not type-based — each module owns its API calls, hooks, and pages. Shared UI lives in `frontend/src/components`: `ui/` (shadcn/Radix primitives), `common/` (composite building blocks — empty/loading/error states, page header/container, KPI/chart cards, search/filter/pagination), `layout/` (app shell — sidebar, topbar, mobile nav, command palette). Theme state lives in `frontend/src/providers`; the nav config (`frontend/src/lib/navigation.ts`) drives the sidebar, the phone bottom bar and the command palette. Full token/component reference: `docs/design-system.md`; phone layout patterns: `docs/design-system.md` "Phones".
 
 ### Server state (TanStack Query)
 

@@ -309,10 +309,10 @@ export function RentalFormDialog({ open, onOpenChange, onCreated, prefill }: Ren
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="flex max-h-[85vh] max-w-xl flex-col">
+        <DialogContent className="flex max-h-[85dvh] max-w-xl flex-col">
           <DialogHeader>
             <DialogTitle>Nouvelle location</DialogTitle>
-            <DialogDescription>Choisissez les dates, puis la voiture et le client.</DialogDescription>
+            <DialogDescription className="sr-only">Choisissez les dates, puis la voiture et le client.</DialogDescription>
           </DialogHeader>
 
           {/* The footer sits outside this scrolling div, not pinned via
@@ -324,7 +324,7 @@ export function RentalFormDialog({ open, onOpenChange, onCreated, prefill }: Ren
               region from the footer like this means the footer is simply
               never part of what can overlap — it's always fully visible. */}
           <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col" noValidate>
-            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto">
+            <div className="-m-1 min-h-0 flex-1 space-y-6 overflow-y-auto p-1">
               <Tabs value={bookingMode} onValueChange={(v) => handleBookingModeChange(v as BookingMode)}>
                 {/* h-auto + whitespace-normal override TabsTrigger's default
                     single-line fit: at dialog widths under ~420px, "Réservation
@@ -342,8 +342,11 @@ export function RentalFormDialog({ open, onOpenChange, onCreated, prefill }: Ren
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
+                  {/* Shorter labels side by side on a phone, so both stay on
+                      one line and the two inputs line up. */}
                   <Label htmlFor="pickupDate" required>
-                    Date de prise en charge
+                    <span className="sm:hidden">Départ</span>
+                    <span className="max-sm:hidden">Date de prise en charge</span>
                   </Label>
                   <Input
                     id="pickupDate"
@@ -356,7 +359,8 @@ export function RentalFormDialog({ open, onOpenChange, onCreated, prefill }: Ren
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="plannedReturnDate" required>
-                    Date de retour prévue
+                    <span className="sm:hidden">Retour prévu</span>
+                    <span className="max-sm:hidden">Date de retour prévue</span>
                   </Label>
                   <Input
                     id="plannedReturnDate"
@@ -486,7 +490,8 @@ export function RentalFormDialog({ open, onOpenChange, onCreated, prefill }: Ren
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="mileageAtPickup" required>
-                      Kilométrage au départ
+                      <span className="sm:hidden">Kilométrage</span>
+                      <span className="max-sm:hidden">Kilométrage au départ</span>
                     </Label>
                     <Input
                       id="mileageAtPickup"
@@ -501,11 +506,12 @@ export function RentalFormDialog({ open, onOpenChange, onCreated, prefill }: Ren
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="fuelLevelAtPickup" required>
-                      Niveau de carburant
+                      <span className="sm:hidden">Carburant</span>
+                      <span className="max-sm:hidden">Niveau de carburant</span>
                     </Label>
                     <Input
                       id="fuelLevelAtPickup"
-                      placeholder="Ex. Plein, 3/4, Moitié..."
+                      placeholder="Plein, 3/4…"
                       value={fuelLevelAtPickup}
                       onChange={(e) => setFuelLevelAtPickup(e.target.value)}
                     />

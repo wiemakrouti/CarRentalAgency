@@ -19,7 +19,9 @@ export function PageHeader({ title, description, actions, className }: PageHeade
     >
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">{title}</h1>
-        {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
+        {/* Left out on phones, where the title says enough and the room
+            goes to the page itself. */}
+        {description && <p className="mt-1 hidden text-sm text-muted-foreground sm:block">{description}</p>}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
     </div>

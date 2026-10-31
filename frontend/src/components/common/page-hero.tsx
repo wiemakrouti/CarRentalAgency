@@ -16,7 +16,7 @@ export function PageHero({ children, className }: PageHeroProps) {
   return (
     <div
       className={cn(
-        'relative overflow-hidden rounded-3xl border border-primary-100 bg-gradient-to-br from-primary-50 via-white to-white p-6 dark:border-primary/20 dark:from-primary/10 dark:via-card dark:to-card md:p-8',
+        'relative overflow-hidden rounded-3xl border border-primary-100 bg-gradient-to-br from-primary-50 via-white to-white p-5 dark:border-primary/20 dark:from-primary/10 dark:via-card dark:to-card sm:p-6 md:p-8',
         className,
       )}
     >

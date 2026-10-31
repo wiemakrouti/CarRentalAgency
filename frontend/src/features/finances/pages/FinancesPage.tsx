@@ -16,8 +16,9 @@ import { DepositsTab } from '../components/deposits-tab';
 // rather than touching ui/tabs.tsx, which the calendar dialogs and the
 // rental form also use as a plain segmented control. `group` lets the icon
 // badge below react to this trigger's own active state.
+// On a phone the four tabs share the width equally, icon over label.
 const TAB_TRIGGER_CLASSES =
-  'group h-auto shrink-0 gap-2.5 rounded-none border-b-2 border-transparent px-1 py-3 text-sm font-medium text-muted-foreground shadow-none transition-colors hover:text-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-foreground data-[state=active]:shadow-none';
+  'group h-auto shrink-0 gap-2.5 max-sm:min-w-0 max-sm:flex-col max-sm:gap-1.5 max-sm:py-2.5 max-sm:text-xs rounded-none border-b-2 border-transparent px-1 py-3 text-sm font-medium text-muted-foreground shadow-none transition-colors hover:text-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-foreground data-[state=active]:shadow-none';
 
 // The icon badge itself: muted until this tab is active, then fills with a
 // blue gradient plus a soft halo — the "Option A1" pick, same glow treatment
@@ -47,12 +48,13 @@ export function FinancesPage() {
             title="Finances"
             description="Suivez les paiements, dépenses et la rentabilité de l'agence."
           />
-          <TabsList className="h-auto w-full justify-center gap-9 rounded-none border-b border-border bg-transparent p-0">
+          <TabsList className="h-auto w-full justify-center gap-9 rounded-none border-b border-border bg-transparent p-0 max-sm:grid max-sm:grid-cols-4 max-sm:gap-0">
             <TabsTrigger value="summary" className={TAB_TRIGGER_CLASSES}>
               <span className={TAB_ICON_CLASSES}>
                 <LayoutDashboard className="h-4 w-4" />
               </span>
-              Vue d'ensemble
+              <span className="sm:hidden">Résumé</span>
+              <span className="max-sm:hidden">Vue d'ensemble</span>
             </TabsTrigger>
             <TabsTrigger value="payments" className={TAB_TRIGGER_CLASSES}>
               <span className={TAB_ICON_CLASSES}>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Controller, useForm } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { Loader2, LogOut, Monitor, Smartphone, Wallet } from 'lucide-react';
@@ -16,7 +16,6 @@ import { ErrorState } from '@/components/common/error-state';
 import { ConfirmDialog } from '@/components/common/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -26,6 +25,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { formatRelativeTime } from '@/lib/format-relative-time';
+import { cn } from '@/lib/utils';
 import { isMobileUserAgent, parseUserAgent } from '@/features/profile/lib/parse-user-agent';
 import {
   useRevokeOtherSessionsMutation,
@@ -36,6 +37,7 @@ import {
 import type { Settings } from '../api/settings.api';
 import { toSettingsFormValues } from '../lib/settings-form';
 import { useUpdateSettingsMutation } from '../hooks/use-settings';
+import { SettingsNumberField } from '../components/settings-number-field';
 
 // The agency identity fields (name, logo, address, phone, contact email,
 // tax id) moved to the Profil page — this form only ever edits the
@@ -66,18 +68,6 @@ function toFormValues(settings: Settings): OperationalSettingsInput {
     largeExpenseThreshold: full.largeExpenseThreshold,
     largeDiscountThreshold: full.largeDiscountThreshold,
   };
-}
-
-// Login time is all a session carries (there's no last-activity tracking),
-// so this reads "Connecté il y a X" rather than implying recent activity.
-function formatRelativeTime(value: string): string {
-  const diffMinutes = Math.round((Date.now() - new Date(value).getTime()) / 60_000);
-  if (diffMinutes < 1) return "à l'instant";
-  if (diffMinutes < 60) return `il y a ${diffMinutes} min`;
-  const diffHours = Math.round(diffMinutes / 60);
-  if (diffHours < 24) return `il y a ${diffHours} h`;
-  const diffDays = Math.round(diffHours / 24);
-  return `il y a ${diffDays} j`;
 }
 
 export function SettingsPage() {
@@ -113,6 +103,13 @@ export function SettingsPage() {
   // back to empty immediately after the first invocation had correctly set
   // them — so it isn't enough that `reset()` itself is safe to call twice,
   // the second call has to genuinely not happen at all.
+  // The amounts' unit follows the currency picked above them, saved or not.
+  const currencyCode = useWatch({ control, name: 'currencyCode' });
+  const currencySymbol =
+    CURRENCY_OPTIONS.find((o) => o.code === currencyCode)?.symbol ??
+    CURRENCY_OPTIONS.find((o) => o.code === settings?.currencyCode)?.symbol ??
+    '';
+
   const resetForUpdatedAt = useRef<string | null>(null);
   useEffect(() => {
     if (settings && resetForUpdatedAt.current !== settings.updatedAt) {
@@ -158,22 +155,22 @@ export function SettingsPage() {
       {/* Side by side on wide screens, stacked below xl where each half
           would be too narrow for the fields and the session rows. */}
       {settings && (
-        <div className="grid items-start gap-6 xl:grid-cols-2 xl:items-stretch">
+        <div className="grid items-start gap-4 sm:gap-6 xl:grid-cols-2 xl:items-stretch">
           <form onSubmit={handleSubmit(onSubmit)} className="flex min-w-0 flex-col gap-6">
             <Card className="min-w-0">
-              <CardHeader className="flex flex-row items-center gap-3.5 space-y-0">
+              <CardHeader className="flex flex-row items-center gap-3.5 space-y-0 max-sm:p-4">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary-400 to-primary-700 text-primary-foreground shadow-[0_4px_10px_-4px_hsl(var(--primary-500)/0.5)]">
                   <Wallet className="h-[18px] w-[18px]" />
                 </div>
                 <div>
                   <CardTitle className="text-base">Devise &amp; location</CardTitle>
-                  <CardDescription>
+                  <CardDescription className="max-sm:hidden">
                     S'applique à tous les montants affichés dans l'application.
                   </CardDescription>
                 </div>
               </CardHeader>
-              <CardContent>
-                <div className="grid gap-4 sm:grid-cols-2">
+              <CardContent className="max-sm:px-4 max-sm:pb-0">
+                <div className="grid gap-5 sm:grid-cols-2 sm:gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="currencyCode" required>
                       Devise
@@ -207,95 +204,78 @@ export function SettingsPage() {
                       )}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="defaultDepositAmount" required>
-                      Caution par défaut
-                    </Label>
-                    <Input
-                      id="defaultDepositAmount"
-                      type="number"
-                      step="0.001"
-                      min="0"
-                      {...register('defaultDepositAmount', { setValueAs: Number })}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Pré-remplit la caution d'une nouvelle location quand aucun montant n'est
-                      saisi.
-                    </p>
-                    {errors.defaultDepositAmount && (
-                      <p className="text-sm text-destructive">
-                        {errors.defaultDepositAmount.message}
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="reminderWindowDays" required>
-                      Fenêtre des rappels (jours)
-                    </Label>
-                    <Input
-                      id="reminderWindowDays"
-                      type="number"
-                      step="1"
-                      min="1"
-                      max="90"
-                      {...register('reminderWindowDays', { setValueAs: Number })}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Les échéances (assurances, permis, contrôles techniques...) apparaissent dans
-                      la cloche de notifications ce nombre de jours à l'avance.
-                    </p>
-                    {errors.reminderWindowDays && (
-                      <p className="text-sm text-destructive">
-                        {errors.reminderWindowDays.message}
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="largeExpenseThreshold" required>
-                      Seuil des dépenses
-                    </Label>
-                    <Input
-                      id="largeExpenseThreshold"
-                      type="number"
-                      step="0.001"
-                      min="0"
-                      {...register('largeExpenseThreshold', { setValueAs: Number })}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Une dépense d'un employé à partir de ce montant attend votre validation.
-                    </p>
-                    {errors.largeExpenseThreshold && (
-                      <p className="text-sm text-destructive">
-                        {errors.largeExpenseThreshold.message}
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="largeDiscountThreshold" required>
-                      Seuil de remise (%)
-                    </Label>
-                    <Input
-                      id="largeDiscountThreshold"
-                      type="number"
-                      step="1"
-                      min="1"
-                      max="100"
-                      {...register('largeDiscountThreshold', { setValueAs: Number })}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Une location d'un employé avec une remise au-delà de ce pourcentage du tarif
-                      catalogue attend votre validation.
-                    </p>
-                    {errors.largeDiscountThreshold && (
-                      <p className="text-sm text-destructive">
-                        {errors.largeDiscountThreshold.message}
-                      </p>
-                    )}
-                  </div>
+                  <SettingsNumberField
+                    id="defaultDepositAmount"
+                    label="Caution par défaut"
+                    unit={currencySymbol}
+                    help="Pré-remplit la caution d'une nouvelle location quand aucun montant n'est saisi."
+                    error={errors.defaultDepositAmount?.message}
+                    inputProps={{
+                      step: '0.001',
+                      min: '0',
+                      ...register('defaultDepositAmount', { setValueAs: Number }),
+                    }}
+                  />
+                  {/* Section titles on a phone only — side by side in two
+                      columns, the fields don't need them. */}
+                  <p className="border-t border-border pt-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground sm:hidden">Rappels</p>
+                  <SettingsNumberField
+                    id="reminderWindowDays"
+                    label="Fenêtre des rappels"
+                    unit="j"
+                    help="Les échéances (assurances, permis, contrôles techniques...) apparaissent dans la cloche de notifications ce nombre de jours à l'avance."
+                    error={errors.reminderWindowDays?.message}
+                    inputProps={{
+                      step: '1',
+                      min: '1',
+                      max: '90',
+                      ...register('reminderWindowDays', { setValueAs: Number }),
+                    }}
+                  />
+                  <p className="border-t border-border pt-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground sm:hidden">Validations du directeur</p>
+                  <SettingsNumberField
+                    id="largeExpenseThreshold"
+                    label="Seuil des dépenses"
+                    unit={currencySymbol}
+                    help="Une dépense d'un employé à partir de ce montant attend votre validation."
+                    error={errors.largeExpenseThreshold?.message}
+                    inputProps={{
+                      step: '0.001',
+                      min: '0',
+                      ...register('largeExpenseThreshold', { setValueAs: Number }),
+                    }}
+                  />
+                  <SettingsNumberField
+                    id="largeDiscountThreshold"
+                    label="Seuil de remise"
+                    unit="%"
+                    help="Une location d'un employé avec une remise au-delà de ce pourcentage du tarif catalogue attend votre validation."
+                    error={errors.largeDiscountThreshold?.message}
+                    inputProps={{
+                      step: '1',
+                      min: '1',
+                      max: '100',
+                      ...register('largeDiscountThreshold', { setValueAs: Number }),
+                    }}
+                  />
                 </div>
 
-                <div className="mt-6 flex justify-end">
-                  <Button type="submit" disabled={updateMutation.isPending || !isDirty}>
+                {/* On a phone, once something has changed, the save button
+                    follows the scroll at the bottom of the screen instead of
+                    waiting at the end of five long fields. */}
+                <div
+                  className={cn(
+                    'mt-6 flex justify-end max-sm:-mx-4 max-sm:mt-5 max-sm:rounded-b-2xl max-sm:px-4 max-sm:pb-4',
+                    isDirty &&
+                      // pb-7 clears the bottom bar's raised "+".
+                      'max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:border-t max-sm:border-border max-sm:bg-card/95 max-sm:pb-7 max-sm:pt-3 max-sm:backdrop-blur',
+                  )}
+                >
+                  <Button
+                    type="submit"
+                    disabled={updateMutation.isPending || !isDirty}
+                    className="max-sm:h-11 max-sm:w-full"
+                  >
                     {updateMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                     Enregistrer
                   </Button>
@@ -305,14 +285,14 @@ export function SettingsPage() {
           </form>
 
           <Card className="flex min-w-0 flex-col">
-            <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 space-y-0">
+            <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 space-y-0 max-sm:p-4">
               <div className="flex items-center gap-3.5">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-400 to-slate-600 text-white shadow-[0_4px_10px_-4px_rgba(51,102,232,0.5)]">
                   <Monitor className="h-[18px] w-[18px]" />
                 </div>
                 <div>
                   <CardTitle className="text-base">Sessions actives</CardTitle>
-                  <CardDescription>
+                  <CardDescription className="max-sm:hidden">
                     Les appareils actuellement connectés à votre compte.
                   </CardDescription>
                 </div>
@@ -321,7 +301,8 @@ export function SettingsPage() {
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                // On a phone it moves under the list, full width.
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive max-sm:hidden"
                 disabled={otherSessionsCount === 0 || revokeOtherSessionsMutation.isPending}
                 onClick={() => setRevokeOthersOpen(true)}
               >
@@ -332,7 +313,7 @@ export function SettingsPage() {
             {/* Next to the settings form (xl) the list takes whatever height
                 that card leaves and scrolls inside, so a long list of devices
                 never stretches the row; stacked, it's simply capped. */}
-            <CardContent className="xl:relative xl:min-h-[200px] xl:flex-1">
+            <CardContent className="xl:relative xl:min-h-[200px] xl:flex-1 max-sm:px-4 max-sm:pb-4">
               <div className="-mx-1 max-h-[420px] overflow-y-auto px-1 xl:absolute xl:inset-x-6 xl:bottom-6 xl:top-0 xl:mx-0 xl:max-h-none xl:px-0">
                 <div className="relative">
                   {/* Timeline connector running behind the icon column — visible
@@ -393,10 +374,13 @@ export function SettingsPage() {
                             type="button"
                             variant="ghost"
                             size="sm"
-                            className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            aria-label="Déconnecter"
+                            className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive max-sm:h-10 max-sm:w-10 max-sm:p-0"
                             onClick={() => setSessionToRevoke(session.id)}
                           >
-                            Déconnecter
+                            {/* Just the icon on a phone, where the row is narrow. */}
+                            <LogOut className="h-4 w-4 sm:hidden" />
+                            <span className="max-sm:hidden">Déconnecter</span>
                           </Button>
                         )}
                       </div>
@@ -404,6 +388,18 @@ export function SettingsPage() {
                   </div>
                 </div>
               </div>
+              {otherSessionsCount > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-4 h-11 w-full border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive sm:hidden"
+                  disabled={revokeOtherSessionsMutation.isPending}
+                  onClick={() => setRevokeOthersOpen(true)}
+                >
+                  <LogOut className="h-4 w-4" />
+                  Déconnecter les autres appareils
+                </Button>
+              )}
             </CardContent>
           </Card>
         </div>

@@ -4,6 +4,11 @@ import { ThemeContext, type ResolvedTheme, type Theme } from './theme-context';
 
 const STORAGE_KEY = 'car-rental-theme';
 
+// The page background of each theme (--background), given to the phone's
+// status bar so it blends into the app. Also set before React loads, in
+// index.html.
+const THEME_COLORS: Record<ResolvedTheme, string> = { light: '#FAFBFD', dark: '#0E121C' };
+
 function getSystemTheme(): ResolvedTheme {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
@@ -36,6 +41,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     media.addEventListener('change', handleChange);
     return () => media.removeEventListener('change', handleChange);
   }, [theme]);
+
+  useEffect(() => {
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLORS[resolvedTheme]);
+  }, [resolvedTheme]);
 
   const setTheme = (next: Theme) => {
     window.localStorage.setItem(STORAGE_KEY, next);

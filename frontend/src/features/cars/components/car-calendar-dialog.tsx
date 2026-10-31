@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { CalendarX2, ChevronLeft, ChevronRight, X } from 'lucide-react';
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -132,12 +132,14 @@ export function CarCalendarDialog({ car, open, onOpenChange, defaultTab = 'calen
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-[36rem]">
-        <DialogHeader>
-          <DialogTitle>
-            Calendrier des locations —{' '}
+      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-[36rem]">
+        {/* Which car on a line of its own — appended to the title, it ran
+            into the close button on a phone. */}
+        <DialogHeader className="px-8 sm:pl-0">
+          <DialogTitle>Calendrier des locations</DialogTitle>
+          <DialogDescription>
             {car ? `${car.brand} ${car.model} (${car.licensePlate})` : ''}
-          </DialogTitle>
+          </DialogDescription>
         </DialogHeader>
 
         {isLoading ? (

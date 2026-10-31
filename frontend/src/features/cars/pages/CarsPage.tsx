@@ -53,6 +53,7 @@ import { CarImageManagerDialog } from '../components/car-image-manager-dialog';
 import { CarDetailSheet } from '../components/car-detail-sheet';
 import { CarCalendarDialog } from '../components/car-calendar-dialog';
 import { CarGrid } from '../components/car-grid';
+import { CarListCard } from '../components/car-list-card';
 import { CarExpiryAlerts } from '../components/car-expiry-alerts';
 import { CarFiltersPopover, type CarFilters } from '../components/car-filters-popover';
 import { CAR_CATEGORY_LABELS } from '../lib/car-labels';
@@ -346,13 +347,19 @@ export function CarsPage() {
         <PageHeader
           title="Gestion des voitures"
           description="Ajoutez, modifiez et suivez la disponibilité de votre flotte de véhicules."
+          className="flex-row items-center justify-between"
           actions={
             <div className="flex items-center gap-2">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" disabled={exportMutation.isPending}>
+                  <Button
+                    variant="outline"
+                    disabled={exportMutation.isPending}
+                    aria-label="Exporter"
+                    className="h-11 w-11 rounded-full p-0 sm:h-9 sm:w-auto sm:rounded-lg sm:px-4"
+                  >
                     <Download className="h-4 w-4" />
-                    Exporter
+                    <span className="hidden sm:inline">Exporter</span>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -366,26 +373,36 @@ export function CarsPage() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button onClick={openCreateForm}>
+              {/* Round icon buttons beside the title on a phone. */}
+              <Button
+                onClick={openCreateForm}
+                aria-label="Ajouter une voiture"
+                className="h-11 w-11 rounded-full p-0 sm:h-9 sm:w-auto sm:rounded-lg sm:px-4"
+              >
                 <Plus className="h-4 w-4" />
-                Ajouter une voiture
+                <span className="hidden sm:inline">Ajouter une voiture</span>
               </Button>
             </div>
           }
         />
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2 sm:flex-wrap sm:gap-3">
           <SearchBar
             value={searchInput}
             onChange={setSearchInput}
             placeholder="Rechercher par marque, modèle ou immatriculation..."
-            className="w-80"
+            className="min-w-0 flex-1 sm:w-80 sm:flex-none"
           />
-          <FilterBar activeCount={activeFilterCount} onClearAll={clearAllFilters}>
+          <FilterBar
+            activeCount={activeFilterCount}
+            onClearAll={clearAllFilters}
+            className="flex-nowrap"
+          >
             <CarFiltersPopover value={filters} onApply={applyFilters} activeCount={activeFilterCount} />
           </FilterBar>
 
-          <div className="ml-auto flex items-center gap-1 rounded-xl bg-muted p-1">
+          {/* Phones always get the card list, so the switch is moot there. */}
+          <div className="ml-auto hidden items-center gap-1 rounded-xl bg-muted p-1 md:flex">
             <Button
               variant={viewMode === 'table' ? 'default' : 'ghost'}
               size="icon"
@@ -422,8 +439,21 @@ export function CarsPage() {
 
       {!isLoading && !isError && data && data.items.length > 0 && (
         <>
+          {/* The table's eight columns don't fit a phone — a card per car. */}
+          <div className="space-y-3 md:hidden">
+            {data.items.map((car) => (
+              <CarListCard
+                key={car.id}
+                car={car}
+                onEdit={openEditForm}
+                onViewDetails={openDetail}
+                onOpenCalendar={openCalendar}
+              />
+            ))}
+          </div>
+
           {viewMode === 'table' ? (
-            <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-elevation">
+            <div className="hidden overflow-x-auto rounded-2xl border border-border bg-card shadow-elevation md:block">
               <Table>
                 <TableHeader>
                   {table.getHeaderGroups().map((headerGroup) => (
@@ -468,6 +498,7 @@ export function CarsPage() {
             </div>
           ) : (
             <CarGrid
+              className="hidden md:grid"
               cars={data.items}
               onEdit={openEditForm}
               onViewDetails={openDetail}

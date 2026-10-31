@@ -20,11 +20,20 @@ import { ExpenseRowActions } from './expense-row-actions';
 import { ExpenseFormDialog } from './expense-form-dialog';
 import { ExpenseFiltersPopover, type ExpenseFilters } from './expense-filters-popover';
 import { EXPENSE_CATEGORY_LABELS } from '../lib/finance-labels';
+import { FinanceListCard } from './finance-list-card';
 
 const PAGE_SIZE = 20;
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('fr-TN');
+}
+
+// "Personnalisé" (OTHER) has no meaningful label of its own — the name the
+// admin typed for it (stored in `description`) stands in for it.
+function categoryLabel(expense: Expense): string {
+  return expense.category === 'OTHER'
+    ? expense.description || EXPENSE_CATEGORY_LABELS.OTHER
+    : EXPENSE_CATEGORY_LABELS[expense.category];
 }
 
 const columnHelper = createColumnHelper<Expense>();
@@ -43,12 +52,7 @@ function buildColumns(onEdit: (expense: Expense) => void, formatMoney: (amount: 
     columnHelper.accessor('date', { header: 'Date', cell: ({ getValue }) => formatDate(getValue()) }),
     columnHelper.accessor('category', {
       header: 'Catégorie',
-      // "Personnalisé" (OTHER) has no meaningful label of its own — show the
-      // name the admin typed for it (stored in `description`) instead.
-      cell: ({ row }) =>
-        row.original.category === 'OTHER'
-          ? row.original.description || EXPENSE_CATEGORY_LABELS.OTHER
-          : EXPENSE_CATEGORY_LABELS[row.original.category],
+      cell: ({ row }) => categoryLabel(row.original),
     }),
     columnHelper.accessor((row) => (row.car ? `${row.car.brand} ${row.car.model}` : '—'), {
       id: 'car',
@@ -123,8 +127,8 @@ export function ExpensesTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="flex items-center justify-between gap-2 sm:flex-wrap sm:gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:flex-wrap sm:gap-3">
           <SearchBar
             value={searchInput}
             onChange={(value) => {
@@ -132,15 +136,20 @@ export function ExpensesTab() {
               setPage(1);
             }}
             placeholder="Rechercher par description..."
-            className="w-72"
+            className="min-w-0 flex-1 sm:w-72 sm:flex-none"
           />
-          <FilterBar activeCount={activeFilterCount} onClearAll={clearAllFilters}>
+          <FilterBar activeCount={activeFilterCount} onClearAll={clearAllFilters} className="flex-nowrap">
             <ExpenseFiltersPopover value={filters} onApply={applyFilters} activeCount={activeFilterCount} />
           </FilterBar>
         </div>
-        <Button onClick={openCreateForm}>
+        {/* A round "+" on a phone, beside the search. */}
+        <Button
+          onClick={openCreateForm}
+          aria-label="Nouvelle dépense"
+          className="h-11 w-11 shrink-0 rounded-full p-0 sm:h-9 sm:w-auto sm:rounded-lg sm:px-4"
+        >
           <Plus className="h-4 w-4" />
-          Nouvelle dépense
+          <span className="hidden sm:inline">Nouvelle dépense</span>
         </Button>
       </div>
 
@@ -158,7 +167,25 @@ export function ExpensesTab() {
 
       {!isLoading && !isError && data && data.items.length > 0 && (
         <>
-          <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-elevation">
+          <div className="space-y-2.5 md:hidden">
+            {data.items.map((expense) => {
+              const carId = expense.carId;
+              const car = expense.car ? `${expense.car.brand} ${expense.car.model}` : 'Dépense générale';
+              return (
+                <FinanceListCard
+                  key={expense.id}
+                  icon={Receipt}
+                  title={categoryLabel(expense)}
+                  details={[`${car} · ${formatDate(expense.date)}`]}
+                  amount={formatMoney(Number(expense.amount))}
+                  actions={<ExpenseRowActions expense={expense} onEdit={openEditForm} />}
+                  onOpen={carId ? () => navigate(`/cars?openId=${carId}`) : undefined}
+                />
+              );
+            })}
+          </div>
+
+          <div className="hidden overflow-x-auto rounded-2xl border border-border bg-card shadow-elevation md:block">
             {/* table-fixed + explicit widths so no column stretches to fit
                 its content — Date/Catégorie/Voiture/Montant share the row
                 evenly, Actions stays just wide enough for the "..." button.

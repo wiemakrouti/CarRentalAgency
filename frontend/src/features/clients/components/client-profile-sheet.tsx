@@ -10,10 +10,12 @@ import {
   RefreshCw,
   ShieldCheck,
   Wallet,
+  X,
 } from 'lucide-react';
 
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetHeader,
@@ -118,7 +120,13 @@ export function ClientProfileSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-2xl">
+      {/* Own close button, in the hero: the default one sits under the
+          hero (rendered before it). */}
+      <SheetContent
+        side="right"
+        showCloseButton={false}
+        className="w-full overflow-y-auto max-sm:p-4 sm:max-w-2xl"
+      >
         {isLoading || !client ? (
           <div className="space-y-4 pt-6">
             <Skeleton className="h-32 w-full" />
@@ -128,12 +136,15 @@ export function ClientProfileSheet({
         ) : (
           <>
             {/* Hero */}
-            <div className="relative -mx-6 -mt-6 w-[calc(100%+3rem)] overflow-hidden bg-gradient-to-br from-primary-600 via-primary-700 to-primary-800 px-6 pb-6 pt-7 text-primary-foreground">
-              {/* pr-10: the sheet's own close button is absolutely positioned
-                  (right-4 top-4, see SheetContent) and overlaps the last
-                  ~24px of this row — without this gap, "Modifier" sits
-                  underneath it and clicks land on Close instead. */}
-              <div className="flex items-start justify-between gap-4 pr-10">
+            <div className="relative -mx-6 -mt-6 w-[calc(100%+3rem)] overflow-hidden bg-gradient-to-br from-primary-600 via-primary-700 to-primary-800 px-6 pb-6 pt-7 text-primary-foreground max-sm:-mx-4 max-sm:-mt-4 max-sm:w-[calc(100%+2rem)] max-sm:px-4 max-sm:pb-5 max-sm:pt-5">
+              <SheetClose
+                aria-label="Fermer"
+                className="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-primary-foreground transition-colors hover:bg-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+              >
+                <X className="h-5 w-5" />
+              </SheetClose>
+              {/* pr-12 keeps the row's end clear of the close button. */}
+              <div className="flex items-start justify-between gap-4 pr-12">
                 <div className="flex items-center gap-4">
                   <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-xl font-bold ring-1 ring-white/25">
                     {initials}

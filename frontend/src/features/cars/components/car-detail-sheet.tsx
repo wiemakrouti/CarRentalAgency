@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CalendarDays, ChevronRight, ImageOff, Images, Plus, RefreshCw } from 'lucide-react';
+import { CalendarDays, ChevronRight, ImageOff, Images, Plus, RefreshCw, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { MANUALLY_SETTABLE_CAR_STATUSES } from '@car-rental/shared';
 import { ConfirmDialog } from '@/components/common/confirm-dialog';
@@ -8,6 +8,7 @@ import { useExpensesQuery } from '@/features/finances/hooks/use-expenses';
 import { EXPENSE_CATEGORY_LABELS } from '@/features/finances/lib/finance-labels';
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetHeader,
@@ -146,7 +147,13 @@ export function CarDetailSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-xl">
+      {/* Own close button, on the photo: the default one sits under the
+          photo (rendered before it), invisible. */}
+      <SheetContent
+        side="right"
+        showCloseButton={false}
+        className="w-full overflow-y-auto max-sm:p-4 sm:max-w-xl"
+      >
         {isLoading || !car ? (
           <div className="space-y-4 pt-6">
             <Skeleton className="h-40 w-full" />
@@ -155,7 +162,7 @@ export function CarDetailSheet({
           </div>
         ) : (
           <>
-            <div className="relative -mx-6 -mt-6 h-48 w-[calc(100%+3rem)] overflow-hidden">
+            <div className="relative -mx-6 -mt-6 h-48 w-[calc(100%+3rem)] overflow-hidden max-sm:-mx-4 max-sm:-mt-4 max-sm:w-[calc(100%+2rem)]">
               {primaryImage ? (
                 <img src={primaryImage.url} alt="" className="h-full w-full object-cover" />
               ) : (
@@ -163,6 +170,12 @@ export function CarDetailSheet({
                   <ImageOff className="h-12 w-12 text-primary-200" strokeWidth={1.3} />
                 </div>
               )}
+              <SheetClose
+                aria-label="Fermer"
+                className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur transition-colors hover:bg-black/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
+              >
+                <X className="h-5 w-5" />
+              </SheetClose>
               <Button
                 size="sm"
                 variant="secondary"
@@ -174,8 +187,8 @@ export function CarDetailSheet({
               </Button>
             </div>
 
-            <SheetHeader className="mt-4 flex-row items-start justify-between gap-4 space-y-0">
-              <div>
+            <SheetHeader className="mt-4 flex-row items-start justify-between gap-4 space-y-0 text-left">
+              <div className="min-w-0">
                 <SheetTitle>
                   {car.brand} {car.model}
                 </SheetTitle>

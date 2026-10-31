@@ -14,10 +14,18 @@ import {
   ShieldCheck,
   Users,
   Wallet,
+  X,
   XCircle,
 } from 'lucide-react';
 
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { useFormatMoney } from '@/hooks/use-format-money';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -377,12 +385,20 @@ export function RentalDetailSheet({ rentalId, open, onOpenChange }: RentalDetail
                 (if tiny) horizontal scrollbar instead of just clipping. */}
             <div className="flex-1 overflow-y-auto overflow-x-hidden">
               {/* --- Stub: gradient hero styled like a boarding-pass ticket --- */}
-              <div className="relative overflow-hidden bg-gradient-to-br from-primary-600 via-primary-700 to-primary-800 px-6 pb-6 pt-6 text-primary-foreground">
+              <div className="relative overflow-hidden bg-gradient-to-br from-primary-600 via-primary-700 to-primary-800 px-6 pb-6 pt-6 text-primary-foreground max-sm:px-4 max-sm:pb-5 max-sm:pt-5">
                 <div aria-hidden className="pointer-events-none absolute -right-10 -top-16 h-56 w-56 rounded-full bg-white/10 blur-2xl" />
-                <div className="relative">
+                {/* Full width on a phone, the sheet leaves no overlay to tap
+                    away — this is the way out. */}
+                <SheetClose
+                  aria-label="Fermer"
+                  className="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-primary-foreground transition-colors hover:bg-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                >
+                  <X className="h-5 w-5" />
+                </SheetClose>
+                <div className="relative pr-12">
                   <SheetHeader className="items-start gap-1 space-y-0 text-left">
                     <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary-100">Location</p>
-                    <SheetTitle className="font-mono text-2xl tracking-tight text-primary-foreground">
+                    <SheetTitle className="font-mono text-2xl tracking-tight text-primary-foreground max-sm:text-xl">
                       {rental.rentalNumber}
                     </SheetTitle>
                     <SheetDescription className="text-primary-100">
@@ -402,7 +418,7 @@ export function RentalDetailSheet({ rentalId, open, onOpenChange }: RentalDetail
                   </span>
                 </div>
 
-                <div className="relative mt-4 grid grid-cols-2 gap-2.5">
+                <div className="relative mt-4 grid gap-2 sm:grid-cols-2 sm:gap-2.5">
                   <Link
                     to={`/cars?openId=${rental.car.id}`}
                     className="group flex items-center gap-2.5 rounded-2xl border border-white/15 bg-white/10 p-3 transition-colors hover:bg-white/20"
@@ -416,7 +432,7 @@ export function RentalDetailSheet({ rentalId, open, onOpenChange }: RentalDetail
                       </span>
                       <span className="block font-mono text-[11px] text-primary-100">{rental.car.licensePlate}</span>
                     </span>
-                    <ChevronRight className="ml-auto h-4 w-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-70" />
+                    <ChevronRight className="ml-auto h-4 w-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-70 max-sm:opacity-70" />
                   </Link>
                   <Link
                     to={`/clients?openId=${rental.client.id}`}
@@ -431,7 +447,7 @@ export function RentalDetailSheet({ rentalId, open, onOpenChange }: RentalDetail
                       </span>
                       <span className="block font-mono text-[11px] text-primary-100">{rental.client.phone}</span>
                     </span>
-                    <ChevronRight className="ml-auto h-4 w-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-70" />
+                    <ChevronRight className="ml-auto h-4 w-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-70 max-sm:opacity-70" />
                   </Link>
                 </div>
               </div>
@@ -442,7 +458,7 @@ export function RentalDetailSheet({ rentalId, open, onOpenChange }: RentalDetail
                 <span className="absolute -right-3 -top-3 h-6 w-6 rounded-full bg-background" />
               </div>
 
-              <div className="space-y-7 px-6 py-6">
+              <div className="space-y-7 px-6 py-6 max-sm:space-y-6 max-sm:px-4 max-sm:py-5">
                 {/* --- Frise (timeline) --- */}
                 <div>
                   <p className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Frise</p>
@@ -776,7 +792,7 @@ export function RentalDetailSheet({ rentalId, open, onOpenChange }: RentalDetail
                 RentalRowActions puts behind a "..." menu in the table,
                 promoted here to always-visible buttons. --- */}
             {rental.status === 'RESERVED' && (
-              <div className="flex shrink-0 gap-2.5 border-t border-border bg-card px-6 py-4">
+              <div className="flex shrink-0 gap-2.5 border-t border-border bg-card px-6 py-4 max-sm:gap-2 max-sm:px-4 max-sm:pb-[max(1rem,env(safe-area-inset-bottom))] max-sm:pt-3">
                 <button
                   type="button"
                   onClick={() => setActivateOpen(true)}
@@ -796,7 +812,7 @@ export function RentalDetailSheet({ rentalId, open, onOpenChange }: RentalDetail
               </div>
             )}
             {rental.status === 'ACTIVE' && (
-              <div className="flex shrink-0 gap-2.5 border-t border-border bg-card px-6 py-4">
+              <div className="flex shrink-0 gap-2.5 border-t border-border bg-card px-6 py-4 max-sm:gap-2 max-sm:px-4 max-sm:pb-[max(1rem,env(safe-area-inset-bottom))] max-sm:pt-3">
                 <button
                   type="button"
                   onClick={() => setReturnOpen(true)}

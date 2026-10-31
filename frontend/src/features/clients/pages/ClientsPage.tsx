@@ -35,6 +35,7 @@ import { ClientDocumentManagerDialog } from '../components/client-document-manag
 import { ClientProfileSheet } from '../components/client-profile-sheet';
 import { ClientCalendarDialog } from '../components/client-calendar-dialog';
 import { ClientReliabilityBadge } from '../components/client-reliability-badge';
+import { ClientListCard } from '../components/client-list-card';
 import { ClientFiltersPopover, type ClientFilters } from '../components/client-filters-popover';
 
 const PAGE_SIZE = 20;
@@ -252,13 +253,19 @@ export function ClientsPage() {
         <PageHeader
           title="Gestion des clients"
           description="Gérez les profils, documents et statut de vos clients."
+          className="flex-row items-center justify-between"
           actions={
             <div className="flex items-center gap-2">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" disabled={exportMutation.isPending}>
+                  <Button
+                    variant="outline"
+                    disabled={exportMutation.isPending}
+                    aria-label="Exporter"
+                    className="h-11 w-11 rounded-full p-0 sm:h-9 sm:w-auto sm:rounded-lg sm:px-4"
+                  >
                     <Download className="h-4 w-4" />
-                    Exporter
+                    <span className="hidden sm:inline">Exporter</span>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -272,22 +279,31 @@ export function ClientsPage() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button onClick={openCreateForm}>
+              {/* Round icon buttons beside the title on a phone. */}
+              <Button
+                onClick={openCreateForm}
+                aria-label="Ajouter un client"
+                className="h-11 w-11 rounded-full p-0 sm:h-9 sm:w-auto sm:rounded-lg sm:px-4"
+              >
                 <Plus className="h-4 w-4" />
-                Ajouter un client
+                <span className="hidden sm:inline">Ajouter un client</span>
               </Button>
             </div>
           }
         />
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2 sm:flex-wrap sm:gap-3">
           <SearchBar
             value={searchInput}
             onChange={setSearchInput}
             placeholder="Rechercher par nom, téléphone, email ou permis..."
-            className="w-80"
+            className="min-w-0 flex-1 sm:w-80 sm:flex-none"
           />
-          <FilterBar activeCount={activeFilterCount} onClearAll={clearAllFilters}>
+          <FilterBar
+            activeCount={activeFilterCount}
+            onClearAll={clearAllFilters}
+            className="flex-nowrap"
+          >
             <ClientFiltersPopover value={filters} onApply={applyFilters} activeCount={activeFilterCount} />
           </FilterBar>
         </div>
@@ -307,7 +323,20 @@ export function ClientsPage() {
 
       {!isLoading && !isError && data && data.items.length > 0 && (
         <>
-          <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-elevation">
+          {/* The table's seven columns don't fit a phone — a card per client. */}
+          <div className="space-y-3 md:hidden">
+            {data.items.map((client) => (
+              <ClientListCard
+                key={client.id}
+                client={client}
+                onEdit={openEditForm}
+                onViewProfile={openProfile}
+                onOpenCalendar={openCalendar}
+              />
+            ))}
+          </div>
+
+          <div className="hidden overflow-x-auto rounded-2xl border border-border bg-card shadow-elevation md:block">
             <Table>
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (

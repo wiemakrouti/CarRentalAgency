@@ -17,7 +17,7 @@ interface AuthLayoutProps {
 // unlike --primary they don't adapt on their own.
 export function AuthLayout({ children }: AuthLayoutProps) {
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background p-4 sm:p-8">
+    <div className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-background p-4 sm:p-8">
       <svg
         aria-hidden="true"
         viewBox="0 0 420 420"

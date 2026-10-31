@@ -101,10 +101,10 @@ export function PaymentFormDialog({
         onOpenChange(next);
       }}
     >
-      <DialogContent className="flex max-h-[85vh] max-w-lg flex-col">
+      <DialogContent className="flex max-h-[85dvh] max-w-lg flex-col">
         <DialogHeader>
           <DialogTitle>Nouveau paiement</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="sr-only">
             Enregistrez un paiement déjà encaissé pour une location (espèces, carte, virement...).
           </DialogDescription>
         </DialogHeader>
@@ -114,7 +114,7 @@ export function PaymentFormDialog({
             pulled up over whatever hasn't scrolled past it yet, overlapping
             it instead of floating cleanly above it (see rental-form-dialog). */}
         <form onSubmit={handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col" noValidate>
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+          <div className="-m-1 min-h-0 flex-1 space-y-4 overflow-y-auto p-1">
           {!rentalId && (
             <div className="space-y-2">
               <Label required>Location</Label>

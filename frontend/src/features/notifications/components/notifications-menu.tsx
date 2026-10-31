@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -6,6 +6,7 @@ import {
   CalendarClock,
   CarFront,
   CheckCircle2,
+  ChevronRight,
   Clock,
   ClipboardList,
   Users,
@@ -20,10 +21,18 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import { LoadingState } from '@/components/common/loading-state';
 import { ErrorState } from '@/components/common/error-state';
 import { cn } from '@/lib/utils';
 import { useCan } from '@/hooks/use-can';
+import { useMediaQuery } from '@/hooks/use-media-query';
 import { MyRequestsPanel } from '@/features/approvals/components/my-requests-panel';
 import { useApprovalsQuery, useMarkDecisionsSeenMutation } from '@/features/approvals/hooks/use-approvals';
 import {
@@ -106,38 +115,86 @@ function formatDueIn(reminder: Reminder, category: ReminderCategory): string {
   return days === 1 ? 'Demain' : `Dans ${days} j`;
 }
 
-function NotificationRow({ reminder }: { reminder: Reminder }) {
+// In the desktop dropdown a row is a menu item (keyboard navigation, closes
+// the menu); in the phone sheet, a plain link that closes the sheet itself.
+function NotificationRow({ reminder, onNavigate }: { reminder: Reminder; onNavigate?: () => void }) {
   const Icon = ENTITY_ICON[reminder.entityType];
   const category = categorize(reminder);
   const style = CATEGORY_STYLES[category];
+  const content = (
+    <>
+      <div
+        className={cn(
+          'flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] ring-1',
+          style.bg,
+          style.text,
+          style.ring,
+        )}
+      >
+        <Icon className="h-[17px] w-[17px]" />
+      </div>
+      <div className="min-w-0 flex-1 whitespace-normal">
+        <p className="text-[13.5px] leading-snug text-foreground">{reminder.label}</p>
+        <p className={cn('mt-[3px] text-xs font-semibold', style.text)}>
+          {formatDueIn(reminder, category)}
+        </p>
+      </div>
+    </>
+  );
+
+  if (onNavigate) {
+    return (
+      <Link
+        to={getReminderLink(reminder)}
+        onClick={onNavigate}
+        className="flex items-center gap-3 rounded-[14px] px-2 py-3 transition-colors active:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {content}
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60" />
+      </Link>
+    );
+  }
+
   return (
     <DropdownMenuItem
       asChild
       className="group items-start gap-3 rounded-[14px] px-2 py-2.5 cursor-pointer"
     >
-      <Link to={getReminderLink(reminder)}>
-        <div
-          className={cn(
-            'flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] ring-1',
-            style.bg,
-            style.text,
-            style.ring,
-          )}
-        >
-          <Icon className="h-[17px] w-[17px]" />
-        </div>
-        <div className="min-w-0 flex-1 whitespace-normal">
-          <p className="text-[13.5px] leading-snug text-foreground">{reminder.label}</p>
-          <p className={cn('mt-[3px] text-xs font-semibold', style.text)}>
-            {formatDueIn(reminder, category)}
-          </p>
-        </div>
-      </Link>
+      <Link to={getReminderLink(reminder)}>{content}</Link>
     </DropdownMenuItem>
   );
 }
 
 type TabKey = 'all' | ReminderCategory;
+
+// A count tile over the list — just a figure in the dropdown, a filter
+// button in the phone sheet.
+function StatTile({
+  phone,
+  active,
+  onSelect,
+  className,
+  children,
+}: {
+  phone: boolean;
+  active: boolean;
+  onSelect: () => void;
+  className: string;
+  children: ReactNode;
+}) {
+  const classes = cn('flex-1 rounded-[14px] border px-3.5 py-3.5 text-left', className);
+  if (!phone) return <div className={classes}>{children}</div>;
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onSelect}
+      className={cn(classes, 'transition-transform active:scale-[0.97]', active && 'ring-2')}
+    >
+      {children}
+    </button>
+  );
+}
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'all', label: 'Tout' },
@@ -161,11 +218,16 @@ export function NotificationsMenu() {
   const markSeen = useMarkDecisionsSeenMutation();
   const [view, setView] = useState<'reminders' | 'requests'>('reminders');
   const [unseenIds, setUnseenIds] = useState<Set<string>>(new Set());
+  // A full-width sheet from the bottom on a phone, where a 420px dropdown
+  // pinned under the bell would be cramped; the dropdown elsewhere.
+  const isPhone = useMediaQuery('(max-width: 639px)');
+  const [sheetOpen, setSheetOpen] = useState(false);
   const unseenDecisions = myRequests.filter(
     (r) => (r.status === 'APPROVED' || r.status === 'REJECTED') && !r.requesterSeenAt,
   );
 
   function handleOpenChange(open: boolean) {
+    setSheetOpen(open);
     setTab('all');
     if (!open || !isEmployee) return;
     setUnseenIds(new Set(unseenDecisions.map((r) => r.id)));
@@ -197,62 +259,44 @@ export function NotificationsMenu() {
           ? upcoming
           : (reminders ?? []);
 
-  return (
-    <DropdownMenu onOpenChange={handleOpenChange}>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="relative rounded-full bg-muted hover:bg-accent"
-          aria-label={count > 0 ? `Notifications (${count})` : 'Notifications'}
-        >
-          <Bell className="h-4 w-4" />
-          {count > 0 && (
-            <span
-              className={cn(
-                'absolute -right-0.5 -top-0.5 flex h-[17px] min-w-[17px] items-center justify-center rounded-full border-2 border-background px-1 text-[9.5px] font-bold',
-                hasOverdue || unseenDecisions.length > 0
-                  ? 'bg-destructive text-destructive-foreground'
-                  : 'bg-warning text-warning-foreground',
-              )}
-            >
-              {count > 9 ? '9+' : count}
-            </span>
-          )}
-        </Button>
-      </DropdownMenuTrigger>
-
-      <DropdownMenuContent
-        align="end"
-        // max-w caps the fixed width on narrow viewports — Radix's collision
-        // detection can slide the panel to stay on-screen, but it can't
-        // shrink a fixed w-[420px] below the viewport itself, so on a phone
-        // the panel was overflowing the screen edge no matter where it slid.
-        className="w-[420px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-[20px] border-border p-0"
-      >
-        <div className="relative flex items-center gap-3 px-[22px] pt-[22px]">
+  // One body for both containers; `phone` switches the few things that
+  // differ (title elements for the sheet, tiles as the filter, link rows).
+  function renderBody(phone: boolean) {
+    const titleClass = 'text-base font-bold tracking-tight text-foreground';
+    const descriptionClass = 'mt-px text-xs text-muted-foreground';
+    const description =
+      view === 'requests'
+        ? 'Vos demandes de validation au directeur'
+        : `Échéances des ${reminderWindowDays} prochains jours`;
+    return (
+      <>
+        <div className="relative flex items-center gap-3 px-[22px] pt-[22px] max-sm:px-4 max-sm:pt-1">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 ring-1 ring-primary/20">
             <Bell className="h-[18px] w-[18px] text-primary" />
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-base font-bold tracking-tight text-foreground">Notifications</p>
-            <p className="mt-px text-xs text-muted-foreground">
-              {view === 'requests'
-                ? 'Vos demandes de validation au directeur'
-                : `Échéances des ${reminderWindowDays} prochains jours`}
-            </p>
-          </div>
+          {/* The sheet needs its own title/description elements. */}
+          {phone ? (
+            <div className="min-w-0 flex-1">
+              <SheetTitle className={titleClass}>Notifications</SheetTitle>
+              <SheetDescription className={descriptionClass}>{description}</SheetDescription>
+            </div>
+          ) : (
+            <div className="min-w-0 flex-1">
+              <p className={titleClass}>Notifications</p>
+              <p className={descriptionClass}>{description}</p>
+            </div>
+          )}
         </div>
 
         {isEmployee && (
-          <div className="relative mx-[22px] mt-4 grid grid-cols-2 gap-1 rounded-[11px] border border-border bg-muted p-[3px]">
+          <div className="relative mx-[22px] mt-4 grid grid-cols-2 gap-1 rounded-[11px] border border-border bg-muted p-[3px] max-sm:mx-4">
             {(['reminders', 'requests'] as const).map((key) => (
               <button
                 key={key}
                 type="button"
                 onClick={() => setView(key)}
                 className={cn(
-                  'flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-[12px] font-semibold transition-colors',
+                  'flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-[12px] font-semibold transition-colors max-sm:py-2 max-sm:text-[13px]',
                   view === key
                     ? 'bg-card text-foreground shadow-xs'
                     : 'text-muted-foreground hover:text-foreground',
@@ -297,9 +341,17 @@ export function NotificationsMenu() {
               <>
                 {/* Hero stats — only the groups that actually have items, so one
                 or two lone groups fill the row instead of leaving gaps. */}
-                <div className="relative flex gap-2 px-[22px] pt-[18px]">
+                {/* On a phone the tiles are also the filter — tap one for
+                    just those, again for everything — in place of the
+                    segmented control below. */}
+                <div className="relative flex gap-2 px-[22px] pt-[18px] max-sm:px-4 max-sm:pt-4">
                   {hasOverdue && (
-                    <div className="flex-1 rounded-[14px] border border-destructive/25 bg-destructive/10 px-3.5 py-3.5">
+                    <StatTile
+                      phone={phone}
+                      active={tab === 'overdue'}
+                      onSelect={() => setTab(tab === 'overdue' ? 'all' : 'overdue')}
+                      className="border-destructive/25 bg-destructive/10 ring-destructive"
+                    >
                       <div className="text-[24px] font-extrabold leading-none tabular-nums text-destructive">
                         {overdue.length}
                       </div>
@@ -307,10 +359,15 @@ export function NotificationsMenu() {
                         <AlertTriangle className="h-3 w-3 shrink-0" />
                         En retard
                       </div>
-                    </div>
+                    </StatTile>
                   )}
                   {today.length > 0 && (
-                    <div className="flex-1 rounded-[14px] border border-warning/25 bg-warning/10 px-3.5 py-3.5">
+                    <StatTile
+                      phone={phone}
+                      active={tab === 'today'}
+                      onSelect={() => setTab(tab === 'today' ? 'all' : 'today')}
+                      className="border-warning/25 bg-warning/10 ring-warning"
+                    >
                       <div className="text-[24px] font-extrabold leading-none tabular-nums text-warning">
                         {today.length}
                       </div>
@@ -318,22 +375,27 @@ export function NotificationsMenu() {
                         <CalendarClock className="h-3 w-3 shrink-0" />
                         Aujourd'hui
                       </div>
-                    </div>
+                    </StatTile>
                   )}
                   {upcoming.length > 0 && (
-                    <div className="flex-1 rounded-[14px] border border-primary/25 bg-primary/10 px-3.5 py-3.5">
+                    <StatTile
+                      phone={phone}
+                      active={tab === 'upcoming'}
+                      onSelect={() => setTab(tab === 'upcoming' ? 'all' : 'upcoming')}
+                      className="border-primary/25 bg-primary/10 ring-primary"
+                    >
                       <div className="text-[24px] font-extrabold leading-none tabular-nums text-primary">
                         {upcoming.length}
                       </div>
                       <div className="mt-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-primary">
                         <Clock className="h-3 w-3 shrink-0" />À venir
                       </div>
-                    </div>
+                    </StatTile>
                   )}
                 </div>
 
                 {/* Segmented filter */}
-                <div className="relative mx-[22px] mt-4 flex items-center gap-1 rounded-[11px] border border-border bg-muted p-[3px]">
+                <div className="relative mx-[22px] mt-4 flex items-center gap-1 rounded-[11px] border border-border bg-muted p-[3px] max-sm:hidden">
                   {TABS.map(({ key, label }) => (
                     <button
                       key={key}
@@ -351,7 +413,7 @@ export function NotificationsMenu() {
                   ))}
                 </div>
 
-                <div className="relative mt-1 max-h-[400px] overflow-y-auto p-3">
+                <div className="relative mt-1 max-h-[400px] overflow-y-auto p-3 max-sm:mt-2 max-sm:max-h-none max-sm:min-h-0 max-sm:flex-1 max-sm:px-2">
                   {visible.length === 0 ? (
                     <p className="px-2 py-8 text-center text-sm text-muted-foreground">
                       Aucune échéance dans cette catégorie.
@@ -362,6 +424,7 @@ export function NotificationsMenu() {
                         <NotificationRow
                           key={`${reminder.type}-${reminder.entityId}`}
                           reminder={reminder}
+                          onNavigate={phone ? () => setSheetOpen(false) : undefined}
                         />
                       ))}
                     </div>
@@ -372,11 +435,67 @@ export function NotificationsMenu() {
           </>
         )}
 
-        <div className="relative border-t border-border px-[22px] py-3 text-center">
+        <div className="relative border-t border-border px-[22px] py-3 text-center max-sm:hidden">
           <span className="text-[11px] text-muted-foreground">
             Actualisé automatiquement toutes les {REFETCH_INTERVAL_MS / 60_000} minutes
           </span>
         </div>
+      </>
+    );
+  }
+
+  const trigger = (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative rounded-full bg-muted hover:bg-accent"
+          aria-label={count > 0 ? `Notifications (${count})` : 'Notifications'}
+        >
+          <Bell className="h-4 w-4" />
+          {count > 0 && (
+            <span
+              className={cn(
+                'absolute -right-0.5 -top-0.5 flex h-[17px] min-w-[17px] items-center justify-center rounded-full border-2 border-background px-1 text-[9.5px] font-bold',
+                hasOverdue || unseenDecisions.length > 0
+                  ? 'bg-destructive text-destructive-foreground'
+                  : 'bg-warning text-warning-foreground',
+              )}
+            >
+              {count > 9 ? '9+' : count}
+            </span>
+          )}
+        </Button>
+  );
+
+  if (isPhone) {
+    return (
+      <Sheet open={sheetOpen} onOpenChange={handleOpenChange}>
+        <SheetTrigger asChild>{trigger}</SheetTrigger>
+        <SheetContent
+          side="bottom"
+          showCloseButton={false}
+          onOpenAutoFocus={(event) => event.preventDefault()}
+          className="flex max-h-[85dvh] flex-col gap-0 rounded-t-3xl p-0 pb-[env(safe-area-inset-bottom)] pt-3"
+        >
+          <span aria-hidden className="mx-auto mb-3 block h-1.5 w-10 shrink-0 rounded-full bg-muted-foreground/25" />
+          {renderBody(true)}
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  return (
+    <DropdownMenu onOpenChange={handleOpenChange}>
+      <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+
+      <DropdownMenuContent
+        align="end"
+        // max-w caps the fixed width on narrow viewports — Radix's collision
+        // detection can slide the panel to stay on-screen, but it can't
+        // shrink a fixed w-[420px] below the viewport itself.
+        className="w-[420px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-[20px] border-border p-0"
+      >
+        {renderBody(false)}
       </DropdownMenuContent>
     </DropdownMenu>
   );

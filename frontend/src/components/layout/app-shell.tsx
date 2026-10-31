@@ -5,6 +5,7 @@ import { useSidebarCollapsed } from '@/hooks/use-sidebar-collapsed';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
 import { CommandPalette } from '@/components/layout/command-palette';
+import { BottomNav } from '@/components/layout/bottom-nav';
 import { QuickActionsProvider } from '@/providers/quick-actions-provider';
 
 export function AppShell() {
@@ -15,7 +16,9 @@ export function AppShell() {
     // Inside the router (pages navigate from its dialogs) and around both
     // the pages and the Ctrl+K palette, which all open its quick actions.
     <QuickActionsProvider>
-      <div className="flex h-screen overflow-hidden bg-background lg:gap-3 lg:p-3">
+      {/* dvh, not vh: on phones 100vh ignores the browser's address bar
+          and would push the bottom of the page under it. */}
+      <div className="flex h-dvh overflow-hidden bg-background lg:gap-3 lg:p-3">
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
@@ -30,6 +33,7 @@ export function AppShell() {
           <main id="main-content" className="flex flex-1 flex-col overflow-y-auto">
             <Outlet />
           </main>
+          <BottomNav />
         </div>
 
         <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />

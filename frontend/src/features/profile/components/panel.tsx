@@ -11,8 +11,12 @@ import { Label } from '@/components/ui/label';
 // stop needs its own dark: fallback onto bare --primary because the
 // numbered primary-N scale has no dark-mode values (see kpi-card.tsx for
 // the same note).
+//
+// overflow-clip, not overflow-hidden: same clipping of the sheen to the
+// rounded corners, but it doesn't make the panel a scroll container — which
+// would stop a form's sticky save bar (ProfilePage) from following the page.
 const PANEL_CLASS =
-  'relative overflow-hidden shadow-xs bg-[linear-gradient(160deg,hsl(var(--primary-100)),hsl(var(--card))_75%)] dark:bg-[linear-gradient(160deg,hsl(var(--primary)/0.18),hsl(var(--card))_75%)]';
+  'relative overflow-clip shadow-xs bg-[linear-gradient(160deg,hsl(var(--primary-100)),hsl(var(--card))_75%)] dark:bg-[linear-gradient(160deg,hsl(var(--primary)/0.18),hsl(var(--card))_75%)]';
 
 function PanelSheen() {
   return (

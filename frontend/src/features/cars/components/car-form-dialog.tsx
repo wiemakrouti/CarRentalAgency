@@ -202,10 +202,10 @@ export function CarFormDialog({ open, onOpenChange, car, focusField }: CarFormDi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col">
+      <DialogContent className="flex max-h-[85dvh] max-w-2xl flex-col">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Modifier la voiture' : 'Ajouter une voiture'}</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="sr-only">
             {isEdit
               ? 'Mettez à jour les informations de ce véhicule.'
               : 'Renseignez les informations du nouveau véhicule.'}
@@ -217,7 +217,7 @@ export function CarFormDialog({ open, onOpenChange, car, focusField }: CarFormDi
             pulled up over whatever hasn't scrolled past it yet, overlapping
             it instead of floating cleanly above it (see rental-form-dialog). */}
         <form onSubmit={handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col" noValidate>
-          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto">
+          <div className="-m-1 min-h-0 flex-1 space-y-6 overflow-y-auto p-1">
           <CarPhotoField
             existingImageUrl={existingImageUrl}
             file={photoFile}
@@ -407,7 +407,10 @@ export function CarFormDialog({ open, onOpenChange, car, focusField }: CarFormDi
                 modifiés.
               </p>
             )}
-            <div className="grid grid-cols-2 gap-4">
+            {/* Bottom-aligned on a phone: "Expiration contrôle technique" wraps
+                to two lines there, and its input would sit lower than its
+                neighbour's. */}
+            <div className="grid grid-cols-2 gap-4 max-sm:items-end">
               <div className="space-y-2">
                 <Label htmlFor="purchaseDate">Date d'achat</Label>
                 <Controller
